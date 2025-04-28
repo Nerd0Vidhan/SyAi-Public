@@ -16,6 +16,7 @@ import java.time.Duration
 
 @Composable
 fun SplashScreen(onSplashFinished: () -> Unit) {
+
     LaunchedEffect(Unit) {
         delay(Duration.ofSeconds(2))
         onSplashFinished()

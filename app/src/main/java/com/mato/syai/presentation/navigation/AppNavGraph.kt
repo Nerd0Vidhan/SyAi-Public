@@ -22,7 +22,6 @@ fun AppNavGraph(navController: NavHostController) {
                 }
             })
         }
-
         composable("home") { MainScreenPreview() }
     }
 }
