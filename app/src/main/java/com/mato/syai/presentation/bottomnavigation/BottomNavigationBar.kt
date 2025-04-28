@@ -63,6 +63,8 @@ import androidx.compose.ui.unit.dp
 //import com.juraj.fluid.ui.theme.FluidBottomNavigationTheme
 import kotlin.math.PI
 import kotlin.math.sin
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Build
 
 private fun getRenderEffect(): RenderEffect {
     val blurEffect = RenderEffect
@@ -166,26 +168,26 @@ fun Circle(color: Color, animationProgress: Float) {
     )
 }
 
-@Composable
-fun CustomBottomNavigation() {
-    Row(
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .height(80.dp)
-            .paint(
-                painter = painterResource(R.drawable.bottom_navigation),
-                contentScale = ContentScale.FillHeight
-            )
-            .padding(horizontal = 40.dp)
-    ) {
-        listOf(Icons.Default.Settings, Icons.Default.Settings).map { image ->
-            IconButton(onClick = { }) {
-                Icon(imageVector = image, contentDescription = null, tint = Color.White)
-            }
-        }
-    }
-}
+//@Composable
+//fun CustomBottomNavigation() {
+//    Row(
+//        horizontalArrangement = Arrangement.SpaceBetween,
+//        verticalAlignment = Alignment.CenterVertically,
+//        modifier = Modifier
+//            .height(80.dp)
+//            .paint(
+//                painter = painterResource(R.drawable.bottom_navigation),
+//                contentScale = ContentScale.FillHeight
+//            )
+//            .padding(horizontal = 40.dp)
+//    ) {
+//        listOf(Icons.Default.Settings, Icons.Default.Settings).map { image ->
+//            IconButton(onClick = { }) {
+//                Icon(imageVector = image, contentDescription = null, tint = Color.White)
+//            }
+//        }
+//    }
+//}
 
 @Composable
 fun FabGroup(
