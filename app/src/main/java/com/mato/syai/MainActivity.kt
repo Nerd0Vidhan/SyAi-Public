@@ -4,6 +4,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.navigation.compose.rememberNavController
+import com.mato.syai.presentation.bottomnavigation.MainScreenPreview
+import com.mato.syai.presentation.navigation.AppNavGraph
 import com.mato.syai.presentation.splash.SplashScreen
 
 class MainActivity : ComponentActivity() {
@@ -11,11 +13,13 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             val navController = rememberNavController()
-            SplashScreen {
-                navController.navigate("splash") {
-//                    popUpTo("") { inclusive = true }
-                }
-            }
+            AppNavGraph(navController = navController)
+//            MainScreenPreview()
+//            SplashScreen {
+//                navController.navigate("splash") {
+////                    popUpTo("") { inclusive = true }
+//                }
+//            }
         }
     }
 }

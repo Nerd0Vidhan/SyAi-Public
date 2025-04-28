@@ -23,8 +23,6 @@ fun AppNavGraph(navController: NavHostController) {
             })
         }
 
-        composable("home") {
-            MainScreenPreview() // Display the HomeScreen when navigating to "home"
-        }
+        composable("home") { MainScreenPreview() }
     }
 }
