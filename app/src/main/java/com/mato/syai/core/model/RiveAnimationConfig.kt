@@ -1,4 +1,4 @@
-package com.mato.syai.core.animation.model
+package com.mato.syai.core.model
 
 import androidx.annotation.RawRes
 

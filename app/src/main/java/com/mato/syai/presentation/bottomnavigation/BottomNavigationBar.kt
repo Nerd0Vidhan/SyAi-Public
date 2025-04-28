@@ -278,8 +278,8 @@ fun AnimatedFab(
 
 
 @Composable
-@Preview(device = "id:pixel_4a", showBackground = true, backgroundColor = 0xFF3A2F6E)
-private fun MainScreenPreview() {
+@Preview(showBackground = true, showSystemUi = true)
+fun MainScreenPreview() {
 //    FluidBottomNavigationTheme {
         MainScreen()
 //    }
