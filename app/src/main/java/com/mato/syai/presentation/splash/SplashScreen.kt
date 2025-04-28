@@ -6,29 +6,25 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.core.view.WindowCompat
-import androidx.activity.ComponentActivity
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.platform.LocalContext
 import com.mato.syai.core.composables.RiveAnimationPlayer
 import com.mato.syai.core.model.RiveAnimationConfig
 import com.mato.syai.R
+import kotlinx.coroutines.time.delay
+import java.time.Duration
 
 @Composable
 fun SplashScreen(onSplashFinished: () -> Unit) {
-    val context = LocalContext.current
-    val activity = context as ComponentActivity
-
-    // Hide status bar
     LaunchedEffect(Unit) {
-        WindowCompat.setDecorFitsSystemWindows(activity.window, false)
-    }
+        delay(Duration.ofSeconds(2))
+        onSplashFinished()
+        }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0D0127)), // Splash background
+            .background(Color(0xFF0D0127)),
         contentAlignment = Alignment.Center
     ) {
         RiveAnimationPlayer(
