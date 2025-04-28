@@ -6,6 +6,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import com.mato.syai.presentation.splash.SplashScreen
 import com.mato.syai.presentation.*
+import com.mato.syai.presentation.bottomnavigation.MainScreen
+import com.mato.syai.presentation.bottomnavigation.MainScreenPreview
 
 @Composable
 fun AppNavGraph(navController: NavHostController) {
@@ -19,6 +21,10 @@ fun AppNavGraph(navController: NavHostController) {
                     popUpTo("splash") { inclusive = true }
                 }
             })
+        }
+
+        composable("home") {
+            MainScreenPreview() // Display the HomeScreen when navigating to "home"
         }
     }
 }

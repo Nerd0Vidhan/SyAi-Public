@@ -11,8 +11,8 @@ import androidx.activity.ComponentActivity
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
-import com.mato.syai.core.animation.composables.RiveAnimationPlayer
-import com.mato.syai.core.animation.model.RiveAnimationConfig
+import com.mato.syai.core.composables.RiveAnimationPlayer
+import com.mato.syai.core.model.RiveAnimationConfig
 import com.mato.syai.R
 
 @Composable

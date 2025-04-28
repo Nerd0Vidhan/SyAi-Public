@@ -1,11 +1,11 @@
-package com.mato.syai.core.animation.composables
+package com.mato.syai.core.composables
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import app.rive.runtime.kotlin.RiveAnimationView
-import com.mato.syai.core.animation.model.RiveAnimationConfig
+import com.mato.syai.core.model.RiveAnimationConfig
 
 @Composable
 fun RiveAnimationPlayer(
