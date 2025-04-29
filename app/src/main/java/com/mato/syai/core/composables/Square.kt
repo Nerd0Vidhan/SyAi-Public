@@ -1,4 +1,4 @@
-package com.mato.syai.core.animation.composables
+package com.mato.syai.core.composables
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column

@@ -65,6 +65,8 @@ import kotlin.math.PI
 import kotlin.math.sin
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Build
+import androidx.navigation.compose.rememberNavController
+import com.mato.syai.presentation.navigation.AppNavGraph
 
 private fun getRenderEffect(): RenderEffect {
     val blurEffect = RenderEffect
@@ -126,13 +128,16 @@ fun MainScreen(
     clickAnimationProgress: Float = 0f,
     toggleAnimation: () -> Unit = { }
 ) {
+    val navController = rememberNavController()
+    AppNavGraph(navController = navController)
+
     Box(
         Modifier
             .fillMaxSize()
             .padding(bottom = 24.dp),
         contentAlignment = Alignment.BottomCenter
     ) {
-        CustomBottomNavigation()
+        CustomBottomNavigation(navController = navController)
         Circle(
             color = Color.Blue, //MaterialTheme.colors.primary.copy(alpha = 0.5f),
             animationProgress = 0.5f
@@ -167,27 +172,6 @@ fun Circle(color: Color, animationProgress: Float) {
             )
     )
 }
-
-//@Composable
-//fun CustomBottomNavigation() {
-//    Row(
-//        horizontalArrangement = Arrangement.SpaceBetween,
-//        verticalAlignment = Alignment.CenterVertically,
-//        modifier = Modifier
-//            .height(80.dp)
-//            .paint(
-//                painter = painterResource(R.drawable.bottom_navigation),
-//                contentScale = ContentScale.FillHeight
-//            )
-//            .padding(horizontal = 40.dp)
-//    ) {
-//        listOf(Icons.Default.Settings, Icons.Default.Settings).map { image ->
-//            IconButton(onClick = { }) {
-//                Icon(imageVector = image, contentDescription = null, tint = Color.White)
-//            }
-//        }
-//    }
-//}
 
 @Composable
 fun FabGroup(
