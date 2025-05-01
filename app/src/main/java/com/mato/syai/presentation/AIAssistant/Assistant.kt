@@ -16,7 +16,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 
 object GeminiProvider {
-    private const val API_KEY = "AIzaSyA1bhWoYX9YnBIxwZSV-mOuGP4GCvFcpHA"
+    private const val API_KEY = ""
 
     val generativeModel = GenerativeModel(
         modelName = "gemini-1.5-flash",
