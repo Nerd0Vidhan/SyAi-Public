@@ -1,4 +1,4 @@
-package com.mato.syai.core.animation.model
+package com.mato.syai.core.model
 
 import com.mato.syai.core.composables.TrackerInterface
 
