@@ -21,11 +21,12 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.mato.syai.core.model.GeminiapiKey
 import com.mato.syai.ui.theme.BrownLight
 import com.mato.syai.ui.theme.PurpleDark
 
 object GeminiProvider {
-    private const val API_KEY = ""
+    private const val API_KEY = GeminiapiKey
 
     val generativeModel = GenerativeModel(
         modelName = "gemini-1.5-flash",

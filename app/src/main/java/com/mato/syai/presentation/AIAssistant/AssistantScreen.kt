@@ -2,7 +2,9 @@ package com.mato.syai.presentation.AIAssistant
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -10,6 +12,7 @@ import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Attachment
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -21,6 +24,7 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -32,14 +36,18 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mato.syai.ui.theme.PurpleDark
 import com.mato.syai.ui.theme.White
 
 @OptIn(ExperimentalMaterial3Api::class)
 //@Preview(showBackground = true, showSystemUi = true)
 @Composable
-fun Msg(){
+fun Msg(viewModel: GeminiTextViewModel = viewModel()){
     var prompt by remember { mutableStateOf("") }
+    val response by viewModel.generatedText.collectAsState()
+
+//    MainAssistantScreen(response)
 
     Row(
         modifier = Modifier
@@ -94,9 +102,9 @@ fun Msg(){
             )
         }
 
-        IconButton(onClick = { /* Handle send message click */ }) {
+        IconButton(onClick = { viewModel.fetchText(prompt) }) {
             Icon(
-                imageVector = Icons.Default.ArrowForward,
+                imageVector = Icons.Default.Send,
                 contentDescription = "Send Message",
                 tint = PurpleDark
             )
@@ -107,10 +115,31 @@ fun Msg(){
 
 @Preview(showBackground = true, showSystemUi = true)
 @Composable
-fun MainAssistant(){
+fun MainAssistantScreen(viewModel: GeminiTextViewModel = viewModel()){
+//    var prompt by remember { mutableStateOf("") }
+    val response by viewModel.generatedText.collectAsState()
+
     Scaffold (
         bottomBar = { Msg() }
     ){ innerPadding ->
-           ChatLayout(modifier = Modifier.padding(innerPadding))
+        Column(
+            modifier = Modifier.fillMaxSize().padding(10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ){
+            Text(
+                text = response,
+                color = Color.Black,
+                style = TextStyle(fontSize = 20.sp, fontStyle = FontStyle.Normal),
+                modifier = Modifier.padding(innerPadding)
+            )
+        }
+
     }
 }
+
+//@Preview(showBackground = true, showSystemUi = true)
+//@Composable
+//fun MainAssistantScreen(){
+//    PromptResponse("Generating")
+//}

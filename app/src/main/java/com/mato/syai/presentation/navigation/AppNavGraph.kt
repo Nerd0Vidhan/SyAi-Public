@@ -18,6 +18,7 @@ import com.mato.syai.presentation.splash.SplashScreen
 import com.mato.syai.presentation.*
 import com.mato.syai.presentation.AIAssistant.GeminiTextGeneratorUI
 import com.mato.syai.presentation.AIAssistant.GeminiTextGeneratorUIPreview
+import com.mato.syai.presentation.AIAssistant.MainAssistantScreen
 import com.mato.syai.presentation.bottomnavigation.MainScreen
 import com.mato.syai.presentation.bottomnavigation.MainScreenPreview
 import com.mato.syai.presentation.dashboard.Place
@@ -51,7 +52,7 @@ fun BottomNavigationGraph(navController: NavHostController, paddingValues: Paddi
         composable("notes") { Place()}
         composable("settings") { Place()}
         composable ("tools",) { GeminiTextGeneratorUI()}
-        composable("ai") { GeminiTextGeneratorUI() }
+        composable("ai") { MainAssistantScreen() }
         composable("edit") { SwappableCardsGridPreview() }
 
     }

@@ -48,6 +48,7 @@ import com.mato.syai.presentation.dashboard.Place
 import com.mato.syai.presentation.navigation.AppNavGraph
 import com.mato.syai.presentation.navigation.BottomNavigationGraph
 import com.mato.syai.ui.theme.BrownLight
+import com.mato.syai.ui.theme.LightPurple
 import com.mato.syai.ui.theme.PurpleDark
 
 //@Preview(showBackground = true, showSystemUi = true)
@@ -67,7 +68,7 @@ fun DashboardTopBar(navController: NavHostController) {
         colors = TopAppBarDefaults.topAppBarColors(containerColor = PurpleDark),
         actions = {
             IconButton(onClick = { navController.navigate("edit") }) {
-                Icon(Icons.Default.Edit, contentDescription = "Edit", tint = PurpleDark)
+                Icon(Icons.Default.Edit, contentDescription = "Edit", tint = BrownLight)
             }
         }
     )
