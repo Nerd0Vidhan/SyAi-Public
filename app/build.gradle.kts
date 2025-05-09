@@ -73,4 +73,6 @@ dependencies {
     implementation (libs.generativeai.v060)
 
     implementation("androidx.startup:startup-runtime:1.1.1")
+
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 }

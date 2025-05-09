@@ -1,10 +1,9 @@
 package com.mato.syai.core.model
 
-import android.provider.ContactsContract.CommonDataKinds.Website.URL
-import androidx.compose.runtime.Recomposer
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.mato.syai.core.getAPIKEY
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -16,7 +15,7 @@ class GeminiViewModel : ViewModel() {
     private val _response = mutableStateOf("")
     val response = mutableStateOf("")
 
-    private val apiKey = GeminiapiKey
+    private val apiKey = getAPIKEY()
 
     fun generateText(prompt: String) {
         viewModelScope.launch {
