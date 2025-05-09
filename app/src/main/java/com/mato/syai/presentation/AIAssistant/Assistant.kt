@@ -14,9 +14,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.mato.syai.core.AIassistant
 
 object GeminiProvider {
-    private const val API_KEY = ""
+    private val API_KEY = AIassistant.getAPIKEY()
 
     val generativeModel = GenerativeModel(
         modelName = "gemini-1.5-flash",

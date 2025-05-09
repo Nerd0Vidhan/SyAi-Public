@@ -3,7 +3,7 @@ package com.mato.syai.core.model
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.mato.syai.core.getAPIKEY
+import com.mato.syai.core.AIassistant.Companion.getAPIKEY
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
