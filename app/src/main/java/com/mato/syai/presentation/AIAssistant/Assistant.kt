@@ -1,5 +1,6 @@
 package com.mato.syai.presentation.AIAssistant
 
+import androidx.compose.foundation.background
 import com.google.ai.client.generativeai.GenerativeModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -9,11 +10,19 @@ import kotlinx.coroutines.launch
 import androidx.compose.runtime.*
 import androidx.compose.material3.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.mato.syai.ui.theme.BrownLight
+import com.mato.syai.ui.theme.PurpleDark
 
 object GeminiProvider {
     private const val API_KEY = ""
@@ -331,3 +340,46 @@ fun GeminiTextGeneratorUIPreview() {
 //        DisplayBTCPrice()
 //    }
 //}
+
+
+//@Preview(showBackground = true, showSystemUi = true)
+@Composable
+fun ChatLayout(modifier: Modifier){
+    Column(){
+        Row(
+            horizontalArrangement = Arrangement.Start,
+            modifier = Modifier.fillMaxWidth(0.7f)
+        ){
+            Text(
+                "Hello",
+                modifier = Modifier
+                    .padding(10.dp)
+                    .background(PurpleDark, RoundedCornerShape(10.dp))
+                    .padding(12.dp)
+                    .widthIn(max = 250.dp),
+                style = TextStyle(
+                    fontSize = 20.sp,
+                    color = BrownLight
+                )
+            )
+        }
+
+        Row(
+            horizontalArrangement = Arrangement.End,
+            modifier = Modifier.fillMaxWidth()
+        ){
+            Text(
+                "Hello",
+                modifier = Modifier
+                    .padding(10.dp)
+                    .background(PurpleDark, RoundedCornerShape(10.dp))
+                    .padding(12.dp)
+                    .widthIn(max = 250.dp),
+                style = TextStyle(
+                    fontSize = 20.sp,
+                    color = BrownLight
+                )
+            )
+        }
+    }
+}

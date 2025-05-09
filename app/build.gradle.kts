@@ -69,6 +69,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.2")
     implementation ("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     implementation ("com.google.code.gson:gson:2.10.1")
+    implementation( libs.androidx.material.icons.extended)
 
     implementation (libs.generativeai.v060)
 

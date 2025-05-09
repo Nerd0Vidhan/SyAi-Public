@@ -3,7 +3,6 @@ package com.mato.syai.core.model
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.mato.syai.core.getAPIKEY
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -15,7 +14,7 @@ class GeminiViewModel : ViewModel() {
     private val _response = mutableStateOf("")
     val response = mutableStateOf("")
 
-    private val apiKey = getAPIKEY()
+    private val apiKey = GeminiapiKey
 
     fun generateText(prompt: String) {
         viewModelScope.launch {
