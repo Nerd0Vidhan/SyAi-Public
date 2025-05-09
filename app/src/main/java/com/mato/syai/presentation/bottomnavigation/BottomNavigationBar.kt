@@ -69,6 +69,7 @@ import com.mato.syai.presentation.toolbar.Toolbar
 //D:\SyAi\app\src\main\java\com\mato\syai\presentation\toolbar
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Menu
 import androidx.navigation.compose.rememberNavController
 import com.mato.syai.presentation.navigation.AppNavGraph
 
@@ -130,7 +131,7 @@ fun MainScreen(
     renderEffect: androidx.compose.ui.graphics.RenderEffect?,
     fabAnimationProgress: Float = 0f,
     clickAnimationProgress: Float = 0f,
-    toggleAnimation: () -> Unit = { }
+    toggleAnimation: () -> Unit = { },
 ) {
     val navController = rememberNavController()
     Toolbar(navController = navController)
