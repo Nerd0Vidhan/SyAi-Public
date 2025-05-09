@@ -35,8 +35,8 @@ fun AppNavGraph(navController: NavHostController) {
         composable("home") { MainScreenPreview() }
 
         composable ("dashboard") { Place() }
-        composable("notes") {}
-        composable("settings") {}
+        composable("notes") { Place()}
+        composable("settings") { Place()}
         composable ("tools",) { GeminiTextGeneratorUI()}
         composable("ai") { GeminiTextGeneratorUI() }
     }

@@ -61,6 +61,7 @@ import com.mato.syai.core.composables.FitnessTracker
 @Preview(showBackground = true, showSystemUi = true)
 @Composable
 fun Place() {
+//    var seq by remember{}
     var list by remember {
         mutableStateOf(
             List(10) { index -> TrackerCardItem(id = index, isExpanded = false, tracker = FitnessTracker()) }

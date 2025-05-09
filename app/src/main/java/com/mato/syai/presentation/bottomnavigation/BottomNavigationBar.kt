@@ -34,6 +34,8 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.TopAppBar
+
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -63,6 +65,8 @@ import androidx.compose.ui.unit.dp
 //import com.juraj.fluid.ui.theme.FluidBottomNavigationTheme
 import kotlin.math.PI
 import kotlin.math.sin
+import com.mato.syai.presentation.toolbar.Toolbar
+//D:\SyAi\app\src\main\java\com\mato\syai\presentation\toolbar
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Build
 import androidx.navigation.compose.rememberNavController
@@ -129,7 +133,8 @@ fun MainScreen(
     toggleAnimation: () -> Unit = { }
 ) {
     val navController = rememberNavController()
-    AppNavGraph(navController = navController)
+    Toolbar(navController = navController)
+//    AppNavGraph(navController = navController)
 
     Box(
         Modifier
@@ -137,7 +142,7 @@ fun MainScreen(
             .padding(bottom = 24.dp),
         contentAlignment = Alignment.BottomCenter
     ) {
-        CustomBottomNavigation(navController = navController)
+//        CustomBottomNavigation(navController)
         Circle(
             color = Color.Blue, //MaterialTheme.colors.primary.copy(alpha = 0.5f),
             animationProgress = 0.5f
@@ -183,7 +188,6 @@ fun FabGroup(
         Modifier
             .fillMaxSize()
             .graphicsLayer { this.renderEffect = renderEffect },
-//            .padding(bottom = DEFAULT_PADDING.dp),
         contentAlignment = Alignment.BottomCenter
     ) {
 

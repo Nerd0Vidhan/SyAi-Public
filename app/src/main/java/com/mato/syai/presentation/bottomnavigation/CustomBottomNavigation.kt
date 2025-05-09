@@ -78,3 +78,59 @@ fun CustomBottomNavigation(navController: NavHostController) {
         }
     }
 }
+
+//@Composable
+//fun CustomBottomNavigation(navController: NavHostController) {
+//    Row(
+//        horizontalArrangement = Arrangement.SpaceBetween,
+//        verticalAlignment = Alignment.CenterVertically,
+//        modifier = Modifier
+//            .height(80.dp)
+//            .paint(
+//                painter = painterResource(R.drawable.bottom_navigation),
+//                contentScale = ContentScale.FillHeight
+//            )
+//            .padding(horizontal = 40.dp)
+//    ) {
+//        // Dashboard
+//        IconButton(onClick = {  }) {
+//            Icon(
+//                imageVector = Icons.Default.Settings, // replace with desired Dashboard icon
+//                contentDescription = "Dashboard",
+//                tint = Color.White
+//            )
+//        }
+//        // Notes
+//        IconButton(onClick = {}) {
+//            Icon(
+//                imageVector = Icons.Default.ShoppingCart, // replace with Notes icon
+//                contentDescription = "Notes",
+//                tint = Color.White
+//            )
+//        }
+//        // Settings
+//        IconButton(onClick = { }) {
+//            Icon(
+//                imageVector = Icons.Default.Settings,
+//                contentDescription = "Settings",
+//                tint = Color.White
+//            )
+//        }
+//        // Tools
+//        IconButton(onClick = {}) {
+//            Icon(
+//                imageVector = Icons.Default.Add, // replace with Tools icon
+//                contentDescription = "Tools",
+//                tint = Color.White
+//            )
+//        }
+//        // AI Assistant
+//        IconButton(onClick = { }) {
+//            Icon(
+//                imageVector = Icons.Default.ShoppingCart, // replace with AI Assistant icon
+//                contentDescription = "AI Assistant",
+//                tint = Color.White
+//            )
+//        }
+//    }
+//}
