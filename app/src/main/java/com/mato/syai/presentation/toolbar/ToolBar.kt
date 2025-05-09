@@ -29,8 +29,13 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.mato.syai.core.animation.SwappableCardsGridPreview
+import com.mato.syai.presentation.bottomnavigation.CustomBottomNavigation
+import com.mato.syai.presentation.bottomnavigation.MainScreen
 import com.mato.syai.presentation.bottomnavigation.MainScreenPreview
 import com.mato.syai.presentation.dashboard.Place
+import com.mato.syai.presentation.navigation.AppNavGraph
+import com.mato.syai.presentation.navigation.BottomNavigationGraph
 import com.mato.syai.ui.theme.BrownLight
 import com.mato.syai.ui.theme.PurpleDark
 
@@ -71,22 +76,23 @@ fun Toolbar(navController: NavHostController = rememberNavController()){
             }
         },
         bottomBar = {
-            MainScreenPreview()
-//            CustomBottomNavigation(navController)
+//            MainScreen()
+            CustomBottomNavigation(navController)
         }
     ) { paddingValues ->
-        NavHost(
-            navController = navController,
-            startDestination = "dashboard",
-            modifier = Modifier.padding(paddingValues)
-        ) {
-            composable("dashboard") { Place() }
-            composable("notes") { Place() }
-            composable("settings") { Place() }
-            composable("tools") { Place() }
-            composable("ai") { Place() }
-//            composable("edit") { SwappableCardsGridPreview() }
-        }
+        BottomNavigationGraph(navController = navController, paddingValues = paddingValues)
+
+//        NavHost(
+//            navController = navController,
+//            startDestination = "dashboard",
+//            modifier = Modifier.padding(paddingValues)
+//        ) {
+//            composable("dashboard") { Place() }
+//            composable("notes") { Place() }
+//            composable("settings") { Place() }
+//            composable("tools") { Place() }
+//            composable("ai") { Place() }
+//        }
     }
 }
 

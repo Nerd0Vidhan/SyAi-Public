@@ -134,6 +134,7 @@ fun MainScreen(
 ) {
     val navController = rememberNavController()
     Toolbar(navController = navController)
+//    CustomBottomNavigation(navController)
 //    AppNavGraph(navController = navController)
 
     Box(

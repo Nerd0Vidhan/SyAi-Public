@@ -3,6 +3,7 @@ package com.mato.syai
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.rememberNavController
 import com.mato.syai.presentation.AIAssistant.GeminiTextGeneratorUIPreview
 import com.mato.syai.presentation.bottomnavigation.MainScreenPreview
@@ -15,13 +16,6 @@ class MainActivity : ComponentActivity() {
         setContent {
             val navController = rememberNavController()
             AppNavGraph(navController = navController)
-//            GeminiTextGeneratorUIPreview()
-//            MainScreenPreview()
-//            SplashScreen {
-//                navController.navigate("splash") {
-////                    popUpTo("") { inclusive = true }
-//                }
-//            }
         }
     }
 }

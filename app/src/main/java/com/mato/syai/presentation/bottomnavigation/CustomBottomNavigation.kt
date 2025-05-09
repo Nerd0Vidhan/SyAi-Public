@@ -5,6 +5,7 @@ import androidx.compose.material3.IconButton
 import com.mato.syai.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -26,15 +27,15 @@ import androidx.navigation.compose.rememberNavController
 @Composable
 fun CustomBottomNavigation(navController: NavHostController) {
     Row(
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .height(80.dp)
             .paint(
                 painter = painterResource(R.drawable.bottom_navigation),
                 contentScale = ContentScale.FillHeight
             )
-            .padding(horizontal = 40.dp)
+            .padding(horizontal = 40.dp).fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         // Dashboard
         IconButton(onClick = { navController.navigate("dashboard") }) {
