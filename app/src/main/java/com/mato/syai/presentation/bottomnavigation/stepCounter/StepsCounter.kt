@@ -25,7 +25,9 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mato.syai.ui.theme.BrownLight
+import com.mato.syai.ui.theme.LightPurple
 import com.mato.syai.ui.theme.PurpleDark
+import com.mato.syai.ui.theme.White
 import kotlinx.coroutines.delay
 import kotlin.math.PI
 import kotlin.math.cos
@@ -92,7 +94,7 @@ fun Timer(
             text = (currentTime / 1000L).toString(),
             fontSize = 44.sp,
             fontWeight = FontWeight.Bold,
-            color = PurpleDark,
+            color = White,
             modifier = Modifier.align(Alignment.Center)
         )
 
@@ -103,7 +105,6 @@ fun Timer(
 @Preview(showBackground = true, showSystemUi = true)
 @Composable
 fun CounterPreview() {
-//    Box()
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
@@ -112,7 +113,7 @@ fun CounterPreview() {
             totalTime = 100L * 1000L,
             handleColor = BrownLight,
             inactiveBarColor = BrownLight,
-            activeBarColor = Color.Red,
+            activeBarColor = LightPurple,
             modifier = Modifier.size(110.dp)
         )
     }

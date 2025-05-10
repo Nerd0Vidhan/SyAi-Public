@@ -1,14 +1,15 @@
-package com.mato.syai.presentation.AIAssistant
+package com.mato.syai.ai_assistant
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Attachment
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Mic
@@ -16,7 +17,6 @@ import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -37,30 +37,26 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.mato.syai.ui.theme.BrownLight
 import com.mato.syai.ui.theme.PurpleDark
-import com.mato.syai.ui.theme.White
 
 @OptIn(ExperimentalMaterial3Api::class)
-//@Preview(showBackground = true, showSystemUi = true)
 @Composable
 fun Msg(viewModel: GeminiTextViewModel = viewModel()){
     var prompt by remember { mutableStateOf("") }
-    val response by viewModel.generatedText.collectAsState()
-
-//    MainAssistantScreen(response)
 
     Row(
         modifier = Modifier
-            .padding(horizontal = 10.dp, vertical = 8.dp) // This keeps spacing from screen edges
-            .clip(RoundedCornerShape(56.dp))             // Ensures rounded shape
-            .background(Color(0xFFAA8BEF))                // Now shape is retained
+            .padding(horizontal = 10.dp, vertical = 8.dp)
+            .clip(RoundedCornerShape(56.dp))
+            .background(Color(0xFFAA8BEF))
             .padding(8.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
 
     ) {
 
-        IconButton(onClick = { /* Handle camera click */ }) {
+        IconButton(onClick = { }) {
             Icon(
                 imageVector = Icons.Default.CameraAlt,
                 contentDescription = "Open Camera",
@@ -86,7 +82,7 @@ fun Msg(viewModel: GeminiTextViewModel = viewModel()){
           maxLines = 4
         )
 
-        IconButton(onClick = { /* Handle mic click */ }) {
+        IconButton(onClick = {}) {
             Icon(
                 imageVector = Icons.Default.Attachment,
                 contentDescription = "Attachment",
@@ -102,7 +98,9 @@ fun Msg(viewModel: GeminiTextViewModel = viewModel()){
             )
         }
 
-        IconButton(onClick = { viewModel.fetchText(prompt) }) {
+        IconButton(onClick = { viewModel.fetchText(prompt)
+            prompt = ""
+        }) {
             Icon(
                 imageVector = Icons.Default.Send,
                 contentDescription = "Send Message",
@@ -112,34 +110,41 @@ fun Msg(viewModel: GeminiTextViewModel = viewModel()){
     }
 }
 
-
 @Preview(showBackground = true, showSystemUi = true)
 @Composable
-fun MainAssistantScreen(viewModel: GeminiTextViewModel = viewModel()){
-//    var prompt by remember { mutableStateOf("") }
-    val response by viewModel.generatedText.collectAsState()
+fun MainAssistantScreen(viewModel: GeminiTextViewModel = viewModel()) {
+    val messages by viewModel.messages.collectAsState()
 
-    Scaffold (
-        bottomBar = { Msg() }
-    ){ innerPadding ->
+    Scaffold(
+        bottomBar = { Msg(viewModel) }
+    ) { innerPadding ->
         Column(
-            modifier = Modifier.fillMaxSize().padding(10.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ){
-            Text(
-                text = response,
-                color = Color.Black,
-                style = TextStyle(fontSize = 20.sp, fontStyle = FontStyle.Normal),
-                modifier = Modifier.padding(innerPadding)
-            )
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(10.dp),
+            verticalArrangement = Arrangement.Top
+        ) {
+            messages.forEach { message ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth(),
+                    horizontalArrangement = if (message.isUser) Arrangement.End else Arrangement.Start
+                ) {
+                    Text(
+                        text = message.text,
+                        modifier = Modifier
+                            .padding(6.dp)
+                            .background(PurpleDark, RoundedCornerShape(10.dp))
+                            .padding(12.dp)
+                            .widthIn(max = 250.dp),
+                        style = TextStyle(
+                            fontSize = 20.sp,
+                            color = BrownLight
+                        )
+                    )
+                }
+            }
         }
-
     }
 }
-
-//@Preview(showBackground = true, showSystemUi = true)
-//@Composable
-//fun MainAssistantScreen(){
-//    PromptResponse("Generating")
-//}
