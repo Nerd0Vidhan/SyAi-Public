@@ -33,7 +33,7 @@ fun SquareCard(content: @Composable () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(120.dp)
+            .height(150.dp)
             .padding(8.dp)
         ,colors = CardDefaults.cardColors(
             containerColor = PurpleDark
@@ -49,7 +49,7 @@ fun RectangleCard(modifier: Modifier=Modifier,content: @Composable () -> Unit) {
     Card(
         modifier
             .fillMaxWidth()
-            .height(120.dp)
+            .height(150.dp).padding(8.dp)
     ) {
         content()
     }

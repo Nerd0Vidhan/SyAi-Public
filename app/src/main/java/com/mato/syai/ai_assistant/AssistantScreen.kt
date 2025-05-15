@@ -8,6 +8,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Attachment
@@ -24,6 +27,7 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -114,18 +118,25 @@ fun Msg(viewModel: GeminiTextViewModel = viewModel()){
 @Composable
 fun MainAssistantScreen(viewModel: GeminiTextViewModel = viewModel()) {
     val messages by viewModel.messages.collectAsState()
+    val listState = rememberLazyListState()
+
+    // Auto-scroll to bottom on new message
+    LaunchedEffect(messages.size) {
+        listState.animateScrollToItem(messages.size)
+    }
 
     Scaffold(
         bottomBar = { Msg(viewModel) }
     ) { innerPadding ->
-        Column(
+        LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
                 .padding(10.dp),
             verticalArrangement = Arrangement.Top
         ) {
-            messages.forEach { message ->
+            items(messages) { message ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth(),

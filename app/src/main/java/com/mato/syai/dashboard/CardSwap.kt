@@ -150,7 +150,8 @@ fun SwappableCard(
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showBackground =
+    true)
 @Composable
 fun SwappableCardsGridPreview() {
     MaterialTheme {

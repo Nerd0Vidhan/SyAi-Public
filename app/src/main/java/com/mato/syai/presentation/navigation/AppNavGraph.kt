@@ -7,11 +7,10 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import com.mato.syai.core.animation.SwappableCardsGridPreview
 import com.mato.syai.presentation.splash.SplashScreen
 import com.mato.syai.ai_assistant.MainAssistantScreen
 import com.mato.syai.presentation.bottomnavigation.MainScreenPreview
-import com.mato.syai.presentation.dashboard.Place
+import com.mato.syai.dashboard.DashboardScreen
 
 @Composable
 fun AppNavGraph(navController: NavHostController) {
@@ -38,12 +37,12 @@ fun BottomNavigationGraph(navController: NavHostController, paddingValues: Paddi
         modifier = Modifier.padding(paddingValues)
     ) {
 
-        composable ("dashboard") { Place() }
-        composable("notes") { Place()}
-        composable("settings") { Place()}
+        composable ("dashboard") { DashboardScreen() }
+        composable("notes") { DashboardScreen() }
+        composable("settings") { DashboardScreen() }
         composable ("tools",) { MainScreenPreview() }
         composable("ai") { MainAssistantScreen() }
-        composable("edit") { SwappableCardsGridPreview() }
+//        composable("edit") { SwappableCardsGridPreview() }
 
     }
 

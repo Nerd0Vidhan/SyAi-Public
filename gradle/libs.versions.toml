@@ -1,5 +1,6 @@
 [versions]
 agp = "8.9.2"
+fontAwesomeBrands = "1.1.0"
 generativeaiVersion = "0.6.0"
 kotlin = "2.0.0"
 coreKtx = "1.15.0"
@@ -21,6 +22,7 @@ appcompat = "1.7.0"
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-material-icons-extended = { module = "androidx.compose.material:material-icons-extended", version.ref = "materialIconsExtended" }
+font-awesome-brands = { module = "br.com.devsrsouza.compose.icons.android:font-awesome-brands", version.ref = "fontAwesomeBrands" }
 generativeai-v060 = { module = "com.google.ai.client.generativeai:generativeai", version.ref = "generativeaiVersion" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
@@ -42,6 +44,8 @@ generativeai = { group = "com.google.ai.client.generativeai", name = "generative
 androidx-lifecycle-livedata-ktx = { group = "androidx.lifecycle", name = "lifecycle-livedata-ktx", version.ref = "lifecycleLivedataKtx" }
 androidx-runtime-livedata = { group = "androidx.compose.runtime", name = "runtime-livedata", version.ref = "runtimeLivedata" }
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
+ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
