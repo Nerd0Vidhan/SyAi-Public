@@ -5,6 +5,8 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
@@ -73,21 +75,10 @@ fun Toolbar(navController: NavHostController = rememberNavController()){
         bottomBar = {
 //            MainScreen()
             CustomBottomNavigation(navController)
+            Spacer(modifier = Modifier.height(40.dp))
         }
     ) { paddingValues ->
         BottomNavigationGraph(navController = navController, paddingValues = paddingValues)
-
-//        NavHost(
-//            navController = navController,
-//            startDestination = "dashboard",
-//            modifier = Modifier.padding(paddingValues)
-//        ) {
-//            composable("dashboard") { Place() }
-//            composable("notes") { Place() }
-//            composable("settings") { Place() }
-//            composable("tools") { Place() }
-//            composable("ai") { Place() }
-//        }
     }
 }
 
