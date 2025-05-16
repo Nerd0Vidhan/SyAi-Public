@@ -1,4 +1,5 @@
 [versions]
+accompanistPermissions = "0.34.0"
 agp = "8.9.2"
 fontAwesomeBrands = "1.1.0"
 generativeaiVersion = "0.6.0"
@@ -20,6 +21,7 @@ runtimeLivedata = "1.8.0"
 appcompat = "1.7.0"
 
 [libraries]
+accompanist-permissions = { module = "com.google.accompanist:accompanist-permissions", version.ref = "accompanistPermissions" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-material-icons-extended = { module = "androidx.compose.material:material-icons-extended", version.ref = "materialIconsExtended" }
 font-awesome-brands = { module = "br.com.devsrsouza.compose.icons.android:font-awesome-brands", version.ref = "fontAwesomeBrands" }

@@ -73,7 +73,7 @@ dependencies {
 //    implementation(libs.font.awesome.brands)
     androidTestImplementation (libs.ui.test.junit4)
     debugImplementation (libs.ui.test.manifest)
-
+    implementation (libs.accompanist.permissions)
 
     implementation (libs.generativeai.v060)
     implementation("androidx.datastore:datastore-preferences:1.0.0")
