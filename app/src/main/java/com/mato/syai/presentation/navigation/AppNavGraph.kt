@@ -11,7 +11,9 @@ import com.mato.syai.presentation.splash.SplashScreen
 import com.mato.syai.ai_assistant.MainAssistantScreen
 import com.mato.syai.presentation.bottomnavigation.MainScreenPreview
 import com.mato.syai.dashboard.DashboardScreen
+import com.mato.syai.mood_tracker.MoodSelectorCardGrid
 import com.mato.syai.step_tracker.StepCounterPreview
+import com.mato.syai.tools.PreviewToolsScreen
 
 @Composable
 fun AppNavGraph(navController: NavHostController) {
@@ -39,9 +41,9 @@ fun BottomNavigationGraph(navController: NavHostController, paddingValues: Paddi
     ) {
 
         composable ("dashboard") { DashboardScreen() }
-        composable("notes") { DashboardScreen() }
+        composable("notes") { MoodSelectorCardGrid() }
         composable("settings") { DashboardScreen() }
-        composable ("tools",) { StepCounterPreview() }
+        composable ("tools",) { PreviewToolsScreen() }
         composable("ai") { MainAssistantScreen() }
 //        composable("edit") { SwappableCardsGridPreview() }
 

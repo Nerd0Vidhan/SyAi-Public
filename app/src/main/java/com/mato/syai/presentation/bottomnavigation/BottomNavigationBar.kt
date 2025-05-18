@@ -177,7 +177,7 @@ fun FabGroup(
             modifier = Modifier
                 .padding(
                     PaddingValues(
-                        bottom = 72.dp,
+                        bottom = 92.dp,
                         end = 210.dp
                     ) * FastOutSlowInEasing.transform(0f, 0.8f, animationProgress)
                 ),
@@ -188,7 +188,7 @@ fun FabGroup(
             icon = Icons.Default.Settings,
             modifier = Modifier.padding(
                 PaddingValues(
-                    bottom = 88.dp,
+                    bottom = 122.dp,
                 ) * FastOutSlowInEasing.transform(0.1f, 0.9f, animationProgress)
             ),
             opacity = LinearEasing.transform(0.3f, 0.8f, animationProgress)
@@ -198,7 +198,7 @@ fun FabGroup(
             icon = Icons.Default.ShoppingCart,
             modifier = Modifier.padding(
                 PaddingValues(
-                    bottom = 72.dp,
+                    bottom = 92.dp,
                     start = 210.dp
                 ) * FastOutSlowInEasing.transform(0.2f, 1.0f, animationProgress)
             ),
@@ -212,7 +212,7 @@ fun FabGroup(
 
         AnimatedFab(
             icon = Icons.Default.Add,
-            modifier = Modifier
+            modifier = Modifier.padding(bottom = 40.dp)
                 .rotate(
                     225 * FastOutSlowInEasing
                         .transform(0.35f, 0.65f, animationProgress)

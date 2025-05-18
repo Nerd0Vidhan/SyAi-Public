@@ -27,7 +27,6 @@ import com.mato.syai.ui.theme.PurpleDark
 @Composable
 fun DashboardScreen() {
     val stepTracker = remember { StepCountTracker() }
-//    var context = LocalContext.current
         var trackerList by remember {
             mutableStateOf(
                 listOf(

@@ -1,5 +1,6 @@
 package com.mato.syai.step_tracker
 
+import android.app.Application
 import android.content.Context
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -19,57 +20,37 @@ import com.mato.syai.ui.theme.BrownLight
 import com.mato.syai.ui.theme.LightPurple
 import com.mato.syai.ui.theme.PurpleDark
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Composable
 fun StepCounterScreen() {
     val context = LocalContext.current
-    val sensorManager = remember {
-        context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
-    }
+    val application = context.applicationContext as Application
+    val viewModel: StepCounterViewModel = viewModel(
+        factory = StepCounterViewModelFactory(application)
+    )
 
-    // Changed from `remember` to `rememberSaveable` to persist the state across recompositions
-    var baseStepCount by rememberSaveable { mutableStateOf(-1f) }
-    var stepCount by rememberSaveable { mutableStateOf(0f) }
+    val stepCount by viewModel.stepCount.collectAsState()
 
-    val stepCounterSensor = remember {
-        sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
-    }
-
-    DisposableEffect(stepCounterSensor) {
-        if (stepCounterSensor == null) return@DisposableEffect onDispose {}
-
-        val listener = object : SensorEventListener {
-            override fun onSensorChanged(event: SensorEvent?) {
-                if (event == null || event.values.isEmpty()) return
-                val totalSteps = event.values[0]
-                if (baseStepCount < 0) {
-                    baseStepCount = totalSteps
-                }
-                stepCount = totalSteps - baseStepCount
-            }
-
-            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
-        }
-
-        sensorManager.registerListener(listener, stepCounterSensor, SensorManager.SENSOR_DELAY_UI)
-
-        onDispose {
-            sensorManager.unregisterListener(listener)
-        }
+    val sensorAvailable = remember {
+        val manager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        manager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER) != null
     }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp).background(PurpleDark),
+        modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        if (stepCounterSensor == null) {
-            Text("Step counter sensor not available on this device.", fontSize = 25.sp)
+        if (!sensorAvailable) {
+            Text(
+                "Step counter sensor not available on this device.",
+                fontSize = 25.sp,
+                color = LightPurple
+            )
         } else {
             Timer(
-                steps = stepCount.toInt().toString(),
+                steps = stepCount.toString(),
                 targetSteps = 100,
                 handleColor = BrownLight,
                 inactiveBarColor = BrownLight,
@@ -80,8 +61,15 @@ fun StepCounterScreen() {
     }
 }
 
+
+
 @Preview(showBackground = true)
 @Composable
 fun StepCounterPreview() {
     StepCounterScreen()
+}
+
+object StepCounterState {
+    var baseStepCount: Float = -1f
+    var stepCount: Float = 0f
 }

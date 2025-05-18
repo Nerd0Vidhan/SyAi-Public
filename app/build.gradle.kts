@@ -74,9 +74,13 @@ dependencies {
     androidTestImplementation (libs.ui.test.junit4)
     debugImplementation (libs.ui.test.manifest)
     implementation (libs.accompanist.permissions)
+    implementation (libs.androidx.datastore.preferences)
+    implementation(libs.coil.compose)
+    implementation(libs.coil.gif)
+
 
     implementation (libs.generativeai.v060)
-    implementation("androidx.datastore:datastore-preferences:1.0.0")
+    implementation(libs.androidx.datastore.preferences.v100)
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
     implementation("androidx.startup:startup-runtime:1.1.1")
 

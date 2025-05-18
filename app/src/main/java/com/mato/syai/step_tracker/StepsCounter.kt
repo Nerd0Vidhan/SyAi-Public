@@ -82,7 +82,7 @@ fun Timer(
             text = steps,
             fontSize = 44.sp,
             fontWeight = FontWeight.Bold,
-            color = PurpleDark,
+            color = LightPurple,
             modifier = Modifier.align(Alignment.Center)
         )
     }

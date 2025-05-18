@@ -1,6 +1,9 @@
 [versions]
 accompanistPermissions = "0.34.0"
 agp = "8.9.2"
+coilGif = "2.5.0"
+datastorePreferences = "1.1.6"
+datastorePreferencesVersion = "1.0.0"
 fontAwesomeBrands = "1.1.0"
 generativeaiVersion = "0.6.0"
 kotlin = "2.0.0"
@@ -23,7 +26,11 @@ appcompat = "1.7.0"
 [libraries]
 accompanist-permissions = { module = "com.google.accompanist:accompanist-permissions", version.ref = "accompanistPermissions" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastorePreferences" }
+androidx-datastore-preferences-v100 = { module = "androidx.datastore:datastore-preferences", version.ref = "datastorePreferencesVersion" }
 androidx-material-icons-extended = { module = "androidx.compose.material:material-icons-extended", version.ref = "materialIconsExtended" }
+coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coilGif" }
+coil-gif = { module = "io.coil-kt:coil-gif", version.ref = "coilGif" }
 font-awesome-brands = { module = "br.com.devsrsouza.compose.icons.android:font-awesome-brands", version.ref = "fontAwesomeBrands" }
 generativeai-v060 = { module = "com.google.ai.client.generativeai:generativeai", version.ref = "generativeaiVersion" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
