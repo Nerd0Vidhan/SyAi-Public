@@ -50,6 +50,9 @@ fun RectangleCard(modifier: Modifier=Modifier,content: @Composable () -> Unit) {
         modifier
             .fillMaxWidth()
             .height(150.dp).padding(8.dp)
+        ,colors = CardDefaults.cardColors(
+            containerColor = PurpleDark
+        )
     ) {
         content()
     }

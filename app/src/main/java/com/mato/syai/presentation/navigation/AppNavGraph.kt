@@ -11,6 +11,7 @@ import com.mato.syai.presentation.splash.SplashScreen
 import com.mato.syai.ai_assistant.MainAssistantScreen
 import com.mato.syai.presentation.bottomnavigation.MainScreenPreview
 import com.mato.syai.dashboard.DashboardScreen
+import com.mato.syai.step_tracker.StepCounterPreview
 
 @Composable
 fun AppNavGraph(navController: NavHostController) {
@@ -40,7 +41,7 @@ fun BottomNavigationGraph(navController: NavHostController, paddingValues: Paddi
         composable ("dashboard") { DashboardScreen() }
         composable("notes") { DashboardScreen() }
         composable("settings") { DashboardScreen() }
-        composable ("tools",) { MainScreenPreview() }
+        composable ("tools",) { StepCounterPreview() }
         composable("ai") { MainAssistantScreen() }
 //        composable("edit") { SwappableCardsGridPreview() }
 
