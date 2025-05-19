@@ -251,7 +251,7 @@ fun AnimatedFab(
 @Composable
 @Preview(showBackground = true, showSystemUi = true)
 fun MainScreenPreview() {
-        BottomNavigationScreen()
+    BottomNavigationScreen()
 //    Spacer(modifier = Modifier.height(90.dp))
 }
 
