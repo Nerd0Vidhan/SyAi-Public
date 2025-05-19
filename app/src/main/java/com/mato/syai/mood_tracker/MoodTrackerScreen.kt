@@ -16,16 +16,25 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import android.os.Build
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.graphicsLayer
 import coil.decode.GifDecoder
 import coil.decode.ImageDecoderDecoder
 import coil.request.ImageRequest
 import com.mato.syai.R
-import com.mato.syai.ui.theme.BrownLight
 import com.mato.syai.ui.theme.LightPurple
 import com.mato.syai.ui.theme.PurpleDark
+import java.time.LocalDate
+
 
 @Composable
-fun MoodSelectorCardGrid() {
+fun MoodSelectorCardGrid(
+    onMoodSelected: (Int) -> Unit,
+    selectedMood: Int? = null
+) {
+    var burstGif by remember { mutableStateOf<Int?>(null) }
     val gifList = listOf(
         R.drawable.happy,
         R.drawable.sad,
@@ -38,7 +47,9 @@ fun MoodSelectorCardGrid() {
         R.drawable.surprised
     )
 
-    var selectedIndex by remember { mutableStateOf(-1) }
+    var selectedIndex by remember(selectedMood) {
+        mutableStateOf(gifList.indexOf(selectedMood))
+    }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -61,7 +72,10 @@ fun MoodSelectorCardGrid() {
                 MoodCard(
                     gifRes = gifList[index],
                     isSelected = selectedIndex == index,
-                    onClick = { selectedIndex = index }
+                    onClick = {
+                        selectedIndex = index
+                        onMoodSelected(gifList[index])
+                    }
                 )
             }
         }
@@ -75,7 +89,8 @@ fun MoodCard(gifRes: Int, isSelected: Boolean, onClick: () -> Unit) {
     Card(
         modifier = Modifier
             .size(100.dp)
-            .clickable { onClick() }.background(Color.Transparent),
+            .clickable { onClick() }
+            .background(Color.Transparent),
         shape = RoundedCornerShape(16.dp),
         elevation = CardDefaults.cardElevation(8.dp),
         border = if (isSelected) BorderStroke(3.dp, PurpleDark) else null
@@ -84,20 +99,80 @@ fun MoodCard(gifRes: Int, isSelected: Boolean, onClick: () -> Unit) {
             model = ImageRequest.Builder(context)
                 .data(gifRes)
                 .decoderFactory(
-                    if (android.os.Build.VERSION.SDK_INT >= 28)
+                    if (Build.VERSION.SDK_INT >= 28)
                         ImageDecoderDecoder.Factory()
                     else
                         GifDecoder.Factory()
                 )
-                .build(),
+                .build(),  // This is the call that was causing the issue
             contentDescription = "Mood GIF",
-            modifier = Modifier.fillMaxSize().background(LightPurple)
+            modifier = Modifier
+                .fillMaxSize()
+                .background(LightPurple)
         )
     }
 }
 
 @Preview(showBackground = true)
 @Composable
-fun PreviewMoodSelectorCardGrid() {
-    MoodSelectorCardGrid()
+fun PreviewMoodCalendarScreen() {
+    var burstGif by remember { mutableStateOf<Int?>(null) }
+    val moodEntries = remember { mutableStateMapOf<LocalDate, MoodEntry>() }
+    var selectedDate by remember { mutableStateOf(LocalDate.now()) }
+
+    var journalText by remember { mutableStateOf("") }
+
+    val selectedMoodEntry = moodEntries[selectedDate]
+    val selectedMoodRes = selectedMoodEntry?.moodRes
+    MoodSelectorCardGrid(
+            onMoodSelected = { moodRes ->
+                burstGif = moodRes // show burst
+                moodEntries[selectedDate] = MoodEntry(
+                    date = selectedDate,
+                    moodRes = moodRes,
+                    journal = journalText
+                )
+            },
+            selectedMood = selectedMoodRes
+        )
+    burstGif?.let { gif ->
+            MoodBurstEffect(gifRes = gif) {
+                burstGif = null // clear when animation completes
+            }
+        }
+}
+
+
+@Composable
+fun MoodBurstEffect(
+    gifRes: Int,
+    onAnimationEnd: () -> Unit
+) {
+    val visible = remember { mutableStateOf(true) }
+    val scale by animateFloatAsState(
+        targetValue = if (visible.value) 1.5f else 0f,
+        animationSpec = tween(durationMillis = 1000),
+        finishedListener = { onAnimationEnd() }
+    )
+
+    if (visible.value) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Transparent)
+        ) {
+            AsyncImage(
+                model = gifRes,
+                contentDescription = "Burst Mood",
+                modifier = Modifier
+                    .size(180.dp)
+                    .graphicsLayer(
+                        scaleX = scale,
+                        scaleY = scale,
+                        alpha = 1 - scale / 2
+                    )
+            )
+        }
+    }
 }
