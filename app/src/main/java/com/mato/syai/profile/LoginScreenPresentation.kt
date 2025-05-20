@@ -7,17 +7,13 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Facebook
-import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.*
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -47,7 +43,7 @@ fun LoginScreen() {
         Card(
             modifier = Modifier
                 .fillMaxWidth(),
-            shape = (RoundedCornerShape(50.dp))
+            shape = (RoundedCornerShape(10.dp))
         ) {
             OutlinedTextField(
                 value = number,
@@ -61,12 +57,12 @@ fun LoginScreen() {
             )
         }
 
-        Spacer(modifier = Modifier.height(40.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
         Card(
             modifier = Modifier
                 .fillMaxWidth(),
-            shape = (RoundedCornerShape(50.dp))
+            shape = (RoundedCornerShape(10.dp))
         ) {
             OutlinedTextField(
                 value = password,
@@ -83,18 +79,10 @@ fun LoginScreen() {
 
         Spacer(modifier = Modifier.height(40.dp))
 
-        Button(
-            onClick = { /* Handle login */ },
-            colors = ButtonDefaults.buttonColors(containerColor = LightPurple),
-            modifier = Modifier.align(Alignment.CenterHorizontally),
-            shape = RoundedCornerShape(20.dp)
-        ) {
-            Text("->", fontSize = 22.sp)
+        IconButton(onClick = {}, modifier = Modifier.size(width=60.dp, height = 50.dp).background(color = LightPurple,  shape = RoundedCornerShape(10.dp))) {
+            Image(painterResource(R.drawable.arrow_fwd), contentDescription = "chunnu", modifier = Modifier.fillMaxSize())
         }
-
         Spacer(modifier = Modifier.height(10.dp))
-
-
 
         Text(
             text = "Forget Password",
