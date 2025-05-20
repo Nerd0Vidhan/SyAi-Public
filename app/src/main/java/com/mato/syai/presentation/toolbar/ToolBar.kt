@@ -5,7 +5,11 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -61,6 +65,7 @@ fun Toolbar(navController: NavHostController = rememberNavController()){
     val currentRoute = navBackStackEntry?.destination?.route
 
     Scaffold(
+        modifier = Modifier.fillMaxSize().systemBarsPadding(),
         topBar = {
             when (currentRoute) {
                 "dashboard" -> DashboardTopBar(navController)
@@ -71,23 +76,10 @@ fun Toolbar(navController: NavHostController = rememberNavController()){
             }
         },
         bottomBar = {
-//            MainScreen()
             CustomBottomNavigation(navController)
         }
     ) { paddingValues ->
         BottomNavigationGraph(navController = navController, paddingValues = paddingValues)
-
-//        NavHost(
-//            navController = navController,
-//            startDestination = "dashboard",
-//            modifier = Modifier.padding(paddingValues)
-//        ) {
-//            composable("dashboard") { Place() }
-//            composable("notes") { Place() }
-//            composable("settings") { Place() }
-//            composable("tools") { Place() }
-//            composable("ai") { Place() }
-//        }
     }
 }
 

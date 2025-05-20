@@ -7,7 +7,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.BODY_SENSORS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
-    <uses-permission android:name=".presentation.dashboard.stepCounter.MidnightResetReceiver" />
+<!--    <uses-permission android:name=".presentation.dashboard.stepCounter.MidnightResetReceiver" />-->
 
     <application
         android:allowBackup="true"
@@ -21,9 +21,10 @@
         >
 
         <service
-            android:name=".presentation.dashboard.stepCounter.StepCounterService"
+            android:name=".step_tracker.StepCounterService"
             android:exported="false"
             android:foregroundServiceType="health" />
+
 
         <activity
             android:name=".MainActivity"

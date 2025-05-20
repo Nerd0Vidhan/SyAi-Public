@@ -4,14 +4,17 @@
     <selectionStates>
       <SelectionState runConfigName="app">
         <option name="selectionMode" value="DROPDOWN" />
-        <DropdownSelection timestamp="2025-04-13T18:37:21.055782Z">
+        <DropdownSelection timestamp="2025-05-19T16:19:22.236054400Z">
           <Target type="DEFAULT_BOOT">
             <handle>
-              <DeviceId pluginId="PhysicalDevice" identifier="serial=f2c20372" />
+              <DeviceId pluginId="LocalEmulator" identifier="path=C:\Users\shrey\.android\avd\my_phone.avd" />
             </handle>
           </Target>
         </DropdownSelection>
         <DialogSelection />
+      </SelectionState>
+      <SelectionState runConfigName="splashScreen_displaysAnimation_and_callsCallbackAfterDelay()">
+        <option name="selectionMode" value="DROPDOWN" />
       </SelectionState>
     </selectionStates>
   </component>

@@ -18,7 +18,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -175,7 +177,7 @@ fun FabGroup(
             modifier = Modifier
                 .padding(
                     PaddingValues(
-                        bottom = 72.dp,
+                        bottom = 92.dp,
                         end = 210.dp
                     ) * FastOutSlowInEasing.transform(0f, 0.8f, animationProgress)
                 ),
@@ -186,7 +188,7 @@ fun FabGroup(
             icon = Icons.Default.Settings,
             modifier = Modifier.padding(
                 PaddingValues(
-                    bottom = 88.dp,
+                    bottom = 122.dp,
                 ) * FastOutSlowInEasing.transform(0.1f, 0.9f, animationProgress)
             ),
             opacity = LinearEasing.transform(0.3f, 0.8f, animationProgress)
@@ -196,7 +198,7 @@ fun FabGroup(
             icon = Icons.Default.ShoppingCart,
             modifier = Modifier.padding(
                 PaddingValues(
-                    bottom = 72.dp,
+                    bottom = 92.dp,
                     start = 210.dp
                 ) * FastOutSlowInEasing.transform(0.2f, 1.0f, animationProgress)
             ),
@@ -210,7 +212,7 @@ fun FabGroup(
 
         AnimatedFab(
             icon = Icons.Default.Add,
-            modifier = Modifier
+            modifier = Modifier.padding(bottom = 40.dp)
                 .rotate(
                     225 * FastOutSlowInEasing
                         .transform(0.35f, 0.65f, animationProgress)
@@ -249,7 +251,8 @@ fun AnimatedFab(
 @Composable
 @Preview(showBackground = true, showSystemUi = true)
 fun MainScreenPreview() {
-        BottomNavigationScreen()
+    BottomNavigationScreen()
+//    Spacer(modifier = Modifier.height(90.dp))
 }
 
 fun Easing.transform(from: Float, to: Float, value: Float): Float {

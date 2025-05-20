@@ -1,5 +1,6 @@
 package com.mato.syai.dashboard
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,19 +20,18 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.mato.syai.core.model.TrackerCardItem
 import com.mato.syai.core.composables.FitnessTracker
-import com.mato.syai.core.composables.StepsTracker
-import com.mato.syai.presentation.dashboard.stepCounter.StepScreen
+import com.mato.syai.step_tracker.StepCountTracker
+import com.mato.syai.ui.theme.PurpleDark
 
 @Preview(showBackground = true, showSystemUi = true)
 @Composable
 fun DashboardScreen() {
-    var context = LocalContext.current
+    val stepTracker = remember { StepCountTracker() }
         var trackerList by remember {
             mutableStateOf(
                 listOf(
                     TrackerCardItem(1, tracker = FitnessTracker()),
-                    TrackerCardItem(2, tracker = StepsTracker(context))
-                    StepScreen(context = context)
+                    TrackerCardItem(2, tracker = stepTracker)
                 )
             )
         }
@@ -41,6 +41,7 @@ fun DashboardScreen() {
             contentPadding = PaddingValues(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
+//            modifier = Modifier.background(PurpleDark),
 
         ) {
             items(

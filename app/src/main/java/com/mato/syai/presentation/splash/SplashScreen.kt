@@ -8,6 +8,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.testTag
 import com.mato.syai.core.composables.RiveAnimationPlayer
 import com.mato.syai.core.model.RiveAnimationConfig
 import com.mato.syai.R
@@ -32,6 +33,7 @@ fun SplashScreen(onSplashFinished: () -> Unit) {
             modifier = Modifier
                 .height(200.dp)
                 .width(200.dp)
+                .testTag("SplashAnimation")
         )
     }
 }
