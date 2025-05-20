@@ -1,54 +1,57 @@
-package com.mato.syai.notes.core.model
+package com.mato.syai.notes.presentation.topbar
 
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.tooling.preview.Preview
+import org.w3c.dom.Text
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NotesBar(modifier: Modifier){
-    var text by remember { mutableStateOf("title ..") }
+fun NotesBar(
+    title: String,
+    onBackClick: () -> Unit,
+    onAddClick: () -> Unit,
+    onEditClick: () -> Unit,
+    onMenuClick: () -> Unit
+) {
     TopAppBar(
-        title = {Text(text)}, navigationIcon = {
-            IconButton(onClick = {}) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, "backIcon")
+        title = { Text(text = title) },
+        navigationIcon = {
+            IconButton(onClick = onBackClick) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")            }
+        },
+        actions = {
+            IconButton(onClick = onAddClick) {
+                Icon(Icons.Filled.Add, contentDescription = "Add")
             }
-        }, actions = {
-            IconButton(onClick = {}) {
-                Icon(Icons.Filled.Add, "add")
+            IconButton(onClick = onEditClick) {
+                Icon(Icons.Filled.Edit, contentDescription = "Edit")
             }
-            IconButton(onClick = {}) {
-                Icon(Icons.Filled.Edit, "page")
-            }
-            IconButton(onClick = {}) {
-                Icon(Icons.Filled.MoreVert, "contentmenu")
+            IconButton(onClick = onMenuClick) {
+                Icon(Icons.Filled.MoreVert, contentDescription = "Menu")
             }
         }
-
     )
-
 }
 
 @Preview
 @Composable
-fun NotesBarPreview(){
-    NotesBar(Modifier.fillMaxWidth())
+fun NotesBarPreview() {
+    NotesBar(
+        title = "Note Title",
+        onBackClick = {},
+        onAddClick = {},
+        onEditClick = {},
+        onMenuClick = {}
+    )
 }

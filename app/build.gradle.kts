@@ -85,4 +85,9 @@ dependencies {
     implementation("androidx.startup:startup-runtime:1.1.1")
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
+    implementation("io.coil-kt.coil3:coil-compose:3.1.0")
+    implementation("io.coil-kt.coil3:coil-network-okhttp:3.1.0")
+
+    implementation("com.google.accompanist:accompanist-permissions:0.37.3")
 }
