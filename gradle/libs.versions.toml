@@ -17,11 +17,15 @@ composeBom = "2024.04.01"
 materialIconsExtended = "1.7.8"
 navigationRuntimeKtx = "2.8.9"
 navigationCompose = "2.8.9"
+playServicesAuth = "21.3.0"
 toolsCore = "1.0.0-alpha13"
 generativeai = "0.9.0"
 lifecycleLivedataKtx = "2.8.7"
 runtimeLivedata = "1.8.0"
 appcompat = "1.7.0"
+navigationComposeJvmstubs = "2.9.0"
+navigationComposeAndroid = "2.9.0"
+roomRuntimeAndroid = "2.7.1"
 
 [libraries]
 accompanist-permissions = { module = "com.google.accompanist:accompanist-permissions", version.ref = "accompanistPermissions" }
@@ -53,8 +57,12 @@ generativeai = { group = "com.google.ai.client.generativeai", name = "generative
 androidx-lifecycle-livedata-ktx = { group = "androidx.lifecycle", name = "lifecycle-livedata-ktx", version.ref = "lifecycleLivedataKtx" }
 androidx-runtime-livedata = { group = "androidx.compose.runtime", name = "runtime-livedata", version.ref = "runtimeLivedata" }
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+play-services-auth = { module = "com.google.android.gms:play-services-auth", version.ref = "playServicesAuth" }
 ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
 ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }
+androidx-navigation-compose-jvmstubs = { group = "androidx.navigation", name = "navigation-compose-jvmstubs", version.ref = "navigationComposeJvmstubs" }
+androidx-navigation-compose-android = { group = "androidx.navigation", name = "navigation-compose-android", version.ref = "navigationComposeAndroid" }
+androidx-room-runtime-android = { group = "androidx.room", name = "room-runtime-android", version.ref = "roomRuntimeAndroid" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

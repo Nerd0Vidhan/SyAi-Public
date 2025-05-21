@@ -165,6 +165,7 @@ fun FabGroup(
     renderEffect: androidx.compose.ui.graphics.RenderEffect? = null,
     toggleAnimation: () -> Unit = { }
 ) {
+    var navController = rememberNavController()
     Box(
         Modifier
             .fillMaxSize()
@@ -191,7 +192,8 @@ fun FabGroup(
                     bottom = 122.dp,
                 ) * FastOutSlowInEasing.transform(0.1f, 0.9f, animationProgress)
             ),
-            opacity = LinearEasing.transform(0.3f, 0.8f, animationProgress)
+            opacity = LinearEasing.transform(0.3f, 0.8f, animationProgress),
+//            onClick = {navController.navigate("login")}
         )
 
         AnimatedFab(

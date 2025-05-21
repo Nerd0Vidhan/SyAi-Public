@@ -44,17 +44,16 @@ fun DashboardTopBar(navController: NavHostController) {
             Row {
                 Image(painter = painterResource(id = R.drawable.syai),"Logo", modifier = Modifier.size(55.dp,30.dp))
                 Text(" | ", color = BrownLight, fontSize = 30.sp)
-                //            ToolbarAnimation(text = "Dashboard")
-                Text("DashBoard", color = BrownLight, fontSize = 30.sp)
+                Text("Finance Tracker", color = BrownLight, fontSize = 30.sp)
 
             }
         },
         colors = TopAppBarDefaults.topAppBarColors(containerColor = PurpleDark),
-        actions = {
-            IconButton(onClick = { navController.navigate("edit") }) {
-                Icon(Icons.Default.Edit, contentDescription = "Edit", tint = BrownLight)
-            }
-        }
+//        actions = {
+//            IconButton(onClick = { navController.navigate("edit") }) {
+//                Icon(Icons.Default.Edit, contentDescription = "Edit", tint = BrownLight)
+//            }
+//        }
     )
 }
 
@@ -92,7 +91,7 @@ fun NotesTopBar() {
                 Image(painter = painterResource(id = R.drawable.syai),"Logo", modifier = Modifier.size(55.dp,30.dp))
                 Text(" | ", color = BrownLight, fontSize = 30.sp)
                 //            ToolbarAnimation(text = "Dashboard")
-                Text("Notes", color = BrownLight, fontSize = 30.sp)
+                Text("Mood Tracker", color = BrownLight, fontSize = 30.sp)
             }
         },
         colors = TopAppBarDefaults.topAppBarColors(containerColor = PurpleDark),
@@ -107,7 +106,7 @@ fun SettingsTopBar() {
             Row {
                 Text("SyAi", color = PurpleDark)
                 Text(" | ", color = PurpleDark)
-                ToolbarAnimation(text = "Settings")
+                Text("Mood Tracker", color = BrownLight, fontSize = 30.sp)
 //                Text("Tools", color = BrownLight)
             }
         },

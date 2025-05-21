@@ -24,7 +24,11 @@ import coil.request.ImageRequest
 import coil.ImageLoader
 import com.mato.syai.R
 import android.os.Build
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.remember
+import com.mato.syai.ui.theme.BrownLight
+import com.mato.syai.ui.theme.LightPurple
+import com.mato.syai.ui.theme.WhitePurple
 
 @Composable
 fun MoodGifGrid(selectedMoodRes: Int?, onMoodSelected: (Int) -> Unit) {
@@ -81,7 +85,7 @@ fun MoodGifGrid(selectedMoodRes: Int?, onMoodSelected: (Int) -> Unit) {
                     painter = painter,
                     contentDescription = "Mood GIF",
                     modifier = Modifier
-                        .background(if (isSelected) Color.LightGray else Color.Transparent)
+                        .background(if (isSelected) WhitePurple else LightPurple).fillMaxSize()
                 )
             }
         }

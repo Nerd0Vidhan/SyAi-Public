@@ -1,5 +1,6 @@
 package com.mato.syai.profile
 
+import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -12,23 +13,29 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.rememberNavController
 import com.mato.syai.R
+import com.mato.syai.presentation.bottomnavigation.MainScreenPreview
 import com.mato.syai.ui.theme.BrownLight
 import com.mato.syai.ui.theme.LightPurple
 import com.mato.syai.ui.theme.White
 import com.mato.syai.ui.theme.PurpleDark
 
-@Preview(showBackground = true, showSystemUi = true)
+//@Preview(showBackground = true, showSystemUi = true)
 @Composable
-fun LoginScreen() {
-    var number by remember { mutableStateOf("") }
+fun LoginScreen(navController: NavHostController) {
+//    var navcontroller = rememberNavController()
+    var name by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var context = LocalContext.current
     Column(
         modifier = Modifier
             .fillMaxSize().background(PurpleDark)
@@ -46,9 +53,9 @@ fun LoginScreen() {
             shape = (RoundedCornerShape(10.dp))
         ) {
             OutlinedTextField(
-                value = number,
-                onValueChange = {number = it},
-                placeholder = { Text("Number") },
+                value = name,
+                onValueChange = {name = it},
+                placeholder = { Text("E-mail") },
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(BrownLight),
@@ -57,7 +64,7 @@ fun LoginScreen() {
             )
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(40.dp))
 
         Card(
             modifier = Modifier
@@ -72,28 +79,18 @@ fun LoginScreen() {
                     .fillMaxWidth()
                     .background(BrownLight),
                 textStyle = TextStyle(fontSize = 30.sp),
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation()
+                singleLine = true
             )
         }
 
         Spacer(modifier = Modifier.height(40.dp))
 
-        IconButton(onClick = {}, modifier = Modifier.size(width=60.dp, height = 50.dp).background(color = LightPurple,  shape = RoundedCornerShape(10.dp))) {
-            Image(painterResource(R.drawable.arrow_fwd), contentDescription = "chunnu", modifier = Modifier.fillMaxSize())
+        Button(onClick = {
+            if (name.isNotEmpty() && password.isNotEmpty()) {
+            navController.navigate("home") }}) {
+
+            Text(text = "Login", color = Color.White)
         }
-        Spacer(modifier = Modifier.height(10.dp))
-
-        Text(
-            text = "Forget Password",
-            color = BrownLight,
-            fontSize = 20.sp,
-            modifier = Modifier
-                .align(Alignment.CenterHorizontally)
-                .clickable { /* Handle forget password */ }
-        )
-
-        Spacer(modifier = Modifier.height(10.dp))
 
         Text(
             text = "________________________________",
@@ -104,40 +101,19 @@ fun LoginScreen() {
 //                .clickable { /* Handle forget password */ }
         )
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(40.dp))
 
-        Row(){
-            IconButton(onClick = {  }, modifier = Modifier.size(30.dp).background(White, shape = RoundedCornerShape(50.dp))) {
-                Icon(
-                    painter = painterResource(id = R.drawable.google),
-//                    imageVector = FontAwesomeIcons.Google,
-                    contentDescription = "Dashboard",
-                    tint = Color.Unspecified,
-//                    shape = RoundedCornerShape(50.dp),
-                    modifier = Modifier.size(20.dp).background(White, shape = RoundedCornerShape(50.dp))
-            )
+        Button(onClick = {
+//            onGoogleSignInClick()
+            Toast.makeText(context, "Error- Google Login is unavailable", Toast.LENGTH_SHORT).show()
+        }) {
+            Text(text = "Login by Google", color = Color.White)
         }
+        Spacer(modifier = Modifier.height(40.dp))
 
-            IconButton(onClick = { }) {
-                Icon(
-                    imageVector = Icons.Default.Facebook, // replace with desired Dashboard icon
-                    contentDescription = "Dashboard",
-                    tint = Color.White,
-                    modifier = Modifier.size(50.dp)
-                )
-            }
-        }
 
-        Text(
-            text = "Don't have account/Sign Up",
-            color = BrownLight,
-            fontSize = 20.sp,
-            modifier = Modifier
-                .align(Alignment.CenterHorizontally)
-                .clickable { /* Handle sign up */ }
-        )
-
-        Spacer(modifier = Modifier.height(10.dp))
+//      Button(text = "Login by Google", onClick = { /*TODO*/ }))
+//        Spacer(modifier = Modifier.height(10.dp))
 
         LinearProgressIndicator(
             modifier = Modifier
@@ -148,3 +124,131 @@ fun LoginScreen() {
     }
 
 }
+
+fun onGoogleSignInClick() {
+    TODO("Not yet implemented")
+}
+
+//@Composable
+//fun LoginScreen() {
+//    var number by remember { mutableStateOf("") }
+//    var password by remember { mutableStateOf("") }
+//    Column(
+//        modifier = Modifier
+//            .fillMaxSize().background(PurpleDark)
+//            .padding(50.dp),
+//        verticalArrangement = Arrangement.Top,
+//        horizontalAlignment = Alignment.CenterHorizontally
+//    ) {
+//        Image(painter = painterResource(R.drawable.syai), contentDescription = "")
+//
+//        Spacer(modifier = Modifier.height(90.dp))
+//
+//        Card(
+//            modifier = Modifier
+//                .fillMaxWidth(),
+//            shape = (RoundedCornerShape(10.dp))
+//        ) {
+//            OutlinedTextField(
+//                value = number,
+//                onValueChange = {number = it},
+//                placeholder = { Text("Number") },
+//                modifier = Modifier
+//                    .fillMaxWidth()
+//                    .background(BrownLight),
+//                textStyle = TextStyle(fontSize = 30.sp),
+//                singleLine = true
+//            )
+//        }
+//
+//        Spacer(modifier = Modifier.height(10.dp))
+//
+//        Card(
+//            modifier = Modifier
+//                .fillMaxWidth(),
+//            shape = (RoundedCornerShape(10.dp))
+//        ) {
+//            OutlinedTextField(
+//                value = password,
+//                onValueChange = {password = it},
+//                placeholder = { Text("Password") },
+//                modifier = Modifier
+//                    .fillMaxWidth()
+//                    .background(BrownLight),
+//                textStyle = TextStyle(fontSize = 30.sp),
+//                singleLine = true,
+//                visualTransformation = PasswordVisualTransformation()
+//            )
+//        }
+//
+//        Spacer(modifier = Modifier.height(40.dp))
+//
+//        IconButton(onClick = {}, modifier = Modifier.size(width=60.dp, height = 50.dp).background(color = LightPurple,  shape = RoundedCornerShape(10.dp))) {
+//            Image(painterResource(R.drawable.arrow_fwd), contentDescription = "chunnu", modifier = Modifier.fillMaxSize())
+//        }
+//        Spacer(modifier = Modifier.height(10.dp))
+//
+//        Text(
+//            text = "Forget Password",
+//            color = BrownLight,
+//            fontSize = 20.sp,
+//            modifier = Modifier
+//                .align(Alignment.CenterHorizontally)
+//                .clickable { /* Handle forget password */ }
+//        )
+//
+//        Spacer(modifier = Modifier.height(10.dp))
+//
+//        Text(
+//            text = "________________________________",
+//            color = BrownLight,
+//            fontSize = 20.sp,
+//            modifier = Modifier
+//                .align(Alignment.CenterHorizontally)
+////                .clickable { /* Handle forget password */ }
+//        )
+//
+//        Spacer(modifier = Modifier.height(10.dp))
+//
+//        Row(){
+//            IconButton(onClick = {  }, modifier = Modifier.size(30.dp).background(White, shape = RoundedCornerShape(50.dp))) {
+//                Icon(
+//                    painter = painterResource(id = R.drawable.google),
+////                    imageVector = FontAwesomeIcons.Google,
+//                    contentDescription = "Dashboard",
+//                    tint = Color.Unspecified,
+////                    shape = RoundedCornerShape(50.dp),
+//                    modifier = Modifier.size(20.dp).background(White, shape = RoundedCornerShape(50.dp))
+//            )
+//        }
+//
+//            IconButton(onClick = { }) {
+//                Icon(
+//                    imageVector = Icons.Default.Facebook, // replace with desired Dashboard icon
+//                    contentDescription = "Dashboard",
+//                    tint = Color.White,
+//                    modifier = Modifier.size(50.dp)
+//                )
+//            }
+//        }
+//
+//        Text(
+//            text = "Don't have account/Sign Up",
+//            color = BrownLight,
+//            fontSize = 20.sp,
+//            modifier = Modifier
+//                .align(Alignment.CenterHorizontally)
+//                .clickable { /* Handle sign up */ }
+//        )
+//
+//        Spacer(modifier = Modifier.height(10.dp))
+//
+//        LinearProgressIndicator(
+//            modifier = Modifier
+//                .width(200.dp)
+//                .align(Alignment.CenterHorizontally)
+//        )
+//
+//    }
+//
+//}
