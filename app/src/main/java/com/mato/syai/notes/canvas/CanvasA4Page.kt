@@ -10,12 +10,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
-import coil3.request.ImageRequest
+//import coil3.compose.AsyncImage
+//import coil3.request.ImageRequest
 import com.mato.syai.notes.core.model.CanvasBackground
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
-import coil3.request.crossfade
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+//import coil3.request.crossfade
 import java.util.UUID
 
 @Composable
