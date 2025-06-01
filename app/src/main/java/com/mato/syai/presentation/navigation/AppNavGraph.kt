@@ -1,6 +1,5 @@
 package com.mato.syai.presentation.navigation
 
-import FinanceTrackerScreen
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -8,13 +7,12 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import com.example.syai.MainScreenPreview
 import com.mato.syai.presentation.splash.SplashScreen
 import com.mato.syai.ai_assistant.MainAssistantScreen
-import com.mato.syai.presentation.bottomnavigation.MainScreenPreview
 import com.mato.syai.dashboard.DashboardScreen
 import com.mato.syai.mood_tracker.MoodTrackerApp
 import com.mato.syai.profile.LoginScreen
-import com.mato.syai.step_tracker.StepCounterPreview
 import com.mato.syai.tools.ToolsScreen
 
 @Composable
@@ -25,7 +23,7 @@ fun AppNavGraph(navController: NavHostController) {
     ) {
         composable("splash") {
             SplashScreen(onSplashFinished = {
-                navController.navigate("login") {
+                navController.navigate("home") {
                     popUpTo("splash") { inclusive = true }
                 }
             })
@@ -43,11 +41,14 @@ fun BottomNavigationGraph(navController: NavHostController, paddingValues: Paddi
         modifier = Modifier.padding(paddingValues)
     ) {
 
-        composable ("dashboard") { FinanceTrackerScreen() }
+        composable ("dashboard") { DashboardScreen() }
         composable("notes") { MoodTrackerApp() }
-        composable("settings") { DashboardScreen() }
+        composable("menu") {  }
         composable ("tools",) { ToolsScreen(navController) }
         composable("ai") { MainAssistantScreen() }
+        composable("premium") { MainAssistantScreen() }
+        composable("profile") { MainAssistantScreen() }
+        composable("settings") { MainAssistantScreen() }
 //        composable("login") { LoginScreenPreview() }
 //        composable("edit") { SwappableCardsGridPreview() }
 

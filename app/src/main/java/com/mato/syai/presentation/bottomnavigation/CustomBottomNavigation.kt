@@ -30,10 +30,12 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
+import com.mato.syai.presentation.toolbar.Toolbar
 
 
 @Composable
 fun CustomBottomNavigation(navController: NavHostController) {
+//    Toolbar(navController)
     Row(
         modifier = Modifier
             .height(80.dp)
@@ -62,7 +64,7 @@ fun CustomBottomNavigation(navController: NavHostController) {
             )
         }
         // Settings
-        IconButton(onClick = {navController.navigate("settings") }) {
+        IconButton(onClick = {navController.navigate("menu") }) {
             Icon(
                 imageVector = Icons.Default.Settings,
                 contentDescription = "Settings",
