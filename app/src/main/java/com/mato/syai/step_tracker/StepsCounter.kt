@@ -98,7 +98,7 @@ fun CounterPreview() {
     ) {
         Timer(
             steps = "75",            // Try "100", "120" etc.
-            targetSteps = 100,
+            targetSteps = 1000,
             handleColor = BrownLight,
             inactiveBarColor = BrownLight,
             activeBarColor = LightPurple,
