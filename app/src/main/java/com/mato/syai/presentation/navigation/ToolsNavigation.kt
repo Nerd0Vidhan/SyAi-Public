@@ -5,7 +5,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.mato.syai.mood_tracker.MoodTrackerApp
-import com.mato.syai.notes.presentation.main.NotesScreen
 import com.mato.syai.step_tracker.StepCounterScreen
 import com.mato.syai.tools.ToolsScreen
 

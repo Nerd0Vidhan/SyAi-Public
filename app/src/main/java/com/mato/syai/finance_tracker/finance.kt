@@ -194,6 +194,7 @@ fun FinanceTracker(viewModel: FinanceViewModel) {
     }
 }
 
+@Preview(showBackground = true, showSystemUi = true)
 @Composable
 fun FinanceTrackerScreen() {
     val context = LocalContext.current
@@ -206,10 +207,3 @@ fun FinanceTrackerScreen() {
     FinanceTracker(viewModel)
 }
 
-
-//@Preview(showBackground = true, showSystemUi = true)
-//@Composable
-//fun FinanceTrackerPreview() {
-//    val viewModel = FinanceViewModel()
-//    FinanceTracker(viewModel)
-//}
