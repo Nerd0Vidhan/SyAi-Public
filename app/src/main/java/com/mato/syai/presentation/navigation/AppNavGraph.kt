@@ -1,5 +1,6 @@
 package com.mato.syai.presentation.navigation
 
+import FinanceTrackerScreen
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -10,7 +11,6 @@ import androidx.navigation.compose.composable
 import com.example.syai.MainScreenPreview
 import com.mato.syai.presentation.splash.SplashScreen
 import com.mato.syai.ai_assistant.MainAssistantScreen
-import com.mato.syai.dashboard.DashboardScreen
 import com.mato.syai.mood_tracker.MoodTrackerApp
 import com.mato.syai.profile.LoginScreen
 import com.mato.syai.tools.ToolsScreen
@@ -41,7 +41,7 @@ fun BottomNavigationGraph(navController: NavHostController, paddingValues: Paddi
         modifier = Modifier.padding(paddingValues)
     ) {
 
-        composable ("dashboard") { DashboardScreen() }
+        composable ("dashboard") { FinanceTrackerScreen() }
         composable("notes") { MoodTrackerApp() }
         composable("menu") {  }
         composable ("tools",) { ToolsScreen(navController) }
@@ -49,8 +49,6 @@ fun BottomNavigationGraph(navController: NavHostController, paddingValues: Paddi
         composable("premium") { MainAssistantScreen() }
         composable("profile") { MainAssistantScreen() }
         composable("settings") { MainAssistantScreen() }
-//        composable("login") { LoginScreenPreview() }
-//        composable("edit") { SwappableCardsGridPreview() }
 
     }
 

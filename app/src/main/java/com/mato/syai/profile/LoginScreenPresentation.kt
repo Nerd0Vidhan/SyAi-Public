@@ -3,6 +3,7 @@ package com.mato.syai.profile
 import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,18 +22,17 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
+import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.rememberNavController
 import com.mato.syai.R
-import com.mato.syai.presentation.bottomnavigation.MainScreenPreview
+//import com.mato.syai.presentation.bottomnavigation.MainScreenPreview
 import com.mato.syai.ui.theme.BrownLight
 import com.mato.syai.ui.theme.LightPurple
 import com.mato.syai.ui.theme.White
 import com.mato.syai.ui.theme.PurpleDark
 
-//@Preview(showBackground = true, showSystemUi = true)
 @Composable
 fun LoginScreen(navController: NavHostController) {
-//    var navcontroller = rememberNavController()
     var name by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var context = LocalContext.current
@@ -58,8 +58,8 @@ fun LoginScreen(navController: NavHostController) {
                 placeholder = { Text("E-mail") },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(BrownLight),
-                textStyle = TextStyle(fontSize = 30.sp),
+                    .background(PurpleDark).border(2.dp, BrownLight, RoundedCornerShape(10.dp)),
+                textStyle = TextStyle(fontSize = 22.sp, color = BrownLight),
                 singleLine = true
             )
         }
@@ -87,7 +87,9 @@ fun LoginScreen(navController: NavHostController) {
 
         Button(onClick = {
             if (name.isNotEmpty() && password.isNotEmpty()) {
-            navController.navigate("home") }}) {
+            navController.navigate("home")
+            }})
+        {
 
             Text(text = "Login", color = Color.White)
         }
@@ -129,6 +131,12 @@ fun onGoogleSignInClick() {
     TODO("Not yet implemented")
 }
 
+@Preview(showBackground = true, showSystemUi = true)
+@Composable
+fun LoginLayout(){
+    val navController = rememberNavController()
+    LoginScreen(navController)
+}
 //@Composable
 //fun LoginScreen() {
 //    var number by remember { mutableStateOf("") }

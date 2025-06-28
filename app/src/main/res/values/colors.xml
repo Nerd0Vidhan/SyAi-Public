@@ -2,6 +2,8 @@
 <resources>
     <color name="lightbrown">#F8E0C3</color>
     <color name="darkpurple">#00005B</color>
+    <color name="lightpurple">#FFAA8BEF</color>
+    <color name="whitepurple">#FFBCAFE5</color>
     <color name="white">#000000</color>
     <color name="black">#FFFFFF</color>
 </resources>
