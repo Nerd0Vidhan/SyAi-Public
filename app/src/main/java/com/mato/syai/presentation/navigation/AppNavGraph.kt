@@ -23,7 +23,7 @@ fun AppNavGraph(navController: NavHostController) {
     ) {
         composable("splash") {
             SplashScreen(onSplashFinished = {
-                navController.navigate("home") {
+                navController.navigate("login") {
                     popUpTo("splash") { inclusive = true }
                 }
             })
@@ -46,9 +46,9 @@ fun BottomNavigationGraph(navController: NavHostController, paddingValues: Paddi
         composable("menu") {  }
         composable ("tools",) { ToolsScreen(navController) }
         composable("ai") { MainAssistantScreen() }
-        composable("premium") { MainAssistantScreen() }
-        composable("profile") { MainAssistantScreen() }
-        composable("settings") { MainAssistantScreen() }
+        composable("premium") {  }
+        composable("profile") { }
+        composable("settings") {  }
 
     }
 

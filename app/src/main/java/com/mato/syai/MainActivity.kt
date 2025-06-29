@@ -12,12 +12,14 @@ import androidx.core.view.WindowCompat
 import androidx.navigation.compose.rememberNavController
 import com.mato.syai.mood_tracker.MoodTrackerApp
 import com.mato.syai.presentation.navigation.AppNavGraph
+import com.mato.syai.profile.kkhh
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         setContent {
+//            kkhh()
             val navController = rememberNavController()
             AppNavGraph(navController = navController)
         }

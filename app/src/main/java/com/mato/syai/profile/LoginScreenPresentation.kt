@@ -55,7 +55,7 @@ fun LoginScreen(navController: NavHostController) {
             OutlinedTextField(
                 value = name,
                 onValueChange = {name = it},
-                placeholder = { Text("E-mail") },
+                placeholder = { Text("E-mail",  color = BrownLight) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(PurpleDark).border(2.dp, BrownLight, RoundedCornerShape(10.dp)),
@@ -74,13 +74,23 @@ fun LoginScreen(navController: NavHostController) {
             OutlinedTextField(
                 value = password,
                 onValueChange = {password = it},
-                placeholder = { Text("Password") },
+                placeholder = { Text("Password", color = BrownLight) },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(BrownLight),
-                textStyle = TextStyle(fontSize = 30.sp),
+                    .background(PurpleDark).border(2.dp, BrownLight, RoundedCornerShape(10.dp)),
+                textStyle = TextStyle(fontSize = 22.sp, color = BrownLight),
                 singleLine = true
             )
+//            OutlinedTextField(
+//                value = password,
+//                onValueChange = {password = it},
+//                placeholder = { Text("Password") },
+//                modifier = Modifier
+//                    .fillMaxWidth()
+//                    .background(BrownLight),
+//                textStyle = TextStyle(fontSize = 30.sp),
+//                singleLine = true
+//            )
         }
 
         Spacer(modifier = Modifier.height(40.dp))
@@ -105,17 +115,32 @@ fun LoginScreen(navController: NavHostController) {
 
         Spacer(modifier = Modifier.height(40.dp))
 
-        Button(onClick = {
-//            onGoogleSignInClick()
-            Toast.makeText(context, "Error- Google Login is unavailable", Toast.LENGTH_SHORT).show()
-        }) {
-            Text(text = "Login by Google", color = Color.White)
-        }
-        Spacer(modifier = Modifier.height(40.dp))
+//        Button(onClick = {
+////            onGoogleSignInClick()
+//            Toast.makeText(context, "Error- Google Login is unavailable", Toast.LENGTH_SHORT).show()
+//        }) {
+//            Text(text = "Login by Google", color = Color.White)
+//        }
 
 
-//      Button(text = "Login by Google", onClick = { /*TODO*/ }))
-//        Spacer(modifier = Modifier.height(10.dp))
+
+//        Row() {
+//            IconButton(
+//                onClick = { },
+//                modifier = Modifier.size(30.dp).background(White, shape = RoundedCornerShape(50.dp))
+//            ) {
+//                Icon(
+//                    painter = painterResource(id = R.drawable.google),
+////                    imageVector = FontAwesomeIcons.Google,
+//                    contentDescription = "Dashboard",
+//                    tint = Color.Unspecified,
+////                    shape = RoundedCornerShape(50.dp),
+//                    modifier = Modifier.size(20.dp)
+//                        .background(White, shape = RoundedCornerShape(50.dp))
+//                )
+//            }
+//        }
+        Spacer(modifier = Modifier.height(60.dp))
 
         LinearProgressIndicator(
             modifier = Modifier
@@ -124,12 +149,13 @@ fun LoginScreen(navController: NavHostController) {
         )
 
     }
+        fun onGoogleSignInClick() {
+            TODO("Not yet implemented")
+        }
 
 }
 
-fun onGoogleSignInClick() {
-    TODO("Not yet implemented")
-}
+
 
 @Preview(showBackground = true, showSystemUi = true)
 @Composable
