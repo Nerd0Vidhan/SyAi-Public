@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Attachment
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Mic
@@ -75,11 +76,10 @@ fun Msg(viewModel: GeminiTextViewModel = viewModel()){
             modifier = Modifier
                 .weight(1f)
                 .padding(horizontal = 4.dp),
-            colors = TextFieldDefaults.textFieldColors(
-                containerColor = Color.Transparent,
-                unfocusedIndicatorColor = Color.Transparent,
-                focusedIndicatorColor = Color.Transparent,
-                unfocusedLabelColor = Color.Transparent,
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
+                disabledContainerColor = Color.Transparent,
             ),
             singleLine = false,
             textStyle = TextStyle(fontSize = 22.sp),
@@ -106,7 +106,7 @@ fun Msg(viewModel: GeminiTextViewModel = viewModel()){
             prompt = ""
         }) {
             Icon(
-                imageVector = Icons.Default.Send,
+                imageVector = Icons.AutoMirrored.Filled.Send,
                 contentDescription = "Send Message",
                 tint = PurpleDark
             )

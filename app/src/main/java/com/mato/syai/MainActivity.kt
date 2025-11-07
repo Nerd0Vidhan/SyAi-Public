@@ -10,12 +10,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.navigation.compose.rememberNavController
+import com.google.firebase.Firebase
+import com.google.firebase.analytics.FirebaseAnalytics
+import com.google.firebase.analytics.analytics
 import com.mato.syai.mood_tracker.MoodTrackerApp
 import com.mato.syai.presentation.navigation.AppNavGraph
-import com.mato.syai.profile.kkhh
+//import com.mato.syai.profile.kkhh
 
 class MainActivity : ComponentActivity() {
+    private lateinit var analytics: FirebaseAnalytics
     override fun onCreate(savedInstanceState: Bundle?) {
+        analytics = Firebase.analytics
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         setContent {
