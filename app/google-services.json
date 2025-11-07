@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "218665243071",
+    "project_id": "mato-syai",
+    "storage_bucket": "mato-syai.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:218665243071:android:db77b3710962fa1aa3110a",
+        "android_client_info": {
+          "package_name": "com.mato.syai"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBTBMEZXvfK48nnxtGtfz_-wmqYidR9-ko"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
