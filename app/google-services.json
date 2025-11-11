@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "426716497293",
+    "project_id": "syai-2c3b7",
+    "storage_bucket": "syai-2c3b7.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:426716497293:android:b3046772833e51bda1e9c4",
+        "android_client_info": {
+          "package_name": "com.mato.syai"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "426716497293-122v1bhe3anqlih3glb2oucj8crmpoj3.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.mato.syai",
+            "certificate_hash": "7fc3adab8c2f117bc33231973a7c25ecde70dd64"
+          }
+        },
+        {
+          "client_id": "426716497293-jr5petbgl680vlprpt31ote9rdb3jkng.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA1qKJtICRfTNu2vt7sZqzXNW0fPd8VYzA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "426716497293-jr5petbgl680vlprpt31ote9rdb3jkng.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
