@@ -1,19 +1,20 @@
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     id("kotlin-kapt")
     alias(libs.plugins.google.gms.google.services)
+    id("com.google.devtools.ksp")
+    alias(libs.plugins.kotlin.android)
 }
 
 android {
     namespace = "com.mato.syai"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.mato.syai"
         minSdk = 34
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0"
 
@@ -30,14 +31,15 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "11"
-    }
+
     buildFeatures {
         compose = true
+    }
+    kotlinOptions {
+        jvmTarget = "17"
     }
 }
 
@@ -45,9 +47,9 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.2")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    implementation(libs.androidx.lifecycle.runtime.ktx.android)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.kotlinx.coroutines.android)
 
     // Compose
     implementation(platform(libs.androidx.compose.bom))
@@ -58,6 +60,7 @@ dependencies {
     implementation(libs.androidx.material.icons.extended)
     implementation(libs.androidx.credentials.play.services.auth)
     implementation(libs.googleid)
+    implementation(libs.firebase.analytics)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 
@@ -72,22 +75,20 @@ dependencies {
 
     // Generative AI
     implementation(libs.generativeai)
-    implementation(libs.generativeai.v060)
 
     // Rive
-    implementation("app.rive:rive-android:9.6.5")
+    implementation(libs.rive.android)
 
     // Room
-    implementation("androidx.room:room-runtime:2.6.1")
-    kapt("androidx.room:room-compiler:2.6.1")
-    implementation("androidx.room:room-ktx:2.6.1")
+    implementation(libs.androidx.room.runtime)
+    ksp(libs.androidx.room.compiler)
+    implementation(libs.androidx.room.ktx)
 
     // Gson
-    implementation("com.google.code.gson:gson:2.10.1")
+    implementation(libs.gson)
 
     // DataStore
     implementation(libs.androidx.datastore.preferences)
-    implementation(libs.androidx.datastore.preferences.v100)
 
     // Coil (Image loading)
     implementation(libs.coil.compose)
@@ -97,13 +98,13 @@ dependencies {
     implementation(libs.accompanist.permissions)
 
     // Serialization
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
+    implementation(libs.kotlinx.serialization.json)
 
     // App Startup
-    implementation("androidx.startup:startup-runtime:1.1.1")
+    implementation(libs.androidx.startup.runtime)
 
     // Networking
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation(libs.okhttp)
 
     // Testing
     testImplementation(libs.junit)
@@ -114,11 +115,11 @@ dependencies {
     debugImplementation(libs.ui.test.manifest)
 
 
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-jdk8")
+    implementation(libs.kotlinx.coroutines.jdk8)
 
-    implementation ("com.google.firebase:firebase-auth:23.2.1")
-    implementation ("androidx.credentials:credentials:1.5.0")
-    implementation ("com.google.android.gms:play-services-auth:18.1.0")
-    implementation ("com.github.bumptech.glide:glide:4.16.0")
+    implementation (libs.firebase.auth)
+    implementation (libs.androidx.credentials)
+    implementation (libs.play.services.auth)
+    implementation (libs.glide)
 
 }
