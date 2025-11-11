@@ -19,7 +19,7 @@ import com.mato.syai.ui.theme.BrownLight
 import com.mato.syai.ui.theme.PurpleDark
 
 object GeminiProvider {
-    private const val API_KEY = GeminiapiKey
+    private const val API_KEY = "GeminiapiKey"
 
     val generativeModel = GenerativeModel(
         modelName = "gemini-1.5-flash",
