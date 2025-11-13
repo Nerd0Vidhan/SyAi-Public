@@ -1,11 +1,11 @@
-package com.mato.syai.core.composables
+package com.mato.syai.splashScreen.core
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import app.rive.runtime.kotlin.RiveAnimationView
-import com.mato.syai.core.model.RiveAnimationConfig
+import com.mato.syai.splashScreen.data.RiveAnimationConfig
 
 @Composable
 fun RiveAnimationPlayer(

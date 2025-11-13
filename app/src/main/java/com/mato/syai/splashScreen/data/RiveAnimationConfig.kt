@@ -1,4 +1,4 @@
-package com.mato.syai.core.model
+package com.mato.syai.splashScreen.data
 
 import androidx.annotation.RawRes
 
