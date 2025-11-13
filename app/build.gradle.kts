@@ -1,10 +1,12 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
-    id("kotlin-kapt")
-    alias(libs.plugins.google.gms.google.services)
     id("com.google.devtools.ksp")
     alias(libs.plugins.kotlin.android)
+    id("com.google.gms.google-services")
+    id("dagger.hilt.android.plugin")
+    alias(libs.plugins.room)
+    alias(libs.plugins.hiltAndroid)
 }
 
 android {
@@ -43,6 +45,10 @@ android {
     }
 }
 
+room {
+    schemaDirectory("$projectDir/schemas")
+}
+
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
@@ -61,6 +67,9 @@ dependencies {
     implementation(libs.androidx.credentials.play.services.auth)
     implementation(libs.googleid)
     implementation(libs.firebase.analytics)
+    implementation(libs.androidx.compose.ui.text)
+    implementation(libs.androidx.lifecycle.process)
+    implementation(libs.firebase.config.ktx)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 
@@ -121,5 +130,10 @@ dependencies {
     implementation (libs.androidx.credentials)
     implementation (libs.play.services.auth)
     implementation (libs.glide)
+    implementation(platform("com.google.firebase:firebase-bom:33.2.0"))
+    implementation("com.google.android.gms:play-services-auth:21.1.1")
+    implementation("com.google.dagger:hilt-android:2.57.2")
+    ksp("com.google.dagger:hilt-compiler:2.57.2")
+    implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
 
 }

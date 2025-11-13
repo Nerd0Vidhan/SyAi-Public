@@ -12,7 +12,20 @@
           "package_name": "com.mato.syai"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "218665243071-22pbp34uffj3asaj8a30351afegoerqm.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.mato.syai",
+            "certificate_hash": "cc98dde8f381710a21086a49f3d35b5206ae3c4b"
+          }
+        },
+        {
+          "client_id": "218665243071-ov7hvl90p3ka7ou83b9t7en1uv5phmic.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBTBMEZXvfK48nnxtGtfz_-wmqYidR9-ko"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "218665243071-ov7hvl90p3ka7ou83b9t7en1uv5phmic.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

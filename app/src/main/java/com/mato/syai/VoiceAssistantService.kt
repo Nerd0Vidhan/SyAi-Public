@@ -37,7 +37,7 @@ import java.util.*
 import android.os.*
 
 
-class MainActivity : ComponentActivity() {
+class VoiceAssistantServiceClass: ComponentActivity() {
 
     private var voiceService: VoiceAssistantService? = null
     private var isBound = false

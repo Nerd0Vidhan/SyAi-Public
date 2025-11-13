@@ -10,7 +10,6 @@
     <uses-permission android:name=".presentation.dashboard.stepCounter.MidnightResetReceiver" />
     <uses-permission android:name="android.permission.BODY_SENSORS_BACKGROUND" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"
         android:minSdkVersion="34" />
@@ -29,7 +28,8 @@
         android:label="@string/app_name"
         android:roundIcon="@drawable/syai_square_logo"
         android:supportsRtl="true"
-        android:theme="@style/Theme.SyAi">
+        android:theme="@style/Theme.SyAi"
+        android:name=".SyAiApplication">
         <meta-data
             android:name="com.google.android.gms.auth.api.signin.v2.clientId"
             android:value="642535303577-a946udbdfi40gkj1f2vcl8lvv33pp3p6.apps.googleusercontent.com" />
@@ -62,7 +62,7 @@
         </provider>
 
         <service
-            android:name=".VoiceAssistantService"
+            android:name=".MainActivity"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="microphone" />
