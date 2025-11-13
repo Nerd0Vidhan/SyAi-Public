@@ -1,4 +1,4 @@
-package com.mato.syai.presentation.splash
+package com.mato.syai.splashScreen.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -9,9 +9,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.testTag
-import com.mato.syai.core.composables.RiveAnimationPlayer
-import com.mato.syai.core.model.RiveAnimationConfig
+import com.mato.syai.splashScreen.data.RiveAnimationConfig
 import com.mato.syai.R
+import com.mato.syai.splashScreen.core.RiveAnimationPlayer
 import kotlinx.coroutines.time.delay
 import java.time.Duration
 

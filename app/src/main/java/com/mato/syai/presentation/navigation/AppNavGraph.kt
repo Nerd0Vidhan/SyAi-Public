@@ -9,7 +9,8 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import com.example.syai.MainScreenPreview
-import com.mato.syai.presentation.splash.SplashScreen
+import com.google.firebase.auth.FirebaseAuth
+import com.mato.syai.splashScreen.ui.SplashScreen
 import com.mato.syai.ai_assistant.MainAssistantScreen
 import com.mato.syai.mood_tracker.MoodTrackerApp
 import com.mato.syai.profile.LoginScreen
@@ -17,15 +18,25 @@ import com.mato.syai.tools.ToolsScreen
 
 @Composable
 fun AppNavGraph(navController: NavHostController) {
+
+    val currentUser = FirebaseAuth.getInstance().currentUser
+
     NavHost(
         navController = navController,
         startDestination = "splash"
     ) {
         composable("splash") {
             SplashScreen(onSplashFinished = {
-                navController.navigate("login") {
-                    popUpTo("splash") { inclusive = true }
+                if (currentUser != null) {
+                    navController.navigate("home") {
+                        popUpTo("splash") { inclusive = true }
+                    }
+                } else{
+                    navController.navigate("login") {
+                        popUpTo("splash") { inclusive = true }
+                    }
                 }
+
             })
         }
         composable("home") { MainScreenPreview() }

@@ -35,12 +35,16 @@ appcompat = "1.7.1"
 navigationComposeJvmstubs = "2.9.5"
 navigationComposeAndroid = "2.9.5"
 roomRuntimeAndroid = "2.8.3"
-googleGmsGoogleServices = "4.4.4"
 firebaseAuth = "24.0.1"
 credentials = "1.5.0"
 credentialsPlayServicesAuth = "1.5.0"
 googleid = "1.1.1"
 firebaseAnalytics = "23.0.0"
+uiText = "1.9.4"
+room = "2.6.1"
+lifecycleProcess = "2.9.4"
+hiltVersion="2.57.2"
+firebaseConfigKtx = "23.0.1"
 
 [libraries]
 accompanist-permissions = { module = "com.google.accompanist:accompanist-permissions", version.ref = "accompanistPermissions" }
@@ -94,10 +98,15 @@ androidx-credentials = { group = "androidx.credentials", name = "credentials", v
 androidx-credentials-play-services-auth = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "credentialsPlayServicesAuth" }
 googleid = { group = "com.google.android.libraries.identity.googleid", name = "googleid", version.ref = "googleid" }
 firebase-analytics = { group = "com.google.firebase", name = "firebase-analytics", version.ref = "firebaseAnalytics" }
+androidx-compose-ui-text = { group = "androidx.compose.ui", name = "ui-text", version.ref = "uiText" }
+androidx-lifecycle-process = { group = "androidx.lifecycle", name = "lifecycle-process", version.ref = "lifecycleProcess" }
+firebase-config-ktx = { group = "com.google.firebase", name = "firebase-config-ktx", version = "22.1.2" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
-google-gms-google-services = { id = "com.google.gms.google-services", version.ref = "googleGmsGoogleServices" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+room = { id = "androidx.room", version.ref = "room" }
+
+hiltAndroid = { id = "com.google.dagger.hilt.android", version.ref ="hiltVersion" }
 

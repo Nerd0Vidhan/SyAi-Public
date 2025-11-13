@@ -2,11 +2,10 @@ package com.mato.syai
 
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import org.junit.Rule
 import org.junit.Test
-import com.mato.syai.presentation.splash.SplashScreen
+import com.mato.syai.splashScreen.ui.SplashScreen
 import org.junit.Assert.assertTrue
 
 class SplashScreenTest {
