@@ -1,144 +1,196 @@
 package com.mato.syai.presentation.navigation
 
-import CuteAnimatedWaterTank
 import FinanceTrackerScreen
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.navigation.NavController
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
+import androidx.navigation.NavDestination
+import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.google.firebase.auth.FirebaseAuth
-import com.mato.syai.CutePrompts.PromptUI
 import com.mato.syai.splashScreen.ui.SplashScreen
 import com.mato.syai.ai_assistant.MainAssistantScreen
 import com.mato.syai.mood_tracker.MoodTrackerApp
-import com.mato.syai.note.ui.editor.NoteEditorScreen
-import com.mato.syai.note.ui.home.NotesHomeScreen
-import com.mato.syai.presentation.main.HomeScreen
 import com.mato.syai.profile.LoginScreen
-import com.mato.syai.presentation.settings.SettingsScreen
-import com.mato.syai.presentation.settings.SettingsScreenPremium
-import com.mato.syai.remainder.ReminderAlarmScreen
-import com.mato.syai.task_management.TaskManagementScreen
 import com.mato.syai.tools.ToolsScreen
-import com.mato.syai.voiceAssistant.VoiceAssistantScreen
-import com.mato.syai.voiceAssistant.VoiceAssistantViewModel
+import com.mato.syai.R
+import com.mato.syai.presentation.bottomnavigation.MainScreen
+
+// MAIN APP ROUTES
+sealed class Screen(val route: String) {
+
+    object Splash : Screen("splash")
+    object Login : Screen("login")
+    object Home : Screen("home")
+
+    object Dashboard : Screen("dashboard")
+    object Notes : Screen("notes")
+    object Tools : Screen("tools")
+    object AI : Screen("ai")
+    object Settings : Screen("settings")
+
+    // NESTED: Tools graph parent
+    object ToolsRoot : Screen("tools_root")
+
+    // Tools nested screens
+    object NotesTool : Screen("notes_tool")
+    object StepCounter : Screen("step_counter")
+    object DigitalWellbeing : Screen("digital_wellbeing")
+    object Finance : Screen("finance")
+    object TaskManager : Screen("task_management")
+    object Remainder : Screen("remainder")
+    object SpeechToVoice : Screen("speech_to_voice")
+    object Prompts : Screen("prompts")
+    object MoodTracker : Screen("mood_tracker")
+    object WaterTracker : Screen("water_tracker")
+    object VoiceAssistant : Screen("voice_assistant")
+}
+
+
 
 @Composable
 fun AppNavGraph(navController: NavHostController) {
 
     val currentUser = FirebaseAuth.getInstance().currentUser
+
     NavHost(
         navController = navController,
-        startDestination = "splash"
+        startDestination = Screen.Splash.route
     ) {
-        composable("splash") {
+        composable(Screen.Splash.route) {
             SplashScreen(onSplashFinished = {
                 if (currentUser != null) {
-                    navController.navigate("home") {
-                        popUpTo("splash") { inclusive = true }
+                    navController.navigate(Screen.Home.route) {
+                        popUpTo(Screen.Splash.route) { inclusive = true }
                     }
-                } else{
-                    navController.navigate("login") {
-                        popUpTo("splash") { inclusive = true }
+                } else {
+                    navController.navigate(Screen.Login.route) {
+                        popUpTo(Screen.Splash.route) { inclusive = true }
                     }
                 }
 
             })
         }
-        composable("home") { HomeScreen(parentNavController = navController) }
-        composable("login") { LoginScreen(navController) }
 
-        composable("settings") {
-            if(/*userIsPremium()*/true){
-                SettingsScreenPremium(navController)
-            } else {
-                SettingsScreen(navController)
-            }
-        }
-        composable("note_editor/{noteId}") { backStackEntry ->
-            val noteId = backStackEntry.arguments?.getString("noteId")?.toLongOrNull() ?: 0L
-            NoteEditorScreen(
-                noteId = noteId,
-                onBack = { navController.popBackStack() }
-            )
-        }
+        composable(Screen.Login.route) { LoginScreen(navController) }
+        composable(Screen.Home.route) { MainScreen() }
     }
 
-    }
+}
+
+
+@Composable
+fun HomeScreen() {
+    val bottomNavController = rememberNavController()
+    MainScreen()
+
+//    Scaffold(
+//        bottomBar = { BottomNavBar(bottomNavController) }
+//    ) { padding ->
+//        BottomNavigationGraph(
+//            navController = bottomNavController,
+//            paddingValues = padding
+//        )
+//    }
+}
 
 
 @Composable
 fun BottomNavigationGraph(
     navController: NavHostController,
-    parentNavController: NavController,
     paddingValues: PaddingValues
-){
+) {
     NavHost(
         navController = navController,
-        startDestination = "notes_list",
+        startDestination = Screen.Dashboard.route,
         modifier = Modifier.padding(paddingValues)
     ) {
-        composable ("finance") { FinanceTrackerScreen() }
-        composable("digital_wellbeing") {
-            ComingSoonScreen("Digital Wellbeing")
-        }
-        composable("step_counter") {
-            ComingSoonScreen("step counter")
-        }
-        composable("remainder") { ReminderAlarmScreen() }
-        composable("mood_tracker") { MoodTrackerApp() }
-        composable("voice_assistant") {
-                val vm: VoiceAssistantViewModel = hiltViewModel()
-                VoiceAssistantScreen(vm)
-        }
-        composable("menu") { }
-        composable ("tools") { ToolsScreen(navController) }
-        composable ("tasks_manager") { TaskManagementScreen() }
-        composable ("prompt_box") { PromptUI() }
-        composable("ai") { MainAssistantScreen() }
-        composable("premium") {
-            ComingSoonScreen("premium")
-        }
-        composable("profile") {
-            ComingSoonScreen("profile")
-        }
-        composable("water_tracker") { CuteAnimatedWaterTank() }
-        composable("settings") {
-            ComingSoonScreen("Settings")
-        }
-        composable("speech_to_voice") {
-            ComingSoonScreen("Speech to Voice")
-        }
 
-        composable("notes_list") {
-            NotesHomeScreen(
-                onNoteClick = { noteId ->
-                    parentNavController.navigate("note_editor/$noteId")
-                }
-            )
-        }
+        composable(Screen.Dashboard.route) { FinanceTrackerScreen() }
+        composable(Screen.Notes.route) { MoodTrackerApp() }
+//        composable(Screen.Menu.route) { Text("Menu") }
+        composable(Screen.Tools.route) { ToolsScreen(navController) }
+        composable(Screen.AI.route) { MainAssistantScreen() }
+//        composable(Screen.Premium.route) { Text("Premium") }
+//        composable(Screen.Profile.route) { Text("Profile") }
+        composable(Screen.Settings.route) { Text("Settings") }
 
+        // Tools pages
+        composable(Screen.StepCounter.route) { Text("Step Counter") }
+        composable(Screen.DigitalWellbeing.route) { Text("Digital Wellbeing") }
+        composable(Screen.Finance.route) { FinanceTrackerScreen() }
+        composable(Screen.Remainder.route) { Text("Remainder") }
+        composable(Screen.SpeechToVoice.route) { Text("Speech To Voice") }
     }
-
 }
+
 
 @Composable
-fun ComingSoonScreen(title: String) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(text = "$title – Coming Soon")
+fun BottomNavBar(navController: NavHostController) {
+
+    val items = listOf(
+        Screen.Dashboard,
+        Screen.Notes,
+        Screen.Tools,
+        Screen.AI,
+        Screen.Settings
+    )
+
+    NavigationBar {
+        val navBackStackEntry by navController.currentBackStackEntryAsState()
+        val currentDestination = navBackStackEntry?.destination
+
+        items.forEach { screen ->
+            NavigationBarItem(
+                selected = currentDestination.isTopLevelDestination(screen),
+                onClick = {
+                    navController.navigate(screen.route) {
+                        // Avoid multiple copies of same destination
+                        popUpTo(navController.graph.startDestinationId) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+                icon = {
+                    Icon(
+                        imageVector = getIcon(screen),
+                        contentDescription = screen.route
+                    )
+                },
+                label = { Text(screen.route) }
+            )
+        }
     }
 }
+
+private fun NavDestination?.isTopLevelDestination(screen: Screen): Boolean {
+    return this?.hierarchy?.any { it.route == screen.route } == true
+}
+
+private fun getIcon(screen: Screen): ImageVector {
+    return when (screen) {
+        Screen.Dashboard -> Icons.Default.Home
+        Screen.Notes -> Icons.Default.Note
+        Screen.Tools -> Icons.Default.Build
+        Screen.AI -> Icons.Default.SmartToy
+        Screen.Settings -> Icons.Default.Settings
+        else -> Icons.Default.Info
+    }
+}
+
