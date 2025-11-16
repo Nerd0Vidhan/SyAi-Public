@@ -1,6 +1,11 @@
+import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
+import android.view.View
+import android.view.WindowInsetsController
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -23,6 +28,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat.enableEdgeToEdge
 import androidx.lifecycle.viewmodel.compose.viewModel
 //
 //data class Transaction(
@@ -135,9 +141,9 @@ class FinanceTracker : ComponentActivity() {
 
         // ✅ Correct usage of Composable inside setContent
         setContent {
-            MaterialTheme {
+
                 FinanceTracker(viewModel)
-            }
+
         }
     }
 }
@@ -151,47 +157,51 @@ fun FinanceTracker(viewModel: FinanceViewModel) {
 
     val transactions by viewModel.transactions.collectAsState()
 
-    Column(Modifier.padding(16.dp)) {
-        Text("Finance Tracker", style = MaterialTheme.typography.headlineSmall)
+    Scaffold {
+        Column(Modifier.padding(16.dp)) {
+            Text("Finance Tracker", style = MaterialTheme.typography.headlineSmall)
 
-        Text("Balance: ₹${viewModel.balance}", style = MaterialTheme.typography.titleMedium)
-        Text("Income: ₹${viewModel.income} | Expense: ₹${viewModel.expense}")
+            Text("Balance: ₹${viewModel.balance}", style = MaterialTheme.typography.titleMedium)
+            Text("Income: ₹${viewModel.income} | Expense: ₹${viewModel.expense}")
 
-        Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(16.dp))
 
-        OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Title") }, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(value = amount, onValueChange = { amount = it }, label = { Text("Amount") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Title") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = amount, onValueChange = { amount = it }, label = { Text("Amount") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
 
-        Row {
-            RadioButton(selected = type == "Income", onClick = { type = "Income" })
-            Text("Income")
-            Spacer(Modifier.width(8.dp))
-            RadioButton(selected = type == "Expense", onClick = { type = "Expense" })
-            Text("Expense")
-        }
+            Row {
+                RadioButton(selected = type == "Income", onClick = { type = "Income" })
+                Text("Income")
+                Spacer(Modifier.width(8.dp))
+                RadioButton(selected = type == "Expense", onClick = { type = "Expense" })
+                Text("Expense")
+            }
 
-        Button(onClick = {
-            viewModel.addTransaction(title, amount.toDoubleOrNull() ?: 0.0, type)
-            title = ""; amount = ""; type = "Income"
-        }) {
-            Text("Add Transaction")
-        }
+            Button(onClick = {
+                viewModel.addTransaction(title, amount.toDoubleOrNull() ?: 0.0, type)
+                title = ""; amount = ""; type = "Income"
+            }) {
+                Text("Add Transaction")
+            }
 
-        Spacer(Modifier.height(20.dp))
-        LazyColumn {
-            items(transactions) { txn ->
-                Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                    Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Column {
-                            Text(txn.title)
-                            Text(txn.type)
+            Spacer(Modifier.height(20.dp))
+            LazyColumn {
+                items(transactions) { txn ->
+                    Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                        Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Column {
+                                Text(txn.title)
+                                Text(txn.type)
+                            }
+                            Text("₹${txn.amount}")
                         }
-                        Text("₹${txn.amount}")
                     }
                 }
             }
         }
     }
+
+
 }
 
 @Preview(showBackground = true, showSystemUi = true)
