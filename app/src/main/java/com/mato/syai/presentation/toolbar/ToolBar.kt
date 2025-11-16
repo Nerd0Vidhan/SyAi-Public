@@ -146,7 +146,7 @@ fun ToolsTopBar() {
 @Composable
 fun ToolbarAnimation(text: String){
     AnimatedVisibility(
-        visible = true, // Control this with state if needed
+        visible = true,
         enter = slideInVertically(initialOffsetY = { -it }),
         exit = slideOutVertically(targetOffsetY = { it })){
         Text(text, color = BrownLight)
