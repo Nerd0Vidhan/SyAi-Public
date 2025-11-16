@@ -10,16 +10,20 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.Note
 import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddCircle
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Note
 import androidx.compose.material.icons.filled.Notes
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,7 +62,7 @@ fun CustomBottomNavigation(navController: NavHostController) {
         // Notes
         IconButton(onClick = { navController.navigate("notes") }) {
             Icon(
-                imageVector = Icons.AutoMirrored.Filled.Notes, // replace with Notes icon
+                imageVector = Icons.Default.Note, // replace with Notes icon
                 contentDescription = "Notes",
                 tint = Color.White
             )
@@ -74,7 +78,7 @@ fun CustomBottomNavigation(navController: NavHostController) {
         // Tools
         IconButton(onClick = { navController.navigate("tools")}) {
             Icon(
-                imageVector = Icons.Default.Menu, // replace with Tools icon
+                imageVector = Icons.Default.Build, // replace with Tools icon
                 contentDescription = "Tools",
                 tint = Color.White
             )
@@ -82,10 +86,18 @@ fun CustomBottomNavigation(navController: NavHostController) {
         // AI Assistant
         IconButton(onClick = { navController.navigate("ai") }) {
             Icon(
-                imageVector = Icons.AutoMirrored.Filled.Chat, // replace with AI Assistant icon
+                imageVector = Icons.Default.SmartToy, // replace with AI Assistant icon
                 contentDescription = "AI Assistant",
                 tint = Color.White
             )
         }
     }
 }
+
+//
+//Screen.Dashboard -> Icons.Default.Home
+//Screen.Notes -> Icons.Default.Note
+//Screen.Tools -> Icons.Default.Build
+//Screen.AI -> Icons.Default.SmartToy
+//Screen.Settings -> Icons.Default.Settings
+//else -> Icons.Default.Info
