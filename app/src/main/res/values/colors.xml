@@ -6,4 +6,5 @@
     <color name="whitepurple">#FFBCAFE5</color>
     <color name="white">#000000</color>
     <color name="black">#FFFFFF</color>
+    <color name="statusbarcolor">#FF0D0127</color>
 </resources>

@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.material3.Scaffold
 import androidx.core.view.WindowCompat
 import androidx.navigation.compose.rememberNavController
 import com.google.firebase.auth.FirebaseAuth
@@ -15,16 +16,15 @@ import jakarta.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-
-    val firebaseAuth = FirebaseAuth.getInstance();
-    val currentUser = firebaseAuth.currentUser;
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         enableEdgeToEdge()
         setContent {
-            val navController = rememberNavController()
-            AppNavGraph(navController = navController)
+            Scaffold {
+                val navController = rememberNavController()
+                AppNavGraph(navController = navController)
+            }
         }
     }
 }
