@@ -1,5 +1,6 @@
 package com.mato.syai.presentation.navigation
 
+import CuteAnimatedWaterTank
 import FinanceTrackerScreen
 import android.widget.Toast
 import androidx.compose.foundation.layout.PaddingValues
@@ -14,6 +15,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import com.example.syai.MainScreenPreview
 import com.google.firebase.auth.FirebaseAuth
+import com.mato.syai.CutePrompts.PromptUI
 import com.mato.syai.splashScreen.ui.SplashScreen
 import com.mato.syai.ai_assistant.MainAssistantScreen
 import com.mato.syai.mood_tracker.MoodTrackerApp
@@ -21,6 +23,7 @@ import com.mato.syai.presentation.bottomnavigation.CustomBottomNavigation
 import com.mato.syai.profile.LoginScreen
 import com.mato.syai.profile.presentation.PhoneLoginScreen
 import com.mato.syai.remainder.ReminderAlarmScreen
+import com.mato.syai.task_management.TaskManagementScreen
 import com.mato.syai.tools.ToolsScreen
 import com.mato.syai.voiceAssistant.VoiceAssistantScreen
 import com.mato.syai.voiceAssistant.VoiceAssistantViewModel
@@ -67,20 +70,25 @@ fun BottomNavigationGraph(navController: NavHostController, paddingValues: Paddi
 
         composable ("dashboard") { FinanceTrackerScreen() }
         composable ("finance") { FinanceTrackerScreen() }
-        composable("notes") { MoodTrackerApp() }
-        composable("digital_wellbeing") { MoodTrackerApp() }
+        composable("notes") { Toast.makeText(LocalContext.current, "Coming Soon", Toast.LENGTH_SHORT).show()  }
+        composable("digital_wellbeing") { Toast.makeText(LocalContext.current, "Coming Soon", Toast.LENGTH_SHORT).show() }
         composable("step_counter") { Toast.makeText(LocalContext.current, "Coming Soon", Toast.LENGTH_SHORT).show() }
         composable("remainder") { ReminderAlarmScreen() }
-        composable("speech_to_voice") {
+        composable("mood_tracker") { MoodTrackerApp() }
+        composable("voice_assistant") {
                 val vm: VoiceAssistantViewModel = hiltViewModel()
                 VoiceAssistantScreen(vm)
         }
-        composable("menu") {  }
+        composable("menu") { Toast.makeText(LocalContext.current, "Coming Soon", Toast.LENGTH_SHORT).show()  }
         composable ("tools",) { ToolsScreen(navController) }
+        composable ("tasks_manager",) { TaskManagementScreen() }
+        composable ("prompt_box",) { PromptUI() }
         composable("ai") { MainAssistantScreen() }
-        composable("premium") {  }
-        composable("profile") { }
-        composable("settings") {  }
+        composable("premium") { Toast.makeText(LocalContext.current, "Coming Soon", Toast.LENGTH_SHORT).show()  }
+        composable("profile") { Toast.makeText(LocalContext.current, "Coming Soon", Toast.LENGTH_SHORT).show()  }
+        composable("water_tracker") { CuteAnimatedWaterTank() }
+        composable("settings") { Toast.makeText(LocalContext.current, "Coming Soon", Toast.LENGTH_SHORT).show()  }
+        composable("speech_to_voice") { Toast.makeText(LocalContext.current, "Coming Soon", Toast.LENGTH_SHORT).show()  }
 
     }
 
