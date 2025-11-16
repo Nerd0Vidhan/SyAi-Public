@@ -28,13 +28,18 @@ import com.mato.syai.R
 data class ToolItem(val id: Int, val route: String)
 
 val tools = listOf(
+    ToolItem(R.drawable.tasks, "tasks_manager"),
+    ToolItem(R.drawable.finance, "finance"),
+    ToolItem(R.drawable.remainder, "remainder"),
+    ToolItem(R.drawable.mood, "mood_tracker"),
+    ToolItem(R.drawable.speech_to_voice, "speech_to_voice"),
+    ToolItem(R.drawable.water_tracker, "water_tracker"),
+    ToolItem(R.drawable.voice_ass, "voice_assistant"),
+    ToolItem(R.drawable.promts, "prompt_box"),
     ToolItem(R.drawable.notes, "notes"),
     ToolItem(R.drawable.step_counter, "step_counter"),
-//    ToolItem(R.drawable.digital_wellbeing, "digital_wellbeing"),
-    ToolItem(R.drawable.finance, "finance"),
-//    ToolItem(R.drawable.notes, "notes"),
-    ToolItem(R.drawable.remainder, "remainder"),
-    ToolItem(R.drawable.speech_to_voice, "speech_to_voice"),
+    ToolItem(R.drawable.digital_wellbeing, "digital_wellbeing"),
+
 
 )
 
