@@ -15,7 +15,9 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.LinearGradient
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -72,7 +74,9 @@ fun CuteAnimatedWaterTank() {
         modifier = Modifier
             .fillMaxSize()
             .background(
-                color = Color(0xFFF0F8FF)
+                brush = Brush.linearGradient(
+                    colors = listOf(Color.Blue, Color.White)
+                )
             )
             .padding(32.dp),
         contentAlignment = Alignment.Center

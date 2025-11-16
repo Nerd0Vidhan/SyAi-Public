@@ -58,11 +58,11 @@ fun PromptUI() {
     )
 
     Box(modifier = Modifier.fillMaxSize()) {
-        Text("Let's see what SyAi wants to tell you!",
-            color = Color.Black,
-            style = TextStyle(fontSize = 30.sp, fontStyle = FontStyle.Italic),
-            modifier = Modifier.padding(16.dp)
-        )
+//        Text("Let's see what SyAi wants to tell you!",
+//            color = Color.Black,
+//            style = TextStyle(fontSize = 30.sp, fontStyle = FontStyle.Italic),
+//            modifier = Modifier.padding(16.dp)
+//        )
 
         LazyVerticalGrid(
             columns = GridCells.Fixed(3),
