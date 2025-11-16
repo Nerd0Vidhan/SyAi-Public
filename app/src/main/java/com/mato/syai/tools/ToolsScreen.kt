@@ -22,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.navigation.NavController
 import com.mato.syai.R
 
@@ -94,7 +95,7 @@ fun ToolsScreen(navController: NavController) {
                         Image(
                             painter = painterResource(id = tool.id),
                             contentDescription = tool.route,
-                            modifier = Modifier.size(60.dp)
+                            contentScale = ContentScale.FillBounds
                         )
 
                         Spacer(modifier = Modifier.height(10.dp))
