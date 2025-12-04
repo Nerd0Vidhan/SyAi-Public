@@ -93,11 +93,3 @@ fun CustomBottomNavigation(navController: NavHostController) {
         }
     }
 }
-
-//
-//Screen.Dashboard -> Icons.Default.Home
-//Screen.Notes -> Icons.Default.Note
-//Screen.Tools -> Icons.Default.Build
-//Screen.AI -> Icons.Default.SmartToy
-//Screen.Settings -> Icons.Default.Settings
-//else -> Icons.Default.Info
