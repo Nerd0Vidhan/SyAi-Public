@@ -5,7 +5,6 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.PhoneAuthOptions
 import com.google.firebase.auth.PhoneAuthProvider
-import com.mato.syai.utils.awaitTask
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import kotlinx.coroutines.tasks.await

@@ -15,7 +15,7 @@ android {
 
     defaultConfig {
         applicationId = "com.mato.syai"
-        minSdk = 34
+        minSdk = 31
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
@@ -70,6 +70,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.text)
     implementation(libs.androidx.lifecycle.process)
     implementation(libs.firebase.config.ktx)
+    implementation(libs.androidx.compose.animation)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 
