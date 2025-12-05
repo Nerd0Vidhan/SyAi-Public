@@ -5,7 +5,6 @@ import FinanceTrackerScreen
 import android.widget.Toast
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -19,9 +18,7 @@ import com.mato.syai.CutePrompts.PromptUI
 import com.mato.syai.splashScreen.ui.SplashScreen
 import com.mato.syai.ai_assistant.MainAssistantScreen
 import com.mato.syai.mood_tracker.MoodTrackerApp
-import com.mato.syai.presentation.bottomnavigation.CustomBottomNavigation
 import com.mato.syai.profile.LoginScreen
-import com.mato.syai.profile.presentation.PhoneLoginScreen
 import com.mato.syai.remainder.ReminderAlarmScreen
 import com.mato.syai.task_management.TaskManagementScreen
 import com.mato.syai.tools.ToolsScreen
@@ -52,9 +49,6 @@ fun AppNavGraph(navController: NavHostController) {
         }
         composable("home") { MainScreenPreview() }
         composable("login") { LoginScreen(navController) }
-        composable("phone_login") {
-            PhoneLoginScreen(navController)
-        }
     }
 
     }
@@ -80,9 +74,9 @@ fun BottomNavigationGraph(navController: NavHostController, paddingValues: Paddi
                 VoiceAssistantScreen(vm)
         }
         composable("menu") { Toast.makeText(LocalContext.current, "Coming Soon", Toast.LENGTH_SHORT).show()  }
-        composable ("tools",) { ToolsScreen(navController) }
-        composable ("tasks_manager",) { TaskManagementScreen() }
-        composable ("prompt_box",) { PromptUI() }
+        composable ("tools") { ToolsScreen(navController) }
+        composable ("tasks_manager") { TaskManagementScreen() }
+        composable ("prompt_box") { PromptUI() }
         composable("ai") { MainAssistantScreen() }
         composable("premium") { Toast.makeText(LocalContext.current, "Coming Soon", Toast.LENGTH_SHORT).show()  }
         composable("profile") { Toast.makeText(LocalContext.current, "Coming Soon", Toast.LENGTH_SHORT).show()  }

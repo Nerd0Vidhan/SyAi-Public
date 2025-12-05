@@ -136,5 +136,6 @@ dependencies {
     implementation("com.google.dagger:hilt-android:2.57.2")
     ksp("com.google.dagger:hilt-compiler:2.57.2")
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
+    implementation("com.google.android.gms:play-services-auth-api-phone:18.0.1")
 
 }
