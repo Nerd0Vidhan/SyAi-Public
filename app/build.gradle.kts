@@ -7,6 +7,7 @@ plugins {
     id("dagger.hilt.android.plugin")
     alias(libs.plugins.room)
     alias(libs.plugins.hiltAndroid)
+    id("com.google.protobuf")
 }
 
 android {
@@ -49,6 +50,26 @@ room {
     schemaDirectory("$projectDir/schemas")
 }
 
+protobuf {
+    protoc {
+        // Match this version to your dependencies
+        artifact = "com.google.protobuf:protoc:3.25.1"
+    }
+    generateProtoTasks {
+        all().forEach { task ->
+            task.builtins {
+                // Generate Java Lite code
+                create("java") {
+                    option("lite")
+                }
+                // Generate Kotlin Lite code
+                create("kotlin") {
+                    option("lite")
+                }
+            }
+        }
+    }
+}
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
@@ -136,6 +157,9 @@ dependencies {
     implementation("com.google.dagger:hilt-android:2.57.2")
     ksp("com.google.dagger:hilt-compiler:2.57.2")
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
-    implementation("com.google.android.gms:play-services-auth-api-phone:18.0.1")
+    implementation("com.google.android.gms:play-services-auth-api-phone:18.3.0")
+    implementation("com.google.protobuf:protobuf-javalite:3.25.1")
+    implementation("com.google.protobuf:protobuf-kotlin-lite:3.25.1")
+    implementation("androidx.datastore:datastore:1.1.1")
 
 }
