@@ -35,23 +35,18 @@ import androidx.compose.ui.unit.dp
 fun GlassEffect(
     modifier: Modifier = Modifier,
     cornerRadius: Dp = 24.dp,
-    glassTintColor: Color = Color.Black.copy(alpha = 0.6f), // Default dark tint
-    borderLightColor: Color = Color.White.copy(alpha = 0.6f),
-    borderShadowColor: Color = Color.Black.copy(alpha = 0.4f),
+    glassTintColor: Color = Color.Black.copy(alpha = 0.3f), // Default dark tint
+    borderLightColor: Color = Color.White.copy(alpha = 0.8f),
+    borderShadowColor: Color = Color.Black.copy(alpha = 0.6f),
     content: @Composable ColumnScope.() -> Unit
 ) {
-    // 1. Define the Shape
     val shape = RoundedCornerShape(cornerRadius)
 
     Box(
         modifier = modifier
-            // Ambient Glow (Simulated via Shadow)
-            // Note: True blur glow is handled in the custom canvas draw below for precision
             .clip(shape)
             .background(glassTintColor) // The "Tint" paint from Java
     ) {
-        // 2. Custom Renderer for the Glowing/Blurred Borders
-        // We use Canvas to replicate the specific BlurMaskFilter logic from the Java View
         Canvas(modifier = Modifier.matchParentSize()) {
             val width = size.width
             val height = size.height
@@ -61,13 +56,8 @@ fun GlassEffect(
                 val paint = Paint().asFrameworkPaint()
                 paint.isAntiAlias = true
                 paint.style = android.graphics.Paint.Style.STROKE
-
-                // --- TOP BORDER (Dynamic Light) ---
-                // Java: topBorderPaint.setMaskFilter(new BlurMaskFilter(4f...))
                 paint.strokeWidth = 6f // Match Java: 6px
                 paint.maskFilter = BlurMaskFilter(4f, BlurMaskFilter.Blur.NORMAL)
-
-                // Java: LinearGradient(0, 0, w, h, lightColor -> Transparent)
                 paint.shader = android.graphics.LinearGradient(
                     0f, 0f, width, height,
                     intArrayOf(borderLightColor.toArgb(), android.graphics.Color.TRANSPARENT),
@@ -84,13 +74,8 @@ fun GlassEffect(
                         }
                     }
                 )
-
-                // --- BOTTOM BORDER (Static Shadow) ---
-                // Java: bottomBorderPaint.setMaskFilter(new BlurMaskFilter(10f...))
                 paint.strokeWidth = 8f // Match Java: 8px
                 paint.maskFilter = BlurMaskFilter(10f, BlurMaskFilter.Blur.NORMAL)
-
-                // Java: LinearGradient(0, 0, w, h, Transparent -> Black)
                 paint.shader = android.graphics.LinearGradient(
                     0f, 0f, width, height,
                     intArrayOf(android.graphics.Color.TRANSPARENT, borderShadowColor.toArgb()),
@@ -109,10 +94,8 @@ fun GlassEffect(
                 )
             }
         }
-
-        // 3. The Content Container
         Column(
-            modifier = Modifier.padding(16.dp), // Add internal padding
+            modifier = Modifier.padding(16.dp),
             content = content
         )
     }

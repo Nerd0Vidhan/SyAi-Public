@@ -36,6 +36,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -71,12 +72,8 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.mato.syai.R
 import com.mato.syai.profile.presentation.LoginUiState
 import com.mato.syai.profile.presentation.LoginViewModel
-import com.mato.syai.ui.theme.BrownLight
-import com.mato.syai.ui.theme.FadeBrownLight
-import com.mato.syai.ui.theme.LightPurple
-import com.mato.syai.ui.theme.White
-import com.mato.syai.utils.DeepSpaceWaveBackground
 import com.mato.syai.utils.GlassEffect
+import com.mato.syai.utils.animatedBackground.DeepSpaceWaveBackground
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -390,15 +387,15 @@ fun StyledOutlinedTextField(
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        placeholder = { Text(placeholder, color = FadeBrownLight) },
+        placeholder = { Text(placeholder, color = MaterialTheme.colorScheme.outline) },
         colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = LightPurple,
-            unfocusedBorderColor = BrownLight,
-            focusedTextColor = White,
-            unfocusedTextColor = BrownLight,
-            cursorColor = White,
-            focusedPrefixColor = White,
-            unfocusedPrefixColor = BrownLight
+            focusedBorderColor = MaterialTheme.colorScheme.primaryContainer,
+            unfocusedBorderColor = MaterialTheme.colorScheme.secondary,
+            focusedTextColor = MaterialTheme.colorScheme.tertiary,
+            unfocusedTextColor = MaterialTheme.colorScheme.secondary,
+            cursorColor =  MaterialTheme.colorScheme.tertiary,
+            focusedPrefixColor =  MaterialTheme.colorScheme.tertiary,
+            unfocusedPrefixColor = MaterialTheme.colorScheme.secondary
         ),
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(10.dp),
@@ -411,9 +408,9 @@ fun StyledOutlinedTextField(
             {
                 IconButton(onClick = { onVisibilityChange(!isVisible) }) {
                     Icon(
-                        imageVector = if (isVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
+                        imageVector = if (isVisible) Icons.Filled.Visibility else Icons.Outlined.VisibilityOff,
                         contentDescription = "Toggle Password",
-                        tint = BrownLight
+                        tint = if (isVisible) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outline
                     )
                 }
             }
@@ -432,11 +429,11 @@ fun ActionButton(
         modifier = Modifier
             .fillMaxWidth()
             .height(50.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = LightPurple),
+        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
         shape = RoundedCornerShape(12.dp)
     ) {
         if (isLoading) {
-            CircularProgressIndicator(color = White, modifier = Modifier.size(24.dp))
+            CircularProgressIndicator(color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(24.dp))
         } else {
             Text(text = text, color = Color.White, fontSize = 16.sp)
         }
@@ -447,9 +444,9 @@ fun ActionButton(
 fun DividerAndGoogle(onGoogleClick: () -> Unit) {
     Column {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            HorizontalDivider(modifier = Modifier.weight(1f), color = BrownLight)
-            Text(" OR ", color = BrownLight, fontSize = 14.sp)
-            HorizontalDivider(modifier = Modifier.weight(1f), color = BrownLight)
+            HorizontalDivider(modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.secondary)
+            Text(" OR ", color = MaterialTheme.colorScheme.secondary, fontSize = 14.sp)
+            HorizontalDivider(modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.secondary)
         }
         Spacer(modifier = Modifier.height(20.dp))
         Button(
@@ -457,7 +454,7 @@ fun DividerAndGoogle(onGoogleClick: () -> Unit) {
             modifier = Modifier
                 .fillMaxWidth()
                 .height(50.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color.White),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary),
             shape = RoundedCornerShape(12.dp)
         ) {
             Image(
@@ -466,13 +463,11 @@ fun DividerAndGoogle(onGoogleClick: () -> Unit) {
                 modifier = Modifier.size(20.dp)
             )
             Spacer(Modifier.width(12.dp))
-            Text("Sign in with Google", color = Color.Black)
+            Text("Sign in with Google", color = MaterialTheme.colorScheme.onTertiary)
         }
     }
 }
 
-
-// --- REPLACED: PhoneLoginContent (Logic Updated for Focus Fix) ---
 @Composable
 fun PhoneLoginContent(
     phone: String, onPhoneChange: (String) -> Unit,
@@ -526,7 +521,7 @@ fun PhoneLoginContent(
                 .fillMaxWidth()
                 .padding(top = 12.dp) // Extra padding for the floating badge
         ) {
-            val borderColor = if (isUiInOtpMode || isAnimatingExit) FadeBrownLight.copy(alpha = 0.5f) else BrownLight
+            val borderColor = if (isUiInOtpMode || isAnimatingExit) MaterialTheme.colorScheme.outline.copy(alpha = 0.5f) else MaterialTheme.colorScheme.secondary
             val borderShape = RoundedCornerShape(12.dp)
 
             // 1. The TextField (With Transparent Border)
@@ -534,41 +529,38 @@ fun PhoneLoginContent(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(width = 3.dp, color = borderColor, shape = borderShape)
+                    .border(width = 2.dp, color = borderColor, shape = borderShape)
             ) {
                 OutlinedTextField(
                     value = phone,
                     onValueChange = { if (it.length <= 10 && it.all { c -> c.isDigit() }) onPhoneChange(it) },
-                    placeholder = { Text("Phone Number", color = FadeBrownLight) },
+                    placeholder = { Text("Phone Number", color = MaterialTheme.colorScheme.outline) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                     enabled = !isUiInOtpMode,
                     singleLine = true,
-                    prefix = { Text("+91 ", color = BrownLight, fontWeight = FontWeight.Bold) },
+                    prefix = { Text("+91 ", color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold) },
                     // Set default borders to Transparent so our Box border shows
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Color.Transparent,
                         unfocusedBorderColor = Color.Transparent,
                         disabledBorderColor = Color.Transparent,
-                        focusedTextColor = White,
-                        unfocusedTextColor = BrownLight,
-                        disabledTextColor = FadeBrownLight,
-                        cursorColor = White,
-                        disabledPrefixColor = FadeBrownLight
+                        focusedTextColor = MaterialTheme.colorScheme.tertiary,
+                        unfocusedTextColor = MaterialTheme.colorScheme.secondary,
+                        disabledTextColor = MaterialTheme.colorScheme.outline,
+                        cursorColor = MaterialTheme.colorScheme.onPrimary,
+                        disabledPrefixColor = MaterialTheme.colorScheme.outline
                     ),
                     modifier = Modifier.fillMaxWidth(),
                     shape = borderShape
                 )
             }
 
-            // 2. The Floating "Edit Number" Badge (UPDATED ANIMATION)
             androidx.compose.animation.AnimatedVisibility(
                 visible = isUiInOtpMode || isAnimatingExit,
-                // CHANGED: Use expandVertically to look like it's sliding out of the border
                 enter = expandVertically(
                     expandFrom = Alignment.CenterVertically,
                     animationSpec = tween(300)
                 ) + fadeIn(tween(300)),
-                // CHANGED: Use shrinkVertically to retract back into the border
                 exit = shrinkVertically(
                     shrinkTowards = Alignment.CenterVertically,
                     animationSpec = tween(200)
@@ -585,7 +577,7 @@ fun PhoneLoginContent(
                     shape = RoundedCornerShape(50), // Pill shape
                     // Dark background to "Mask" the border line behind it
                     color = Color(0xFF1E1033),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, BrownLight),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.secondary),
                     modifier = Modifier.height(28.dp)
                 ) {
                     Row(
@@ -594,7 +586,7 @@ fun PhoneLoginContent(
                     ) {
                         Text(
                             text = "Edit",
-                            color = BrownLight,
+                            color = MaterialTheme.colorScheme.secondary,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -602,7 +594,7 @@ fun PhoneLoginContent(
                         Icon(
                             imageVector = Icons.Default.Edit,
                             contentDescription = "Edit",
-                            tint = BrownLight,
+                            tint = MaterialTheme.colorScheme.secondary,
                             modifier = Modifier.size(12.dp)
                         )
                     }
@@ -673,14 +665,14 @@ fun PhoneLoginContent(
                         if (!canResend) {
                             Text(
                                 text = "Resend in ${ticks}s",
-                                color = FadeBrownLight,
+                                color = MaterialTheme.colorScheme.outline,
                                 fontSize = 14.sp,
                                 modifier = Modifier.align(Alignment.CenterHorizontally)
                             )
                         } else {
                             Text(
                                 text = "Resend OTP",
-                                color = White,
+                                color = MaterialTheme.colorScheme.tertiary,
                                 fontSize = 14.sp,
                                 textDecoration = TextDecoration.Underline,
                                 modifier = Modifier.align(Alignment.CenterHorizontally)
@@ -709,7 +701,6 @@ fun PhoneLoginContent(
         )
     }
 }
-// --- NEW COMPOSABLE: Zero-Latency Dropping Row ---
 @Composable
 fun OtpDroppingRow(
     otpValue: String,
@@ -816,7 +807,7 @@ fun OtpVisualBox(
     isActive: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val borderColor = if (isActive) LightPurple else BrownLight
+    val borderColor = if (isActive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.secondary
 
     Box(
         modifier = modifier
@@ -831,7 +822,7 @@ fun OtpVisualBox(
         Text(
             text = char,
             style = TextStyle(
-                color = White,
+                color = MaterialTheme.colorScheme.tertiary,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center
@@ -853,101 +844,8 @@ fun OtpVisualBox(
                 modifier = Modifier
                     .height(20.dp)
                     .width(2.dp)
-                    .background(LightPurple.copy(alpha = cursorAlpha))
+                    .background(MaterialTheme.colorScheme.onPrimary.copy(alpha = cursorAlpha))
             )
         }
     }
-}
-@OptIn(ExperimentalComposeUiApi::class)
-@Composable
-fun OtpDigitInput(
-    modifier: Modifier = Modifier,
-    value: String,
-    onValueChange: (String) -> Unit,
-    focusRequester: FocusRequester,
-    onBackspace: () -> Unit
-) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = {
-            if (it.length <= 1) onValueChange(it)
-            else if (it.length == 2) onValueChange(it.last().toString())
-        },
-        modifier = modifier
-            .aspectRatio(0.8f)
-            .focusRequester(focusRequester)
-            .onKeyEvent { keyEvent ->
-                if (keyEvent.key == Key.Backspace && value.isEmpty()) {
-                    onBackspace()
-                    true
-                } else {
-                    false
-                }
-            },
-        textStyle = TextStyle(
-            color = White,
-            fontSize = 18.sp,
-            textAlign = TextAlign.Center,
-            fontWeight = FontWeight.Bold
-        ),
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = LightPurple,
-            unfocusedBorderColor = BrownLight,
-            cursorColor = Color.Transparent
-        ),
-        shape = RoundedCornerShape(8.dp),
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-    )
-}
-
-@Composable
-fun StyledOutlinedTextField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    placeholder: String,
-    keyboardType: KeyboardType,
-    enabled: Boolean = true,
-    isPassword: Boolean = false,
-    isVisible: Boolean = false,
-    onVisibilityChange: ((Boolean) -> Unit)? = null,
-    prefix: @Composable (() -> Unit)? = null,
-    suffix: @Composable (() -> Unit)? = null,
-    colors: TextFieldColors? = null
-) {
-    val defaultColors = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = LightPurple,
-        unfocusedBorderColor = BrownLight,
-        focusedTextColor = White,
-        unfocusedTextColor = BrownLight,
-        cursorColor = White,
-        focusedPrefixColor = White,
-        unfocusedPrefixColor = BrownLight
-    )
-
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        enabled = enabled,
-        placeholder = { Text(placeholder, color = FadeBrownLight) },
-        colors = colors ?: defaultColors,
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(10.dp),
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-        prefix = prefix,
-        suffix = suffix,
-        visualTransformation = if (isPassword && !isVisible) PasswordVisualTransformation() else VisualTransformation.None,
-        trailingIcon = if (isPassword && onVisibilityChange != null) {
-            {
-                IconButton(onClick = { onVisibilityChange(!isVisible) }) {
-                    Icon(
-                        imageVector = if (isVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
-                        contentDescription = "Toggle Password",
-                        tint = BrownLight
-                    )
-                }
-            }
-        } else null
-    )
 }
