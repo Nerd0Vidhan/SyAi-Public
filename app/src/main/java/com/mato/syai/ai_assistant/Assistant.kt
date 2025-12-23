@@ -15,8 +15,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.mato.syai.ui.theme.BrownLight
-import com.mato.syai.ui.theme.PurpleDark
 
 object GeminiProvider {
     private const val API_KEY = "GeminiapiKey"
@@ -62,12 +60,12 @@ fun ChatLayout(modifier: Modifier){
                 "Hello",
                 modifier = Modifier
                     .padding(10.dp)
-                    .background(PurpleDark, RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(10.dp))
                     .padding(12.dp)
                     .widthIn(max = 250.dp),
                 style = TextStyle(
                     fontSize = 20.sp,
-                    color = BrownLight
+                    color = MaterialTheme.colorScheme.secondary
                 )
             )
         }
@@ -80,12 +78,12 @@ fun ChatLayout(modifier: Modifier){
                 "Hello",
                 modifier = Modifier
                     .padding(10.dp)
-                    .background(PurpleDark, RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(10.dp))
                     .padding(12.dp)
                     .widthIn(max = 250.dp),
                 style = TextStyle(
                     fontSize = 20.sp,
-                    color = BrownLight
+                    color = MaterialTheme.colorScheme.secondary
                 )
             )
         }

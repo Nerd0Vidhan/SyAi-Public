@@ -24,9 +24,9 @@
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
-        android:icon="@drawable/syai_square_logo"
+        android:icon="@drawable/syai_square_vector_logo"
         android:label="@string/app_name"
-        android:roundIcon="@drawable/syai_square_logo"
+        android:roundIcon="@drawable/syai_square_vector_logo"
         android:supportsRtl="true"
         android:theme="@style/Theme.SyAi"
         android:name=".SyAiApplication">

@@ -11,6 +11,8 @@ import com.google.firebase.auth.FirebaseAuth
 import com.mato.syai.presentation.navigation.AppNavGraph
 import com.mato.syai.profile.kkhh
 import com.mato.syai.profile.presentation.LoginViewModel
+import com.mato.syai.ui.theme.AppTheme
+import com.mato.syai.ui.theme.SyAiTheme
 import dagger.hilt.android.AndroidEntryPoint
 import jakarta.inject.Inject
 
@@ -21,10 +23,14 @@ class MainActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         enableEdgeToEdge()
         setContent {
-            Scaffold {
-                val navController = rememberNavController()
-                AppNavGraph(navController = navController)
+            AppTheme {
+                Scaffold {
+                    val navController = rememberNavController()
+                    AppNavGraph(navController = navController)
+                }
+
             }
+
         }
     }
 }
