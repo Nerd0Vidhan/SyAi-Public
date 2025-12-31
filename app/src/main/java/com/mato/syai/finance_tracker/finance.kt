@@ -156,45 +156,53 @@ fun FinanceTracker(viewModel: FinanceViewModel) {
     var type by remember { mutableStateOf("Income") }
 
     val transactions by viewModel.transactions.collectAsState()
+    Column(Modifier.padding(16.dp)) {
+        Text("Balance: ₹${viewModel.balance}", style = MaterialTheme.typography.titleMedium)
+        Text("Income: ₹${viewModel.income} | Expense: ₹${viewModel.expense}")
 
-    Scaffold {
-        Column(Modifier.padding(16.dp)) {
-            Text("Finance Tracker", style = MaterialTheme.typography.headlineSmall)
+        Spacer(Modifier.height(16.dp))
 
-            Text("Balance: ₹${viewModel.balance}", style = MaterialTheme.typography.titleMedium)
-            Text("Income: ₹${viewModel.income} | Expense: ₹${viewModel.expense}")
+        OutlinedTextField(
+            value = title,
+            onValueChange = { title = it },
+            label = { Text("Title") },
+            modifier = Modifier.fillMaxWidth()
+        )
+        OutlinedTextField(
+            value = amount,
+            onValueChange = { amount = it },
+            label = { Text("Amount") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth()
+        )
 
-            Spacer(Modifier.height(16.dp))
+        Row {
+            RadioButton(selected = type == "Income", onClick = { type = "Income" })
+            Text("Income")
+            Spacer(Modifier.width(8.dp))
+            RadioButton(selected = type == "Expense", onClick = { type = "Expense" })
+            Text("Expense")
+        }
 
-            OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Title") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(value = amount, onValueChange = { amount = it }, label = { Text("Amount") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
+        Button(onClick = {
+            viewModel.addTransaction(title, amount.toDoubleOrNull() ?: 0.0, type)
+            title = ""; amount = ""; type = "Income"
+        }) {
+            Text("Add Transaction")
+        }
 
-            Row {
-                RadioButton(selected = type == "Income", onClick = { type = "Income" })
-                Text("Income")
-                Spacer(Modifier.width(8.dp))
-                RadioButton(selected = type == "Expense", onClick = { type = "Expense" })
-                Text("Expense")
-            }
-
-            Button(onClick = {
-                viewModel.addTransaction(title, amount.toDoubleOrNull() ?: 0.0, type)
-                title = ""; amount = ""; type = "Income"
-            }) {
-                Text("Add Transaction")
-            }
-
-            Spacer(Modifier.height(20.dp))
-            LazyColumn {
-                items(transactions) { txn ->
-                    Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                        Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Column {
-                                Text(txn.title)
-                                Text(txn.type)
-                            }
-                            Text("₹${txn.amount}")
+        Spacer(Modifier.height(20.dp))
+        LazyColumn {
+            items(transactions) { txn ->
+                Card(Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp)) {
+                    Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Column {
+                            Text(txn.title)
+                            Text(txn.type)
                         }
+                        Text("₹${txn.amount}")
                     }
                 }
             }
