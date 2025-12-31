@@ -59,8 +59,7 @@ val tools = listOf(
 fun ToolsScreen(navController: NavController) {
     Column(
         modifier = Modifier
-            .fillMaxSize()
-            .padding(WindowInsets.systemBars.asPaddingValues()),
+            .fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
 
