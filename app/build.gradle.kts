@@ -92,6 +92,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.process)
     implementation(libs.firebase.config.ktx)
     implementation(libs.androidx.compose.animation)
+    implementation(libs.androidx.compose.foundation.layout)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 

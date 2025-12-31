@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -16,7 +17,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import java.time.Instant
 import java.time.LocalDateTime
+import java.time.LocalTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.*
 
@@ -56,26 +60,13 @@ fun ReminderAlarmScreen() {
     var showAddDialog by remember { mutableStateOf(false) }
     var reminderToDelete by remember { mutableStateOf<String?>(null) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Reminders & Alarms") },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
-            )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showAddDialog = true },
-                containerColor = MaterialTheme.colorScheme.primary
-            ) {
-                Icon(Icons.Default.Add, "Add Reminder")
-            }
-        }
-    ) { padding ->
+    Box(modifier = Modifier.fillMaxSize()) {
+
+        // ---------- Main Content ----------
         if (reminders.isEmpty()) {
-            EmptyState(modifier = Modifier.padding(padding))
+            EmptyState(
+                modifier = Modifier.fillMaxSize()
+            )
         } else {
             ReminderList(
                 reminders = reminders,
@@ -87,31 +78,45 @@ fun ReminderAlarmScreen() {
                 onDeleteRequest = { id ->
                     reminderToDelete = id
                 },
-                modifier = Modifier.padding(padding)
+                modifier = Modifier.fillMaxSize()
             )
         }
 
-        if (showAddDialog) {
-            AddReminderDialog(
-                onDismiss = { showAddDialog = false },
-                onSave = { reminder ->
-                    reminders = reminders + reminder
-                    showAddDialog = false
-                }
-            )
+        // ---------- FAB ----------
+        FloatingActionButton(
+            onClick = { showAddDialog = true },
+            shape = CircleShape,
+            containerColor = MaterialTheme.colorScheme.primary,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(
+                    end = 16.dp,
+                    bottom = 100.dp   // your custom offset
+                )
+        ) {
+            Icon(Icons.Default.Add, contentDescription = "Add Reminder")
         }
+    }
 
-        if (reminderToDelete != null) {
-            DeleteConfirmationDialog(
-                onConfirm = {
-                    reminders = reminders.filter { it.id != reminderToDelete }
-                    reminderToDelete = null
-                },
-                onDismiss = {
-                    reminderToDelete = null
-                }
-            )
-        }
+    // ---------- Dialogs ----------
+    if (showAddDialog) {
+        AddReminderDialog(
+            onDismiss = { showAddDialog = false },
+            onSave = { reminder ->
+                reminders = reminders + reminder
+                showAddDialog = false
+            }
+        )
+    }
+
+    if (reminderToDelete != null) {
+        DeleteConfirmationDialog(
+            onConfirm = {
+                reminders = reminders.filter { it.id != reminderToDelete }
+                reminderToDelete = null
+            },
+            onDismiss = { reminderToDelete = null }
+        )
     }
 }
 
@@ -280,7 +285,7 @@ fun AddReminderDialog(
     var showTimePicker by remember { mutableStateOf(false) }
 
     val datePickerState = rememberDatePickerState(
-        initialSelectedDateMillis = selectedDate.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+        initialSelectedDateMillis = selectedDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
     )
     val timePickerState = rememberTimePickerState(
         initialHour = selectedTime.hour,
@@ -491,8 +496,8 @@ fun AddReminderDialog(
                 TextButton(
                     onClick = {
                         datePickerState.selectedDateMillis?.let { millis ->
-                            selectedDate = java.time.Instant.ofEpochMilli(millis)
-                                .atZone(java.time.ZoneId.systemDefault())
+                            selectedDate = Instant.ofEpochMilli(millis)
+                                .atZone(ZoneId.systemDefault())
                                 .toLocalDate()
                         }
                         showDatePicker = false
@@ -518,7 +523,7 @@ fun AddReminderDialog(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        selectedTime = java.time.LocalTime.of(
+                        selectedTime = LocalTime.of(
                             timePickerState.hour,
                             timePickerState.minute
                         )
