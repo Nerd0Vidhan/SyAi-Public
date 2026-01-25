@@ -53,7 +53,7 @@ fun CustomBottomNavigation(navController: NavController) {
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = { navController.navigate("finance") }) {
+                IconButton(onClick = { navController.navigate("dashboard") }) {
                     Icon(
                         imageVector = Icons.Default.Home,
                         contentDescription = "Dashboard",

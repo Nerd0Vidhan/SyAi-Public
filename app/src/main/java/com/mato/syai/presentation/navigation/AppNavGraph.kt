@@ -19,6 +19,7 @@ import com.mato.syai.CutePrompts.PromptUI
 import com.mato.syai.splashScreen.ui.SplashScreen
 import com.mato.syai.ai_assistant.MainAssistantScreen
 import com.mato.syai.mood_tracker.MoodTrackerApp
+import com.mato.syai.notes.ui.screen.DebugNotesScreen
 import com.mato.syai.presentation.main.HomeScreen
 import com.mato.syai.profile.LoginScreen
 import com.mato.syai.remainder.ReminderAlarmScreen
@@ -63,7 +64,9 @@ fun BottomNavigationGraph(navController: NavHostController, paddingValues: Paddi
         startDestination = "dashboard",
         modifier = Modifier.padding(paddingValues)
     ) {
-        composable ("dashboard") { ToolsScreen(navController = navController) }
+        composable ("dashboard") {
+            DebugNotesScreen()
+        }
         composable ("finance") { FinanceTrackerScreen() }
         composable("notes") {
            ComingSoonScreen("notes")
