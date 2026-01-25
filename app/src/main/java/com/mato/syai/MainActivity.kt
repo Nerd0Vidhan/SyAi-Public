@@ -6,6 +6,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.WindowCompat
 import androidx.navigation.compose.rememberNavController
+import com.mato.syai.notes.ui.screen.DebugNotesScreen
 import com.mato.syai.presentation.navigation.AppNavGraph
 import com.mato.syai.ui.theme.AppTheme
 import dagger.hilt.android.AndroidEntryPoint
