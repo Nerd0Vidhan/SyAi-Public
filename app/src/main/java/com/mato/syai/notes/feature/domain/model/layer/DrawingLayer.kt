@@ -11,4 +11,8 @@ data class DrawingLayer(
 
     val points: List<Offset>,
     val style: DrawStyle
-) : Layer
+) : Layer {
+    override fun withPosition(newPosition: Offset): DrawingLayer {
+        return copy(position = newPosition)
+    }
+}

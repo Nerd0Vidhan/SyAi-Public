@@ -12,4 +12,8 @@ data class ImageLayer(
     val width: Float,
     val height: Float,
     val rotation: Float
-) : Layer
+) : Layer {
+    override fun withPosition(newPosition: Offset): ImageLayer {
+        return copy(position = newPosition)
+    }
+}
