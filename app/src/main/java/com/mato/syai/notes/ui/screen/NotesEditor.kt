@@ -3,6 +3,8 @@ package com.mato.syai.notes.ui.screen
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -12,23 +14,33 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import com.mato.syai.notes.core.undo.command.AddLayerCommand
 import com.mato.syai.notes.core.undo.command.UpdateTextCommand
+import com.mato.syai.notes.core.undo.command.UpdateTextStyleCommand
 import com.mato.syai.notes.feature.domain.NoteCommand
+import com.mato.syai.notes.feature.domain.command.MoveLayerCommand
 import com.mato.syai.notes.feature.domain.model.layer.ImageLayer
 import com.mato.syai.notes.feature.domain.model.layer.Offset
 import com.mato.syai.notes.feature.domain.model.layer.TextLayer
+import com.mato.syai.notes.feature.domain.model.style.FontWeight
 import com.mato.syai.notes.ui.canvas.NotesCanvas
 import com.mato.syai.notes.ui.canvas.rememberCanvasEngine
 import com.mato.syai.notes.ui.canvas.rememberViewport
 import com.mato.syai.notes.ui.component.BottomToolBar
 import com.mato.syai.notes.ui.component.EditorTool
 import com.mato.syai.notes.ui.component.UndoRedoFab
+import com.mato.syai.notes.ui.controls.draw.DrawControlState
+import com.mato.syai.notes.ui.controls.text.TextControlState
+import com.mato.syai.notes.ui.controls.EditorControlsPanel
 import com.mato.syai.notes.ui.image.ImageLayerFactory
 import com.mato.syai.notes.ui.image.ImageLayerOverlay
 import com.mato.syai.notes.ui.mvi.NotesIntent
 import com.mato.syai.notes.ui.mvi.NotesViewModel
+import com.mato.syai.notes.ui.selection.LayerHitTest
+import com.mato.syai.notes.ui.selection.SelectionController
+import com.mato.syai.notes.ui.selection.SelectionOverlay
 import com.mato.syai.notes.ui.state.EditorMode
 import com.mato.syai.notes.ui.text.TextLayerOverlay
 
@@ -41,6 +53,26 @@ fun NotesEditorScreen(
 ) {
     val state by viewModel.state.collectAsState()
     val editorMode = remember { mutableStateOf(EditorMode.NONE) }
+
+    val drawControlState = remember {
+        mutableStateOf(
+            DrawControlState()
+        )
+    }
+
+    val textControlState = remember {
+        mutableStateOf(
+            TextControlState()
+        )
+    }
+
+    val selectionController = remember { SelectionController() }
+
+    var dragStartPosition by remember { mutableStateOf<Offset?>(null) }
+    var dragCurrentOffset by remember { mutableStateOf(Offset(0f, 0f)) }
+
+
+
 
     val imagePicker =
         rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -91,6 +123,54 @@ fun NotesEditorScreen(
                         .clip(RoundedCornerShape(8.dp))
                         .background(Color.White)
                         .padding(PAGE_PADDING)
+                        .pointerInput(Unit) {
+                            detectTapGestures { offset ->
+                                val layer = LayerHitTest.findTopMost(
+                                    layers = state.note?.layers ?: emptyList(),
+                                    x = offset.x,
+                                    y = offset.y
+                                )
+                                selectionController.select(layer?.id)
+                            }
+                        }
+                        .pointerInput(selectionController.state.selectedLayerId) {
+                            detectDragGestures(
+                                onDragStart = { start ->
+                                    val selected = state.note?.layers
+                                        ?.firstOrNull { it.id == selectionController.state.selectedLayerId }
+                                        ?: return@detectDragGestures
+
+                                    dragStartPosition = selected.position
+                                    dragCurrentOffset = Offset(0f, 0f)
+                                },
+                                onDrag = { change, dragAmount ->
+                                    dragCurrentOffset += Offset(dragAmount.x, dragAmount.y)
+                                },
+                                onDragEnd = {
+                                    val selected = state.note?.layers
+                                        ?.firstOrNull { it.id == selectionController.state.selectedLayerId }
+                                        ?: return@detectDragGestures
+
+                                    val oldPos = dragStartPosition ?: return@detectDragGestures
+                                    val newPos = oldPos + dragCurrentOffset
+
+                                    viewModel.onIntent(
+                                        NotesIntent.ExecuteCommand(
+                                            NoteCommand(
+                                                MoveLayerCommand(
+                                                    layerId = selected.id,
+                                                    oldPos = oldPos,
+                                                    newPos = newPos
+                                                )
+                                            )
+                                        )
+                                    )
+
+                                    dragStartPosition = null
+                                    dragCurrentOffset = Offset(0f, 0f)
+                                }
+                            )
+                        }
                 ) {
 
                     // 1️⃣ Text (document flow)
@@ -132,11 +212,30 @@ fun NotesEditorScreen(
                         viewportState = rememberViewport(),
                         canvasEngine = rememberCanvasEngine(),
                         editorMode = editorMode.value,
-                        viewModel = viewModel
+                        viewModel = viewModel,
+                        drawControlState = drawControlState.value
                     )
+                    state.note?.layers
+                        ?.firstOrNull { it.id == selectionController.state.selectedLayerId }
+                        ?.let { selected ->
+                            SelectionOverlay(selected)
+                        }
                 }
             }
         }
+
+        EditorControlsPanel(
+            editorMode = editorMode.value,
+            drawControlState = drawControlState.value,
+            textControlState = textControlState.value,
+            onDrawChange = {
+                drawControlState.value = it
+            },
+            onTextChange = {
+                textControlState.value = it
+            }
+        )
+
 
         BottomToolBar(
             modifier = Modifier
@@ -161,4 +260,31 @@ fun NotesEditorScreen(
             onRedo = { viewModel.onIntent(NotesIntent.Redo) }
         )
     }
+//    LaunchedEffect(textControlState.value) {
+//        state.note?.layers
+//            ?.filterIsInstance<TextLayer>()
+//            ?.forEach { layer ->
+//                viewModel.onIntent(
+//                    NotesIntent.ExecuteCommand(
+//                        NoteCommand(
+//                            UpdateTextStyleCommand(
+//                                layerId = layer.id,
+//                                oldStyle = layer.style,
+//                                newStyle = layer.style.copy(
+//                                    color = textControlState.value.color,
+//                                    fontSize = textControlState.value.fontSize,
+//                                    fontWeight =
+//                                        if (textControlState.value.bold)
+//                                            FontWeight.BOLD
+//                                        else
+//                                            FontWeight.NORMAL,
+//                                    italic = textControlState.value.italic
+//                                )
+//                            )
+//                        )
+//                    )
+//                )
+//            }
+//    }
+
 }

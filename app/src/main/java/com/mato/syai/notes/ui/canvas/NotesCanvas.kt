@@ -11,6 +11,7 @@ import com.mato.syai.notes.core.undo.command.AddLayerCommand
 import com.mato.syai.notes.feature.domain.NoteCommand
 import com.mato.syai.notes.feature.domain.model.LayerId
 import com.mato.syai.notes.feature.domain.model.layer.*
+import com.mato.syai.notes.ui.controls.draw.DrawControlState
 import com.mato.syai.notes.ui.drawing.DrawingLayerFactory
 import com.mato.syai.notes.ui.drawing.DrawingState
 import com.mato.syai.notes.ui.drawing.drawDrawingLayer
@@ -25,9 +26,21 @@ fun NotesCanvas(
     viewportState: ViewportState,
     canvasEngine: CanvasEngine,
     editorMode: EditorMode,
-    viewModel: NotesViewModel
+    viewModel: NotesViewModel,
+    drawControlState: DrawControlState
 ) {
     val drawingState = remember { mutableStateOf(DrawingState()) }
+//    val drawControlState = remember { mutableStateOf(DrawControlState()) }
+
+    LaunchedEffect(drawControlState) {
+        drawingState.value = drawingState.value.copy(
+            currentStyle = drawingState.value.currentStyle.copy(
+                color = drawControlState.color,
+                strokeWidth = drawControlState.strokeWidth
+            )
+        )
+    }
+
 
     // ⚠️ Pointer input ONLY in DRAW mode
     val canvasModifier =
@@ -54,7 +67,10 @@ fun NotesCanvas(
                         if (points.size > 1) {
                             val layer = DrawingLayerFactory.create(
                                 points = points,
-                                style = drawingState.value.currentStyle,
+                                style = drawingState.value.currentStyle.copy(
+                                    color = drawControlState.color,
+                                    strokeWidth = drawControlState.strokeWidth
+                                ),
                                 zIndex = note.maxZIndex() + 1
                             )
 

@@ -1,15 +1,20 @@
 package com.mato.syai.notes.ui.text
 
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import com.mato.syai.notes.core.undo.command.UpdateTextStyleCommand
 import com.mato.syai.notes.feature.domain.NoteCommand
 import com.mato.syai.notes.feature.domain.model.layer.TextLayer
 import com.mato.syai.notes.feature.domain.model.style.FontWeight
+import com.mato.syai.notes.ui.controls.text.TextControlState
 import com.mato.syai.notes.ui.mvi.NotesIntent
 import com.mato.syai.notes.ui.mvi.NotesViewModel
 
 class TextFormattingController(
     private val viewModel: NotesViewModel
 ) {
+    val textControlState = TextControlState()
+
 
     fun onBoldClicked(
         layer: TextLayer,
@@ -36,11 +41,15 @@ class TextFormattingController(
                         layerId = layer.id,
                         oldStyle = layer.style,
                         newStyle = layer.style.copy(
-                            fontWeight = FontWeight.BOLD
+                            color = textControlState.color,
+                            fontSize = textControlState.fontSize,
+                            fontWeight = if (textControlState.bold) FontWeight.BOLD else FontWeight.NORMAL,
+                            italic = textControlState.italic
                         )
                     )
                 )
             )
         )
+
     }
 }

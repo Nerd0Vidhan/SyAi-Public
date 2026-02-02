@@ -12,4 +12,8 @@ data class TextLayer(
     val text: String,
     val style: TextStyle,
     val width: Float
-) : Layer
+) : Layer {
+    override fun withPosition(newPosition: Offset): TextLayer {
+        return copy(position = newPosition)
+    }
+}
