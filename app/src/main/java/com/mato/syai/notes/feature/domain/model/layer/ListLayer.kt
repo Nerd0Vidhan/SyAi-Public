@@ -12,7 +12,12 @@ data class ListLayer(
     val items: List<ListItem>,
     val style: TextStyle,
     val marker: ListMarker
-) : Layer
+) : Layer {
+    override fun withPosition(newPosition: Offset): ListLayer {
+        return copy(position = newPosition)
+    }
+
+}
 
 data class ListItem(
     val id: String,
