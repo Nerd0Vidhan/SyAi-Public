@@ -1,20 +1,20 @@
 {
   "project_info": {
-    "project_number": "218665243071",
-    "project_id": "mato-syai",
-    "storage_bucket": "mato-syai.firebasestorage.app"
+    "project_number": "5260556929",
+    "project_id": "syai-33d22",
+    "storage_bucket": "syai-33d22.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:218665243071:android:db77b3710962fa1aa3110a",
+        "mobilesdk_app_id": "1:5260556929:android:e40586f685fa81cf1c2b80",
         "android_client_info": {
           "package_name": "com.mato.syai"
         }
       },
       "oauth_client": [
         {
-          "client_id": "218665243071-22pbp34uffj3asaj8a30351afegoerqm.apps.googleusercontent.com",
+          "client_id": "5260556929-o496c7u055hr6ujd26vbi8jvlcrcu3ro.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.mato.syai",
@@ -22,20 +22,20 @@
           }
         },
         {
-          "client_id": "218665243071-ov7hvl90p3ka7ou83b9t7en1uv5phmic.apps.googleusercontent.com",
+          "client_id": "5260556929-pstufgb6spv2p17el31v74vrojm40nd6.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyBTBMEZXvfK48nnxtGtfz_-wmqYidR9-ko"
+          "current_key": "AIzaSyCYrJpG_2a3ve9Jtuj0lRbfyslPy_xXrNI"
         }
       ],
       "services": {
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "218665243071-ov7hvl90p3ka7ou83b9t7en1uv5phmic.apps.googleusercontent.com",
+              "client_id": "5260556929-pstufgb6spv2p17el31v74vrojm40nd6.apps.googleusercontent.com",
               "client_type": 3
             }
           ]

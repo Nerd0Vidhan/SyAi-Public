@@ -1,6 +1,9 @@
 package com.mato.syai.auth
 
 
+import android.content.Context
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.PhoneAuthOptions
@@ -76,4 +79,19 @@ class FirebaseAuthRepository @Inject constructor(
 
     override fun isUserLoggedIn(): Boolean = firebaseAuth.currentUser != null
     override fun getCurrentUserUid(): String? = firebaseAuth.currentUser?.uid
+
+    override fun logout(context: Context): Result<Unit> {
+        FirebaseAuth.getInstance().signOut()
+
+        return try {
+            // Also sign out Google if used
+            GoogleSignIn.getClient(
+                context,
+                GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN).build()
+            ).signOut()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

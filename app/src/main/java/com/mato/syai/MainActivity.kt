@@ -19,9 +19,9 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             AppTheme {
-                DebugNotesScreen()
-//                val navController = rememberNavController()
-//                AppNavGraph(navController = navController)
+//                DebugNotesScreen()
+                val navController = rememberNavController()
+                AppNavGraph(navController = navController)
             }
 
         }
