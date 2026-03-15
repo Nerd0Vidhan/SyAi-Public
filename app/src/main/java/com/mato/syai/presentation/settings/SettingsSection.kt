@@ -1,4 +1,4 @@
-package com.mato.syai.profile.presentation.settings
+package com.mato.syai.presentation.settings
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
