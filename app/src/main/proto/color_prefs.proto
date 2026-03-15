@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+option java_package = "com.mato.syai.data.datastore";
+option java_multiple_files = true;
+
+message ColorPreferences {
+    int64 primary = 1;
+    int64 onPrimary = 2;
+    int64 secondary = 3;
+    int64 onSecondary = 4;
+    int64 background = 5;
+    int64 onBackground = 6;
+    int64 logoTint = 7;
+    int64 accent = 8;
+}
