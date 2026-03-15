@@ -1,6 +1,7 @@
 package com.mato.syai.profile.presentation
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -191,4 +192,15 @@ class LoginViewModel @Inject constructor(
     }
 
     fun isLoggedIn() = authRepository.isUserLoggedIn()
+
+    fun logout(context: Context) {
+        viewModelScope.launch {
+            try {
+                authRepository.logout(context)
+                _uiState.value = LoginUiState.Success(null)
+            } catch (e: Exception) {
+                _uiState.value = LoginUiState.Error("Logout failed")
+            }
+        }
+    }
 }

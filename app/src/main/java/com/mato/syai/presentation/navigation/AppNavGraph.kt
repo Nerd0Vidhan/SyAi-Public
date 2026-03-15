@@ -22,6 +22,7 @@ import com.mato.syai.mood_tracker.MoodTrackerApp
 import com.mato.syai.notes.ui.screen.DebugNotesScreen
 import com.mato.syai.presentation.main.HomeScreen
 import com.mato.syai.profile.LoginScreen
+import com.mato.syai.profile.presentation.SettingsScreen
 import com.mato.syai.remainder.ReminderAlarmScreen
 import com.mato.syai.task_management.TaskManagementScreen
 import com.mato.syai.tools.ToolsScreen
@@ -52,6 +53,10 @@ fun AppNavGraph(navController: NavHostController) {
         }
         composable("home") { HomeScreen(parentNavController = navController) }
         composable("login") { LoginScreen(navController) }
+
+        composable("settings") {
+            SettingsScreen(navController)
+        }
     }
 
     }
