@@ -32,13 +32,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import com.mato.syai.ui.theme.LightPurple
 import com.mato.syai.ui.theme.WhitePurple
 import kotlin.math.PI
 import kotlin.math.sin
 
 @Composable
-fun BottomFabGroup(navController: NavController) {
+fun BottomFabGroup(navController: NavController,parentNavController: NavController) {
     val isMenuExtended = remember { mutableStateOf(false) }
 
     val fabAnimationProgress by animateFloatAsState(
@@ -82,15 +81,17 @@ fun BottomFabGroup(navController: NavController) {
             }
             Box(modifier = Modifier.padding(bottom = 12.dp)) {
                 FabGroup(
-                    renderEffect = renderEffect,
                     animationProgress = fabAnimationProgress,
-                    navController = navController
-                )
+                    renderEffect = renderEffect,
+                    navController = navController,
+                    parentNavController = parentNavController
+                    )
                 FabGroup(
                     renderEffect = null,
                     animationProgress = fabAnimationProgress,
                     toggleAnimation = { isMenuExtended.value = !isMenuExtended.value },
-                    navController = navController
+                    navController = navController,
+                    parentNavController = parentNavController
                 )
             }
 
@@ -107,7 +108,8 @@ fun FabGroup(
     animationProgress: Float = 0f,
     renderEffect: androidx.compose.ui.graphics.RenderEffect? = null,
     toggleAnimation: () -> Unit = {},
-    navController: NavController
+    navController: NavController,
+    parentNavController: NavController
 ) {
     val context = LocalContext.current
 
@@ -143,7 +145,7 @@ fun FabGroup(
             opacity = LinearEasing.transform(0.4f, 0.9f, animationProgress),
             onClick = {
                 Toast.makeText(context, "Settings will be available in future update", Toast.LENGTH_SHORT).show()
-                navController.navigate("settings")
+                parentNavController.navigate("settings")
                 toggleAnimation()
             }
         )

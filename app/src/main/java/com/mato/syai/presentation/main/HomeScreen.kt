@@ -68,7 +68,7 @@ fun HomeScreen(
 
             // 2. The Bottom UI (Bar + FABs + Overlay)
             // This stays on top of the NavGraph
-            BottomFabGroup(navController = bottomNavController)
+            BottomFabGroup(navController = bottomNavController,parentNavController = parentNavController)
         }
     }
 }

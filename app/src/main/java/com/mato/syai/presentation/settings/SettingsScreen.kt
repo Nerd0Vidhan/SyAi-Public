@@ -1,4 +1,4 @@
-package com.mato.syai.profile.presentation
+package com.mato.syai.presentation.settings
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -23,9 +23,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
-import com.mato.syai.profile.presentation.settings.SettingsButtonItem
-import com.mato.syai.profile.presentation.settings.SettingsSection
-import com.mato.syai.profile.presentation.settings.SettingsSwitchItem
+import com.mato.syai.profile.presentation.LoginUiState
+import com.mato.syai.profile.presentation.LoginViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
