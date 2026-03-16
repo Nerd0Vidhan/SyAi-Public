@@ -4,7 +4,6 @@ import com.mato.syai.notes.core.undo.command.Command
 import com.mato.syai.notes.feature.domain.model.LayerId
 import com.mato.syai.notes.feature.domain.model.Note
 import com.mato.syai.notes.feature.domain.model.layer.Offset
-import com.mato.syai.notes.feature.domain.model.withPosition
 
 class MoveLayerCommand(
     private val layerId: LayerId,
@@ -19,7 +18,7 @@ class MoveLayerCommand(
                     layer.withPosition(newPos)
                 else layer
             },
-            lastModified = System.currentTimeMillis()
+            updatedAt = System.currentTimeMillis()
         )
 
     override fun undo(current: Note): Note =
@@ -29,7 +28,7 @@ class MoveLayerCommand(
                     layer.withPosition(oldPos)
                 else layer
             },
-            lastModified = System.currentTimeMillis()
+            updatedAt = System.currentTimeMillis()
         )
 }
 
