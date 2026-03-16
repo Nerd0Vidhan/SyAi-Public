@@ -2,7 +2,6 @@ package com.mato.syai.notes.core.undo.command
 
 import com.mato.syai.notes.feature.domain.model.LayerId
 import com.mato.syai.notes.feature.domain.model.Note
-import com.mato.syai.notes.feature.domain.model.layer.ImageLayer
 import com.mato.syai.notes.feature.domain.model.withRotation
 
 class RotateImageCommand(
@@ -18,7 +17,7 @@ class RotateImageCommand(
                     layer.withRotation(newRotation)
                 else layer
             },
-            lastModified = System.currentTimeMillis()
+            updatedAt = System.currentTimeMillis()
         )
 
     override fun undo(current: Note): Note =
@@ -28,6 +27,6 @@ class RotateImageCommand(
                     layer.withRotation(oldRotation)
                 else layer
             },
-            lastModified = System.currentTimeMillis()
+            updatedAt = System.currentTimeMillis()
         )
 }

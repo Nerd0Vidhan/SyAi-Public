@@ -10,14 +10,11 @@ import androidx.compose.runtime.getValue
 import androidx.core.view.WindowCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.compose.rememberNavController
-import com.mato.syai.data.settings.SettingsDataStore
-import com.mato.syai.notes.ui.screen.DebugNotesScreen
 import com.mato.syai.presentation.navigation.AppNavGraph
 import com.mato.syai.presentation.settings.ThemeMode
 import com.mato.syai.presentation.theme.ThemeViewModel
 import com.mato.syai.ui.theme.AppTheme
 import dagger.hilt.android.AndroidEntryPoint
-import jakarta.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {

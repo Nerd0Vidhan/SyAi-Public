@@ -23,19 +23,7 @@ fun TextLayerRenderer(
     layer: TextLayer,
     editState: TextEditState,
     onTextChanged: (String, TextRange) -> Unit,
-    viewModel: NotesViewModel = NotesViewModel(
-        initialNote = Note(
-            layers = listOf(layer),
-            id = "1",
-            page = Page(
-                id = "1",
-                widthPx = 100,
-                heightPx = 100
-            ),
-            lastModified = 1769331008839,
-            title = ""
-        )
-    )
+    viewModel: NotesViewModel = hiltViewModel()
 ) {
 
     val state by viewModel.state.collectAsState()

@@ -24,6 +24,7 @@ import com.mato.syai.ai_assistant.MainAssistantScreen
 import com.mato.syai.mood_tracker.MoodTrackerApp
 import com.mato.syai.notes.ui.screen.DebugNotesScreen
 import com.mato.syai.notes.ui.screen.NotesListScreen
+import com.mato.syai.notes.ui.screen.NotesScreen
 import com.mato.syai.presentation.main.HomeScreen
 import com.mato.syai.profile.LoginScreen
 import com.mato.syai.presentation.settings.SettingsScreen
@@ -66,7 +67,7 @@ fun AppNavGraph(navController: NavHostController) {
                 SettingsScreen(navController)
             }
         }
-        composable ("notes_editor") {
+        composable ("note_editor/{noteId}") {
             DebugNotesScreen()
         }
     }
@@ -122,7 +123,10 @@ fun BottomNavigationGraph(
 
         composable("notes_list") {
             val notesNavController = rememberNavController()
-            NotesListScreen(
+//            NotesListScreen(
+//                parentNavController = parentNavController
+//            )
+            NotesScreen(
                 parentNavController = parentNavController
             )
         }
@@ -149,7 +153,7 @@ fun NotesNavGraph(
 ) {
     NavHost(
         navController = parentNavController,
-        startDestination = "noteslist",
+        startDestination = "notes_list",
     ) {
 
         composable("notes_list") {

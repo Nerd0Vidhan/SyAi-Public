@@ -2,7 +2,6 @@ package com.mato.syai.notes.core.undo.command
 
 import com.mato.syai.notes.feature.domain.model.LayerId
 import com.mato.syai.notes.feature.domain.model.Note
-import com.mato.syai.notes.feature.domain.model.layer.ImageLayer
 import com.mato.syai.notes.feature.domain.model.withSize
 
 
@@ -21,7 +20,7 @@ class ResizeImageCommand(
                     layer.withSize(newWidth, newHeight)
                 else layer
             },
-            lastModified = System.currentTimeMillis()
+            updatedAt = System.currentTimeMillis()
         )
 
     override fun undo(current: Note): Note =
@@ -31,6 +30,6 @@ class ResizeImageCommand(
                     layer.withSize(oldWidth, oldHeight)
                 else layer
             },
-            lastModified = System.currentTimeMillis()
+            updatedAt = System.currentTimeMillis()
         )
 }
