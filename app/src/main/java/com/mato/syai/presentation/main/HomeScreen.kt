@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -63,6 +65,7 @@ fun HomeScreen(
             // 1. The Main Content
             BottomNavigationGraph(
                 navController = bottomNavController,
+                parentNavController = parentNavController,
                 paddingValues = PaddingValues(bottom = 0.dp) // Leave space for the bar
             )
 
@@ -76,13 +79,16 @@ fun HomeScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeTopBar(navController: NavHostController,parentNavController: NavController) {
+fun HomeTopBar(
+    navController: NavHostController,
+    parentNavController: NavController
+) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     var expanded by remember { mutableStateOf(false) }
 
     val title = when (currentRoute) {
-        "dashboard" -> "Dashboard"
+        "dashboard" -> "Notes"
         "mood_tracker" -> "Mood Tracker"
         "finance" -> "Finance"
         "notes" -> "Notes"
@@ -101,6 +107,18 @@ fun HomeTopBar(navController: NavHostController,parentNavController: NavControll
         },
         colors = TopAppBarDefaults.topAppBarColors(PurpleDark),
         actions = {
+
+            if(currentRoute.equals("dashboard")){
+                IconButton(onClick = { }) {
+                    Icon(Icons.Default.PictureAsPdf, null)
+                }
+            }
+
+            if(currentRoute.equals("dashboard")){
+                IconButton(onClick = { }) {
+                    Icon(Icons.Default.Search, null)
+                }
+            }
 
             IconButton(onClick = { expanded = true }) {
                 Icon(Icons.Default.MoreVert, contentDescription = "Menu")

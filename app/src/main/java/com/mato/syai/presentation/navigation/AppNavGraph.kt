@@ -10,16 +10,20 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import com.google.firebase.auth.FirebaseAuth
 import com.mato.syai.CutePrompts.PromptUI
 import com.mato.syai.splashScreen.ui.SplashScreen
 import com.mato.syai.ai_assistant.MainAssistantScreen
 import com.mato.syai.mood_tracker.MoodTrackerApp
 import com.mato.syai.notes.ui.screen.DebugNotesScreen
+import com.mato.syai.notes.ui.screen.NotesListScreen
 import com.mato.syai.presentation.main.HomeScreen
 import com.mato.syai.profile.LoginScreen
 import com.mato.syai.presentation.settings.SettingsScreen
@@ -62,25 +66,29 @@ fun AppNavGraph(navController: NavHostController) {
                 SettingsScreen(navController)
             }
         }
+        composable ("notes_editor") {
+            DebugNotesScreen()
+        }
     }
 
     }
 
 
 @Composable
-fun BottomNavigationGraph(navController: NavHostController, paddingValues: PaddingValues){
+fun BottomNavigationGraph(
+    navController: NavHostController,
+    parentNavController: NavController,
+    paddingValues: PaddingValues
+){
     NavHost(
         navController = navController,
-        startDestination = "dashboard",
+        startDestination = "notes_list",
         modifier = Modifier.padding(paddingValues)
     ) {
-        composable ("dashboard") {
+        composable ("notes_editor") {
             DebugNotesScreen()
         }
         composable ("finance") { FinanceTrackerScreen() }
-        composable("notes") {
-           ComingSoonScreen("notes")
-        }
         composable("digital_wellbeing") {
             ComingSoonScreen("Digital Wellbeing")
         }
@@ -112,6 +120,13 @@ fun BottomNavigationGraph(navController: NavHostController, paddingValues: Paddi
             ComingSoonScreen("Speech to Voice")
         }
 
+        composable("notes_list") {
+            val notesNavController = rememberNavController()
+            NotesListScreen(
+                parentNavController = parentNavController
+            )
+        }
+
     }
 
 }
@@ -123,5 +138,29 @@ fun ComingSoonScreen(title: String) {
         contentAlignment = Alignment.Center
     ) {
         Text(text = "$title – Coming Soon")
+    }
+}
+
+
+@Composable
+fun NotesNavGraph(
+    navController: NavController,
+    parentNavController: NavHostController
+) {
+    NavHost(
+        navController = parentNavController,
+        startDestination = "noteslist",
+    ) {
+
+        composable("notes_list") {
+            NotesListScreen(
+                parentNavController = parentNavController
+            )
+        }
+
+        composable ("notes_editor") {
+            DebugNotesScreen()
+        }
+
     }
 }
