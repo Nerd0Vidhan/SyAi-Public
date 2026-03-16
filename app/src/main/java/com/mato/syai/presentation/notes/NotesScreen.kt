@@ -21,7 +21,7 @@ fun NotesScreen(navController: NavHostController) {
             TopAppBar(
                 title = { Text("Your Notes") },
                 actions = {
-                    IconButton(onClick = { navController.navigate("note_editor") }) {
+                    IconButton(onClick = { navController.navigate("notes_editor") }) {
                         Icon(Icons.Default.Add, contentDescription = "Add Note")
                     }
                 }
