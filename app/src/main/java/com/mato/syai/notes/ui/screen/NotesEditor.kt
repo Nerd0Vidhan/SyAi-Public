@@ -16,15 +16,19 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.mato.syai.notes.core.undo.command.AddLayerCommand
 import com.mato.syai.notes.core.undo.command.UpdateTextCommand
 import com.mato.syai.notes.core.undo.command.UpdateTextStyleCommand
 import com.mato.syai.notes.feature.domain.NoteCommand
 import com.mato.syai.notes.feature.domain.command.MoveLayerCommand
+import com.mato.syai.notes.feature.domain.model.LayerId
 import com.mato.syai.notes.feature.domain.model.layer.ImageLayer
 import com.mato.syai.notes.feature.domain.model.layer.Offset
 import com.mato.syai.notes.feature.domain.model.layer.TextLayer
 import com.mato.syai.notes.feature.domain.model.style.FontWeight
+import com.mato.syai.notes.feature.domain.model.style.TextStyle
 import com.mato.syai.notes.ui.canvas.NotesCanvas
 import com.mato.syai.notes.ui.canvas.rememberCanvasEngine
 import com.mato.syai.notes.ui.canvas.rememberViewport
@@ -43,16 +47,18 @@ import com.mato.syai.notes.ui.selection.SelectionController
 import com.mato.syai.notes.ui.selection.SelectionOverlay
 import com.mato.syai.notes.ui.state.EditorMode
 import com.mato.syai.notes.ui.text.TextLayerOverlay
+import java.util.UUID
 
 private val PAGE_WIDTH = 360.dp
 private val PAGE_PADDING = 16.dp
 
 @Composable
 fun NotesEditorScreen(
-    viewModel: NotesViewModel
+    viewModel: NotesViewModel= hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
     val editorMode = remember { mutableStateOf(EditorMode.NONE) }
+
 
     val drawControlState = remember {
         mutableStateOf(
@@ -106,7 +112,7 @@ fun NotesEditorScreen(
 
             NotesTopBar(
                 title = state.note?.title ?: "",
-                onTitleChange = { /* later */ }
+                onTitleChange = { viewModel.updateTitle(it) }
             )
 
             Box(
@@ -240,12 +246,48 @@ fun NotesEditorScreen(
         BottomToolBar(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 16.dp),
-            onToolSelected = {
-                when (it) {
-                    EditorTool.TEXT -> editorMode.value = EditorMode.TEXT
-                    EditorTool.DRAW -> editorMode.value = EditorMode.DRAW
-                    EditorTool.IMAGE -> imagePicker.launch("image/*")
+                .fillMaxWidth(),
+            onToolSelected = { tool ->
+                when (tool) {
+
+                    EditorTool.TEXT -> {
+
+                        val note = state.note ?: return@BottomToolBar
+
+                        viewModel.onIntent(
+                            NotesIntent.ExecuteCommand(
+                                NoteCommand(
+                                    AddLayerCommand(
+                                        TextLayer(
+                                            id = LayerId(UUID.randomUUID().toString()),
+                                            text = "",
+                                            position = Offset(20f, 20f),
+                                            zIndex = note.maxZIndex() + 1,
+                                            isVisible = true,
+                                            style = TextStyle(
+                                                fontSize = textControlState.value.fontSize,
+                                                fontWeight = FontWeight.NORMAL,
+                                                italic = true,
+                                                underline = true,
+                                                strikeThrough = true,
+                                                color = textControlState.value.color,
+                                                lineSpacing = 2f
+                                            ),
+                                            width = 30f
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    }
+
+                    EditorTool.DRAW -> {
+                        editorMode.value = EditorMode.DRAW
+                    }
+
+                    EditorTool.IMAGE -> {
+                        imagePicker.launch("image/*")
+                    }
                 }
             }
         )
@@ -259,6 +301,12 @@ fun NotesEditorScreen(
             onUndo = { viewModel.onIntent(NotesIntent.Undo) },
             onRedo = { viewModel.onIntent(NotesIntent.Redo) }
         )
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            viewModel.saveNote()
+        }
     }
 //    LaunchedEffect(textControlState.value) {
 //        state.note?.layers

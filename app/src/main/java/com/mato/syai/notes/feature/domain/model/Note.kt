@@ -1,14 +1,17 @@
 package com.mato.syai.notes.feature.domain.model
 
-import android.icu.text.CaseMap
 import com.mato.syai.notes.feature.domain.model.layer.Layer
 
 data class Note(
     val id: String,
     val page: Page,
     val layers: List<Layer>,
-    val lastModified: Long,
-    val title: String
+    val updatedAt: Long,
+    val createdAt: Long,
+    val folderId: String?,
+    val pinned: Boolean = false,
+    val title: String,
+    val previewText: String
 ) {
 
     fun sortedLayers(): List<Layer> =
