@@ -5,6 +5,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.rememberTransformableState
+import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -49,7 +51,11 @@ import com.mato.syai.notes.ui.state.EditorMode
 import com.mato.syai.notes.ui.text.TextLayerOverlay
 import java.util.UUID
 
-private val PAGE_WIDTH = 360.dp
+// A4 page dimensions in DP
+private val A4_WIDTH = 210.dp * 2.83465f // Approx 595 dp
+private val A4_HEIGHT = 297.dp * 2.83465f // Approx 842 dp
+
+// private val PAGE_WIDTH = A4_WIDTH // Keep these for potential future use or smaller pages
 private val PAGE_PADDING = 16.dp
 
 @Composable
@@ -57,6 +63,7 @@ fun NotesEditorScreen(
     viewModel: NotesViewModel= hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
+    // Default to NONE which we'll interpret as linear writing when no other tool is active.
     val editorMode = remember { mutableStateOf(EditorMode.NONE) }
 
 
@@ -73,6 +80,11 @@ fun NotesEditorScreen(
     }
 
     val selectionController = remember { SelectionController() }
+
+    // State for zoom and pan
+    var scale by remember { mutableStateOf(1f) }
+    var offsetX by remember { mutableStateOf(0f) }
+    var offsetY by remember { mutableStateOf(0f) }
 
     var dragStartPosition by remember { mutableStateOf<Offset?>(null) }
     var dragCurrentOffset by remember { mutableStateOf(Offset(0f, 0f)) }
@@ -123,9 +135,10 @@ fun NotesEditorScreen(
             ) {
 
                 Box(
+                    // Set the size of the page area to A4 dimensions
                     modifier = Modifier
-                        .width(PAGE_WIDTH)
-                        .fillMaxHeight()
+                        .width(A4_WIDTH)
+                        .height(A4_HEIGHT)
                         .clip(RoundedCornerShape(8.dp))
                         .background(Color.White)
                         .padding(PAGE_PADDING)
@@ -141,7 +154,7 @@ fun NotesEditorScreen(
                         }
                         .pointerInput(selectionController.state.selectedLayerId) {
                             detectDragGestures(
-                                onDragStart = { start ->
+                                onDragStart = {
                                     val selected = state.note?.layers
                                         ?.firstOrNull { it.id == selectionController.state.selectedLayerId }
                                         ?: return@detectDragGestures
@@ -149,7 +162,7 @@ fun NotesEditorScreen(
                                     dragStartPosition = selected.position
                                     dragCurrentOffset = Offset(0f, 0f)
                                 },
-                                onDrag = { change, dragAmount ->
+                                onDrag = { _, dragAmount ->
                                     dragCurrentOffset += Offset(dragAmount.x, dragAmount.y)
                                 },
                                 onDragEnd = {
@@ -177,6 +190,12 @@ fun NotesEditorScreen(
                                 }
                             )
                         }
+                        .transformable(state = rememberTransformableState(onTransformation = { zoomChange, panChange, _ ->
+                            scale *= zoomChange
+                            offsetX += panChange.x
+                            offsetY += panChange.y
+                        }),
+                        )
                 ) {
 
                     // 1️⃣ Text (document flow)
@@ -215,7 +234,7 @@ fun NotesEditorScreen(
                             .fillMaxSize()
                             .clipToBounds(),
                         layers = state.note?.layers ?: emptyList(),
-                        viewportState = rememberViewport(),
+                        viewportState = rememberViewport(scale = scale, offsetX = offsetX, offsetY = offsetY),
                         canvasEngine = rememberCanvasEngine(),
                         editorMode = editorMode.value,
                         viewModel = viewModel,
@@ -249,11 +268,9 @@ fun NotesEditorScreen(
                 .fillMaxWidth(),
             onToolSelected = { tool ->
                 when (tool) {
-
                     EditorTool.TEXT -> {
-
+                        editorMode.value = EditorMode.TEXT // Assuming EditorMode.TEXT is for free-form or rich text editing
                         val note = state.note ?: return@BottomToolBar
-
                         viewModel.onIntent(
                             NotesIntent.ExecuteCommand(
                                 NoteCommand(
@@ -280,13 +297,19 @@ fun NotesEditorScreen(
                             )
                         )
                     }
-
                     EditorTool.DRAW -> {
                         editorMode.value = EditorMode.DRAW
                     }
-
                     EditorTool.IMAGE -> {
                         imagePicker.launch("image/*")
+                    }
+                    // Add other tool handlers here
+                    // If a tool does not change the editor mode, we do nothing to editorMode.value
+                    // For example, if 'tool' is a styling option, it might affect textControlState or drawControlState
+                    else -> {
+                        // Handle other tools, potentially by updating control states without changing editorMode
+                        // If a tool implies a specific mode, set it here. Otherwise, preserve current mode.
+                        // For now, we assume that only TEXT and DRAW explicitly change the mode.
                     }
                 }
             }
