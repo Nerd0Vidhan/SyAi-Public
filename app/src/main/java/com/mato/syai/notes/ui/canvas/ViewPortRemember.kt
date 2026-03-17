@@ -4,14 +4,18 @@ import androidx.compose.runtime.*
 import com.mato.syai.notes.core.canvas.viewport.ViewportState
 
 @Composable
-fun rememberViewport(): ViewportState {
+fun rememberViewport(
+    scale: Float = 1f,
+    offsetX: Float = 0f,
+    offsetY: Float = 0f
+): ViewportState {
     // Static viewport for now
     // (Pan & zoom will update this later)
     return remember {
         ViewportState(
-            offsetX = 0f,
-            offsetY = 0f,
-            scale = 1f,
+            offsetX = offsetX,
+            offsetY = offsetY,
+            scale = scale,
             width = 0f,
             height = 0f
         )
