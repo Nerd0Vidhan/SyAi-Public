@@ -22,7 +22,9 @@ import com.mato.syai.CutePrompts.PromptUI
 import com.mato.syai.splashScreen.ui.SplashScreen
 import com.mato.syai.ai_assistant.MainAssistantScreen
 import com.mato.syai.mood_tracker.MoodTrackerApp
-import com.mato.syai.notes.ui.screen.DebugNotesScreen
+import com.mato.syai.note.ui.editor.NoteEditorScreen
+import com.mato.syai.note.ui.home.NotesHomeScreen
+import com.mato.syai.notes.ui.screen.NotesEditorScreen
 import com.mato.syai.notes.ui.screen.NotesListScreen
 import com.mato.syai.notes.ui.screen.NotesScreen
 import com.mato.syai.presentation.main.HomeScreen
@@ -67,8 +69,13 @@ fun AppNavGraph(navController: NavHostController) {
                 SettingsScreen(navController)
             }
         }
-        composable ("note_editor/{noteId}") {
-            DebugNotesScreen()
+        composable ("note_editor/{noteId}") { backStackEntry ->
+            val noteId = backStackEntry.arguments?.getString("noteId")
+            NotesEditorScreen()
+        }
+        composable("note_editor/{noteId}") { backStackEntry ->
+            val noteId = backStackEntry.arguments?.getString("noteId")?.toLongOrNull() ?: 0L
+            NoteEditorScreen(noteId = noteId, onBack = { navController.popBackStack() })
         }
     }
 
@@ -87,7 +94,7 @@ fun BottomNavigationGraph(
         modifier = Modifier.padding(paddingValues)
     ) {
         composable ("notes_editor") {
-            DebugNotesScreen()
+            NotesEditorScreen()
         }
         composable ("finance") { FinanceTrackerScreen() }
         composable("digital_wellbeing") {
@@ -122,12 +129,12 @@ fun BottomNavigationGraph(
         }
 
         composable("notes_list") {
-            val notesNavController = rememberNavController()
-//            NotesListScreen(
-//                parentNavController = parentNavController
-//            )
-            NotesScreen(
-                parentNavController = parentNavController
+            NotesHomeScreen(
+                // Navigate using parentNavController to go full screen
+                onNoteClick = { noteId ->
+                    parentNavController.navigate("note_editor/$noteId")
+                },
+                onFabClick = { /* Handled inside the Composable via ViewModel */ }
             )
         }
 
@@ -163,7 +170,7 @@ fun NotesNavGraph(
         }
 
         composable ("notes_editor") {
-            DebugNotesScreen()
+            NotesEditorScreen()
         }
 
     }
