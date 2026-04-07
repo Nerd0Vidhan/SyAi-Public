@@ -331,31 +331,31 @@ fun NotesEditorScreen(
             viewModel.saveNote()
         }
     }
-//    LaunchedEffect(textControlState.value) {
-//        state.note?.layers
-//            ?.filterIsInstance<TextLayer>()
-//            ?.forEach { layer ->
-//                viewModel.onIntent(
-//                    NotesIntent.ExecuteCommand(
-//                        NoteCommand(
-//                            UpdateTextStyleCommand(
-//                                layerId = layer.id,
-//                                oldStyle = layer.style,
-//                                newStyle = layer.style.copy(
-//                                    color = textControlState.value.color,
-//                                    fontSize = textControlState.value.fontSize,
-//                                    fontWeight =
-//                                        if (textControlState.value.bold)
-//                                            FontWeight.BOLD
-//                                        else
-//                                            FontWeight.NORMAL,
-//                                    italic = textControlState.value.italic
-//                                )
-//                            )
-//                        )
-//                    )
-//                )
-//            }
-//    }
+    LaunchedEffect(textControlState.value) {
+        state.note?.layers
+            ?.filterIsInstance<TextLayer>()
+            ?.forEach { layer ->
+                viewModel.onIntent(
+                    NotesIntent.ExecuteCommand(
+                        NoteCommand(
+                            UpdateTextStyleCommand(
+                                layerId = layer.id,
+                                oldStyle = layer.style,
+                                newStyle = layer.style.copy(
+                                    color = textControlState.value.color,
+                                    fontSize = textControlState.value.fontSize,
+                                    fontWeight =
+                                        if (textControlState.value.bold)
+                                            FontWeight.BOLD
+                                        else
+                                            FontWeight.NORMAL,
+                                    italic = textControlState.value.italic
+                                )
+                            )
+                        )
+                    )
+                )
+            }
+    }
 
 }
