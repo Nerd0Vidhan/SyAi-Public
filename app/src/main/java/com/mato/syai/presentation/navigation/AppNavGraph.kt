@@ -24,9 +24,6 @@ import com.mato.syai.ai_assistant.MainAssistantScreen
 import com.mato.syai.mood_tracker.MoodTrackerApp
 import com.mato.syai.note.ui.editor.NoteEditorScreen
 import com.mato.syai.note.ui.home.NotesHomeScreen
-import com.mato.syai.notes.ui.screen.NotesEditorScreen
-import com.mato.syai.notes.ui.screen.NotesListScreen
-import com.mato.syai.notes.ui.screen.NotesScreen
 import com.mato.syai.presentation.main.HomeScreen
 import com.mato.syai.profile.LoginScreen
 import com.mato.syai.presentation.settings.SettingsScreen
@@ -69,10 +66,6 @@ fun AppNavGraph(navController: NavHostController) {
                 SettingsScreen(navController)
             }
         }
-        composable ("note_editor/{noteId}") { backStackEntry ->
-            val noteId = backStackEntry.arguments?.getString("noteId")
-            NotesEditorScreen()
-        }
         composable("note_editor/{noteId}") { backStackEntry ->
             val noteId = backStackEntry.arguments?.getString("noteId")?.toLongOrNull() ?: 0L
             NoteEditorScreen(noteId = noteId, onBack = { navController.popBackStack() })
@@ -93,9 +86,6 @@ fun BottomNavigationGraph(
         startDestination = "notes_list",
         modifier = Modifier.padding(paddingValues)
     ) {
-        composable ("notes_editor") {
-            NotesEditorScreen()
-        }
         composable ("finance") { FinanceTrackerScreen() }
         composable("digital_wellbeing") {
             ComingSoonScreen("Digital Wellbeing")
@@ -149,29 +139,5 @@ fun ComingSoonScreen(title: String) {
         contentAlignment = Alignment.Center
     ) {
         Text(text = "$title – Coming Soon")
-    }
-}
-
-
-@Composable
-fun NotesNavGraph(
-    navController: NavController,
-    parentNavController: NavHostController
-) {
-    NavHost(
-        navController = parentNavController,
-        startDestination = "notes_list",
-    ) {
-
-        composable("notes_list") {
-            NotesListScreen(
-                parentNavController = parentNavController
-            )
-        }
-
-        composable ("notes_editor") {
-            NotesEditorScreen()
-        }
-
     }
 }
