@@ -13,8 +13,4 @@ object AppModule {
     @Provides
     @Singleton
     fun provideCryptoManager() = CryptoManager()
-
-//    @Provides
-//    @Singleton
-//    fun provideGson() = com.google.gson.Gson()
 }
