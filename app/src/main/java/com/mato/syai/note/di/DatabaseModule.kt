@@ -2,9 +2,11 @@ package com.mato.syai.note.di
 
 import android.content.Context
 import androidx.room.Room
+import com.google.gson.Gson
 import com.mato.syai.note.data.local.database.NoteDao
 import com.mato.syai.note.data.local.database.NoteDatabase
 import com.mato.syai.note.data.local.repository.NoteRepository
+import com.mato.syai.note.data.local.security.CryptoManager
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -38,7 +40,11 @@ object DatabaseModule {
     // in the Repository class itself, but this is fine too.
     @Provides
     @Singleton
-    fun provideRepository(dao: NoteDao): NoteRepository {
-        return NoteRepository(dao)
+    fun provideRepository(dao: NoteDao,cryptoManager: CryptoManager,gson: Gson): NoteRepository {
+        return NoteRepository(
+            dao=dao,
+            cryptoManager = cryptoManager,
+            gson = gson
+        )
     }
 }

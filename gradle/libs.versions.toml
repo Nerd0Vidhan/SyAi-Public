@@ -47,6 +47,7 @@ hiltVersion="2.57.2"
 firebaseConfigKtx = "23.0.1"
 animation = "1.9.5"
 foundationLayout = "1.10.0"
+runtime = "1.10.6"
 
 [libraries]
 accompanist-permissions = { module = "com.google.accompanist:accompanist-permissions", version.ref = "accompanistPermissions" }
@@ -105,6 +106,7 @@ androidx-lifecycle-process = { group = "androidx.lifecycle", name = "lifecycle-p
 firebase-config-ktx = { group = "com.google.firebase", name = "firebase-config-ktx", version = "22.1.2" }
 androidx-compose-animation = { group = "androidx.compose.animation", name = "animation", version.ref = "animation" }
 androidx-compose-foundation-layout = { group = "androidx.compose.foundation", name = "foundation-layout", version.ref = "foundationLayout" }
+androidx-compose-runtime = { group = "androidx.compose.runtime", name = "runtime", version.ref = "runtime" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
