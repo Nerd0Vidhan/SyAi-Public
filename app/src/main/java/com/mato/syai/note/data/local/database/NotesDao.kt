@@ -32,6 +32,9 @@ interface NoteDao {
     @Query("SELECT * FROM notes_path WHERE noteId = :noteId")
     suspend fun getNoteById(noteId: Long): NoteEntity?
 
+    @Query("UPDATE notes_path SET filePath = :absolutePath, title = :newTitle WHERE noteId = :noteId")
+    suspend fun updateNotePathAndTitle(noteId: Long, absolutePath: String, newTitle: String)
+
     @Transaction
     suspend fun insertNoteWithMetadata(note: NoteEntity, metadata: MetadataEntity): Long {
         val id = insertNote(note)

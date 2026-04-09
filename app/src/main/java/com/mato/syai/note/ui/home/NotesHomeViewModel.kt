@@ -36,7 +36,7 @@ class NotesHomeViewModel @Inject constructor(
 
     fun createNewNote() {
         viewModelScope.launch {
-            val newId = repository.createNewNote("Untitled_${System.currentTimeMillis().toString().take(4)}", "Root")
+            val newId = repository.createNewNote("Untitled_${System.currentTimeMillis().toString()}", "Root")
             _navigationEvent.send(newId)
         }
     }

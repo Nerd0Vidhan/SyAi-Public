@@ -1,197 +1,295 @@
 package com.mato.syai.note.ui.editor
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Brush
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.TextFields
-import androidx.compose.material.icons.filled.Undo
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.mato.syai.R
-import com.mato.syai.note.domain.local.model.CustomObject
-import com.mato.syai.note.domain.local.model.ObjectType
-import com.mato.syai.note.domain.local.model.PageData
+import com.mato.syai.note.domain.local.model.*
+import kotlin.math.roundToInt
 
-
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NoteEditorScreen(
     noteId: Long,
-    onBack: () -> Unit,
-    viewModel: NoteEditorViewModel = hiltViewModel()
+    viewModel: NoteEditorViewModel = hiltViewModel(),
+    onBack: () -> Unit
 ) {
-    val content by viewModel.noteContent.collectAsState()
-    val isViewOnly by viewModel.isViewOnly.collectAsState()
+    val content by viewModel.uiState.collectAsState()
+    val activeTool by viewModel.currentTool.collectAsState()
 
-    LaunchedEffect(noteId) { viewModel.loadNote(noteId) }
+    // 1. Initial Load
+    LaunchedEffect(noteId) {
+        viewModel.loadNote(noteId)
+    }
+
+    // 2. CRITICAL: Save on Dispose
+    // This triggers when the Composable leaves the screen (Back press/Navigation)
+    DisposableEffect(noteId) {
+        onDispose {
+            viewModel.persistToDisk()
+        }
+    }
 
     Scaffold(
-        topBar = { EditorTopBar(
-            title = "Note #$noteId",
-            isViewOnly = isViewOnly,
-            onToggleView = { viewModel.toggleViewOnly() },
-            onUndo = { viewModel.undo() }
-        ) },
-        floatingActionButton = { if (!isViewOnly) FloatingSubToolbar() },
+        topBar = {
+            EditorTopBar(
+                title = viewModel.noteTitle.collectAsState().value,
+                onBack = onBack,
+                onUndo = { viewModel.undo() },
+                onRedo = { viewModel.redo() }
+            )
+        },
+        bottomBar = {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // ALWAYS show the SubMenu for the active tool
+                when (activeTool) {
+                    ActiveTool.DRAW -> DrawingSubMenu(viewModel)
+                    ActiveTool.TEXT -> TextSubMenu(viewModel)
+                    else -> {}
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                // Main Toolbar
+                FloatingSubToolbar(
+                    activeTool = activeTool,
+                    onToolSelect = { viewModel.setTool(it) }
+                )
+
+                // ADD PAGE BUTTON
+                IconButton(
+                    onClick = { viewModel.addNewPage() },
+                    modifier = Modifier.background(Color.White, CircleShape).shadow(2.dp)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Add Page", tint = Color.Black)
+                }
+            }
+        }
     ) { padding ->
-        Box(modifier = Modifier.padding(padding).fillMaxSize().background(Color(0xFF1A1A1A))) {
+        Box(modifier = Modifier.padding(padding).fillMaxSize().background(Color(0xFF121212))) {
+
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                contentPadding = PaddingValues(top = 20.dp, bottom = 150.dp)
+                contentPadding = PaddingValues(vertical = 24.dp)
             ) {
-                content?.pages?.let { pages ->
-                    items(pages) { page ->
-                        NotePage(page)
-                        Spacer(Modifier.height(24.dp))
+                itemsIndexed(content.pages) { index, page ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.9f)
+                            .aspectRatio(1 / page.pageSize.ratio)
+                            .background(Color(page.backgroundColor), RoundedCornerShape(4.dp))
+                            .shadow(4.dp)
+                    ) {
+                        // LAYER 1: Saved Objects (Images, Text, Finished Drawings)
+                        Canvas(modifier = Modifier.fillMaxSize()) {
+                            page.items.forEach { obj ->
+                                if (obj.type == ObjectType.DRAWING) {
+                                    renderStaticDrawing(obj)
+                                }
+                            }
+                        }
+
+                        // LAYER 2: Live Drawing Layer (Only active if DRAW tool is selected)
+                        if (activeTool == ActiveTool.DRAW) {
+                            DrawingCanvas(
+                                pageIndex = index,
+                                viewModel = viewModel,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+
+                        // LAYER 3: Text/Object Overlays (for dragging)
+                        page.items.forEach { obj ->
+                            if (obj.type != ObjectType.DRAWING) {
+                                RenderObject(index, obj, activeTool, viewModel)
+                            }
+                        }
                     }
+                    Spacer(Modifier.height(32.dp))
                 }
             }
         }
     }
 }
 
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditorTopBar(
     title: String,
-    isViewOnly: Boolean,
-    onToggleView: () -> Unit,
-    onUndo: () -> Unit
+    onBack: () -> Unit,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit
 ) {
     TopAppBar(
-        title = { Text(title, fontSize = 18.sp, fontWeight = FontWeight.Bold) },
+        title = {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        },
         navigationIcon = {
-            IconButton(onClick = { /* Back */ }) {
-                Icon(painterResource(R.drawable.folder_icon), "Back", Modifier.size(24.dp))
+            IconButton(onClick = onBack) {
+                Icon(
+                    imageVector = Icons.Default.ArrowBackIosNew,
+                    contentDescription = "Back",
+                    modifier = Modifier.size(20.dp)
+                )
             }
         },
         actions = {
-            IconButton(onClick = onUndo) { Icon(Icons.Default.Undo, "Undo") }
-            IconButton(onClick = onToggleView) {
+            // Undo Button
+            IconButton(onClick = onUndo) {
                 Icon(
-                    imageVector = if (isViewOnly) Icons.Default.Visibility else Icons.Default.Edit,
-                    contentDescription = "Toggle Mode"
+                    imageVector = Icons.Default.Undo,
+                    contentDescription = "Undo",
+                    tint = MaterialTheme.colorScheme.primary
                 )
             }
-            IconButton(onClick = { /* Layer List Dialog */ }) {
-                Icon(Icons.AutoMirrored.Filled.List, "Layers")
+
+            // Redo Button
+            IconButton(onClick = onRedo) {
+                Icon(
+                    imageVector = Icons.Default.Redo,
+                    contentDescription = "Redo",
+                    tint = MaterialTheme.colorScheme.primary
+                )
             }
-        }
+
+            // Optional: More Options (Three dots)
+            IconButton(onClick = { /* Open menu for settings/delete */ }) {
+                Icon(Icons.Default.MoreVert, contentDescription = "Options")
+            }
+        },
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = Color(0xFF0D0127), // Match your AuraPurple theme
+            titleContentColor = Color.White,
+            navigationIconContentColor = Color.White,
+            actionIconContentColor = Color.White
+        )
     )
 }
 
-@Composable
-fun NotePage(page: PageData) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth(0.92f)
-            .aspectRatio(1 / page.pageSize.ratio),
-        colors = CardDefaults.cardColors(containerColor = Color(page.backgroundColor)),
-        elevation = CardDefaults.cardElevation(12.dp),
-        shape = RoundedCornerShape(4.dp)
-    ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            // Sort by layer before rendering
-            page.items.sortedBy { it.layer }.forEach { obj ->
-                RenderObject(obj)
-            }
-        }
-    }
-}
-
 
 @Composable
-fun RenderObject(obj: CustomObject) {
+fun RenderObject(
+    pageIndex: Int,
+    obj: CustomObject,
+    activeTool: ActiveTool,
+    viewModel: NoteEditorViewModel
+) {
+    // If we are in "TEXT" tool mode, maybe we don't allow dragging so users can select text.
+    // If we are in other modes (like a generic selection mode), allow drag.
+    // For this engine, we allow dragging if the object is NOT linear text.
+
+    val isDraggable = obj.type != ObjectType.TEXT && !obj.isLocked
+
     Box(
         modifier = Modifier
-            .offset(obj.offset.x.dp, obj.offset.y.dp)
-            .rotate(obj.rotation)
-            .scale(obj.scale)
-            .alpha(obj.alpha)
+            .offset { IntOffset(obj.offsetX.roundToInt(), obj.offsetY.roundToInt()) }
+            .pointerInput(isDraggable) {
+                if (isDraggable) {
+                    detectDragGestures(
+                        onDragEnd = { viewModel.finalizeObjectMove() }
+                    ) { change, dragAmount ->
+                        change.consume()
+                        viewModel.updateObjectPosition(
+                            pageIndex = pageIndex,
+                            objectId = obj.id,
+                            deltaX = dragAmount.x,
+                            deltaY = dragAmount.y
+                        )
+                    }
+                }
+            }
     ) {
+        // Render based on type
         when (obj.type) {
             ObjectType.TEXT -> {
-                val textValue = obj.data["value"] as? String ?: ""
-                val fontSize = (obj.data["fontSize"] as? Double)?.toFloat() ?: 12f
-                Text(
-                    text = textValue,
-                    fontSize = fontSize.sp,
-                    color = Color(obj.data["color"] as? Int ?: 0xFF000000.toInt())
-                )
+                RenderTextBlock(pageIndex, obj, true,viewModel)
             }
             ObjectType.IMAGE -> {
-                // Placeholder for Image Loading logic
-                Icon(Icons.Default.Image, contentDescription = null, tint = Color.Gray)
+                Icon(Icons.Default.Image, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(100.dp))
             }
-            // Add other cases (Drawing, Table, etc.)
+            ObjectType.DRAWING -> {
+                // TODO in Part 2: Render saved paths
+            }
             else -> {}
         }
     }
 }
 
+
 @Composable
-fun FloatingSubToolbar() {
-    // Floating bar with horizontal scroll as requested
+fun FloatingSubToolbar(
+    activeTool: ActiveTool,
+    onToolSelect: (ActiveTool) -> Unit,
+    modifier: Modifier = Modifier
+) {
     Surface(
-        modifier = Modifier.padding(10.dp).fillMaxWidth(0.9f),
-        shape = RoundedCornerShape(24.dp),
-        color = Color.White.copy(0.15f),
-        border = BorderStroke(1.dp, Color.White.copy(0.2f))
+        modifier = modifier.fillMaxWidth(0.9f).height(60.dp),
+        shape = RoundedCornerShape(30.dp),
+        color = Color(0xFFF8E0C3), // SecondaryCream
+        shadowElevation = 8.dp
     ) {
         Row(
-            modifier = Modifier.horizontalScroll(rememberScrollState()).padding(8.dp),
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            IconButton(onClick = { /* List Sub-menu */ }) { Icon(Icons.Default.List, null) }
-            IconButton(onClick = { /* Color Pallet */ }) { Icon(Icons.Default.Palette, null) }
-            IconButton(onClick = { /* Drawing Tools */ }) { Icon(Icons.Default.Brush, null) }
-            IconButton(onClick = { /* Text Styles */ }) { Icon(Icons.Default.TextFields, null) }
-            IconButton(onClick = { /* Media Picker */ }) { Icon(Icons.Default.Image, null) }
+            ToolbarIcon(Icons.Default.TextFields, activeTool == ActiveTool.TEXT) { onToolSelect(ActiveTool.TEXT) }
+            ToolbarIcon(Icons.Default.Brush, activeTool == ActiveTool.DRAW) { onToolSelect(ActiveTool.DRAW) }
+            ToolbarIcon(Icons.Default.Image, activeTool == ActiveTool.IMAGE_PICKER) { onToolSelect(ActiveTool.IMAGE_PICKER) }
+        }
+    }
+}
+
+@Composable
+fun ToolbarIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, isSelected: Boolean, onClick: () -> Unit) {
+    IconButton(onClick = onClick) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = if (isSelected) Color(0xFF3F2A7A) else Color.Gray // AuraPurple if selected
+        )
+    }
+}
+
+@Composable
+fun UndoRedoCard(onUndo: () -> Unit, onRedo: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(
+        color = Color.DarkGray.copy(alpha = 0.8f),
+        shape = RoundedCornerShape(16.dp),
+        modifier = modifier.wrapContentSize()
+    ) {
+        Row(modifier = Modifier.padding(8.dp)) {
+            IconButton(onClick = onUndo) { Icon(Icons.Default.Undo, "Undo", tint = Color.White) }
+            IconButton(onClick = onRedo) { Icon(Icons.Default.Redo, "Redo", tint = Color.White) }
         }
     }
 }

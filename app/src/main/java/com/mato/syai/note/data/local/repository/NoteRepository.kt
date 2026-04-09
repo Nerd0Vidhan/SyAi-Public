@@ -1,10 +1,13 @@
 package com.mato.syai.note.data.local.repository
 
 import android.os.Environment
+import com.google.gson.Gson
 import com.mato.syai.note.data.local.database.MetadataEntity
 import com.mato.syai.note.data.local.database.NoteDao
 import com.mato.syai.note.data.local.database.NoteEntity
+import com.mato.syai.note.data.local.security.CryptoManager
 import com.mato.syai.note.domain.local.model.Note
+import com.mato.syai.note.domain.local.model.NoteContent
 import com.mato.syai.note.domain.local.model.NoteMetadata
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -13,7 +16,11 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import javax.inject.Inject
 
-class NoteRepository @Inject constructor(private val dao: NoteDao) {
+class NoteRepository @Inject constructor(
+    private val dao: NoteDao,
+    private val cryptoManager: CryptoManager,
+    private val gson: Gson
+) {
 
     val allNotes: Flow<List<Note>> = dao.getNotesWithMetadata().map { list ->
         list.map { item ->
@@ -116,5 +123,33 @@ class NoteRepository @Inject constructor(private val dao: NoteDao) {
         dao.deleteByPath(note.filePath)
         val file = File(note.filePath)
         if (file.exists()) file.delete()
+    }
+
+    suspend fun saveNoteContent(noteId: Long, content: NoteContent) = withContext(Dispatchers.IO) {
+        val note = dao.getNoteById(noteId) ?: return@withContext
+        val json = gson.toJson(content)
+        val (iv, encrypted) = cryptoManager.encrypt(json.toByteArray())
+        File(note.filePath).writeBytes(iv + encrypted)
+    }
+
+    suspend fun loadNoteContent(noteId: Long): NoteContent? = withContext(Dispatchers.IO) {
+        val note = dao.getNoteById(noteId) ?: return@withContext null
+        val file = File(note.filePath)
+        if (!file.exists() || file.length() < 13) return@withContext null
+
+        val bytes = file.readBytes()
+        val iv = bytes.take(12).toByteArray()
+        val encrypted = bytes.drop(12).toByteArray()
+        val decrypted = cryptoManager.decrypt(iv, encrypted).decodeToString()
+        gson.fromJson(decrypted, NoteContent::class.java)
+    }
+
+    suspend fun updateTitle(noteId: Long, newTitle: String) = withContext(Dispatchers.IO) {
+        val note = dao.getNoteById(noteId) ?: return@withContext
+        val oldFile = File(note.filePath)
+        val newFile = File(oldFile.parent, "$newTitle.dpn")
+        if (oldFile.renameTo(newFile)) {
+            dao.updateNotePathAndTitle(noteId, newFile.absolutePath, newTitle)
+        }
     }
 }
