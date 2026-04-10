@@ -10,10 +10,11 @@ import javax.crypto.spec.GCMParameterSpec
 
 class CryptoManager {
     private val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-    private val ALGORITHM = KeyProperties.KEY_ALGORITHM_AES
-    private val BLOCK_MODE = KeyProperties.BLOCK_MODE_GCM
-    private val PADDING = KeyProperties.ENCRYPTION_PADDING_NONE
-    private val TRANSFORMATION = "$ALGORITHM/$BLOCK_MODE/$PADDING"
+
+    private val algorithm = KeyProperties.KEY_ALGORITHM_AES
+    private val blockMode = KeyProperties.BLOCK_MODE_GCM
+    private val padding = KeyProperties.ENCRYPTION_PADDING_NONE
+    private val transformation = "$algorithm/$blockMode/$padding"
 
     private fun getSecretKey(): SecretKey {
         val existingKey = keyStore.getEntry("syai_key", null) as? KeyStore.SecretKeyEntry
@@ -21,25 +22,28 @@ class CryptoManager {
     }
 
     private fun createKey(): SecretKey {
-        return KeyGenerator.getInstance(ALGORITHM, "AndroidKeyStore").apply {
-            init(KeyGenParameterSpec.Builder("syai_key", KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
-                .setBlockModes(BLOCK_MODE)
-                .setEncryptionPaddings(PADDING)
-                .setUserAuthenticationRequired(false)
-                .build())
+        return KeyGenerator.getInstance(algorithm, "AndroidKeyStore").apply {
+            init(
+                KeyGenParameterSpec.Builder(
+                    "syai_key",
+                    KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
+                )
+                    .setBlockModes(blockMode)
+                    .setEncryptionPaddings(padding)
+                    .setUserAuthenticationRequired(false)
+                    .build()
+            )
         }.generateKey()
     }
 
     fun encrypt(data: ByteArray): Pair<ByteArray, ByteArray> {
-        val cipher = Cipher.getInstance(TRANSFORMATION)
+        val cipher = Cipher.getInstance(transformation)
         cipher.init(Cipher.ENCRYPT_MODE, getSecretKey())
-        val iv = cipher.iv
-        val encrypted = cipher.doFinal(data)
-        return iv to encrypted
+        return cipher.iv to cipher.doFinal(data)
     }
 
     fun decrypt(iv: ByteArray, encryptedData: ByteArray): ByteArray {
-        val cipher = Cipher.getInstance(TRANSFORMATION)
+        val cipher = Cipher.getInstance(transformation)
         cipher.init(Cipher.DECRYPT_MODE, getSecretKey(), GCMParameterSpec(128, iv))
         return cipher.doFinal(encryptedData)
     }

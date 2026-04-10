@@ -11,8 +11,8 @@ data class NoteEntity(
     val title: String,
     val folderName: String,
     val lastModified: Long,
-    val isFavorite: Boolean = false,
-    val preview: String
+    val preview: String = "",
+    val isFavorite: Boolean = false
 )
 
 @Entity(

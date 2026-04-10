@@ -2,13 +2,9 @@ package com.mato.syai.note.data.local.repository
 
 import android.os.Environment
 import com.google.gson.Gson
-import com.mato.syai.note.data.local.database.MetadataEntity
-import com.mato.syai.note.data.local.database.NoteDao
-import com.mato.syai.note.data.local.database.NoteEntity
+import com.mato.syai.note.data.local.database.*
 import com.mato.syai.note.data.local.security.CryptoManager
-import com.mato.syai.note.domain.local.model.Note
-import com.mato.syai.note.domain.local.model.NoteContent
-import com.mato.syai.note.domain.local.model.NoteMetadata
+import com.mato.syai.note.domain.local.model.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -32,8 +28,8 @@ class NoteRepository @Inject constructor(
                 lastModified = item.note.lastModified,
                 isFavorite = item.note.isFavorite,
                 metadata = NoteMetadata(
-                    textSize = item.metadata?.textSize ?: 12f,
-                    colorHex = item.metadata?.colorHex ?: 0xFFFFFFFF.toInt(),
+                    textSize = item.metadata?.textSize ?: 16f,
+                    colorHex = item.metadata?.colorHex ?: 0xFF000000.toInt(),
                 )
             )
         }
@@ -46,7 +42,6 @@ class NoteRepository @Inject constructor(
         val dir = File(root, "SyAi/$folder").apply { if (!exists()) mkdirs() }
         val file = File(dir, "$title.dpn")
 
-        // Ensure file exists physically
         if (!file.exists()) file.createNewFile()
 
         val entity = NoteEntity(
@@ -54,21 +49,23 @@ class NoteRepository @Inject constructor(
             title = title,
             folderName = folder,
             lastModified = System.currentTimeMillis(),
-            preview = file.readText().take(150),
+            preview = "",
             isFavorite = false
         )
 
-        val meta = MetadataEntity(noteId = 0, textSize = 12f)
-        dao.insertNoteWithMetadata(entity, meta)
+        val noteId = dao.insertNote(entity)
+        dao.insertMetadata(MetadataEntity(noteId = noteId, textSize = 16f))
+
+        saveNoteContent(noteId, createDefaultContent())
+
+        noteId
     }
 
     suspend fun syncFileSystem() = withContext(Dispatchers.IO) {
         try {
-            // Targeted directories are more reliable than scanning the whole Root
             val roots = listOf(
                 Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS),
                 Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-                // You can still add the root, but be aware of performance
                 Environment.getExternalStorageDirectory()
             )
 
@@ -87,10 +84,8 @@ class NoteRepository @Inject constructor(
             val diskPaths = diskFiles.map { it.absolutePath }.toSet()
             val dbPaths = dao.getAllStoredPaths().toSet()
 
-            // Remove deleted
             (dbPaths - diskPaths).forEach { dao.deleteByPath(it) }
 
-            // Add/Update new
             diskFiles.forEach { file ->
                 val existingId = dao.getIdByPath(file.absolutePath)
                 if (existingId == null) {
@@ -99,19 +94,17 @@ class NoteRepository @Inject constructor(
                         title = file.nameWithoutExtension,
                         folderName = file.parentFile?.name ?: "Root",
                         lastModified = file.lastModified(),
-                        preview = file.readText().take(150),
+                        preview = "",
                         isFavorite = false
                     )
+
                     val defaultMetadata = MetadataEntity(
-                        noteId = 0, // Room will ignore this 0 because of the Transaction logic
+                        noteId = 0,
                         textSize = 16f,
-                        colorHex = 0xFFF8E0C3.toInt(),
+                        colorHex = 0xFF000000.toInt(),
                     )
 
-                    // Use the transaction method we created
                     dao.insertNoteWithMetadata(noteEntity, defaultMetadata)
-//                    val newId = dao.insertNote(noteEntity)
-//                    dao.insertMetadata(MetadataEntity(newId, 16f, 0xFFF8E0C3.toInt(), false))
                 }
             }
         } catch (e: Exception) {
@@ -130,18 +123,27 @@ class NoteRepository @Inject constructor(
         val json = gson.toJson(content)
         val (iv, encrypted) = cryptoManager.encrypt(json.toByteArray())
         File(note.filePath).writeBytes(iv + encrypted)
+        dao.updateLastModified(noteId, System.currentTimeMillis())
     }
 
-    suspend fun loadNoteContent(noteId: Long): NoteContent? = withContext(Dispatchers.IO) {
-        val note = dao.getNoteById(noteId) ?: return@withContext null
+    suspend fun loadNoteContent(noteId: Long): NoteContent = withContext(Dispatchers.IO) {
+        val note = dao.getNoteById(noteId) ?: return@withContext createDefaultContent()
         val file = File(note.filePath)
-        if (!file.exists() || file.length() < 13) return@withContext null
 
-        val bytes = file.readBytes()
-        val iv = bytes.take(12).toByteArray()
-        val encrypted = bytes.drop(12).toByteArray()
-        val decrypted = cryptoManager.decrypt(iv, encrypted).decodeToString()
-        gson.fromJson(decrypted, NoteContent::class.java)
+        if (!file.exists() || file.length() < 13) {
+            return@withContext createDefaultContent()
+        }
+
+        return@withContext try {
+            val bytes = file.readBytes()
+            val iv = bytes.take(12).toByteArray()
+            val encrypted = bytes.drop(12).toByteArray()
+            val decrypted = cryptoManager.decrypt(iv, encrypted).decodeToString()
+            gson.fromJson(decrypted, NoteContent::class.java) ?: createDefaultContent()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            createDefaultContent()
+        }
     }
 
     suspend fun updateTitle(noteId: Long, newTitle: String) = withContext(Dispatchers.IO) {
@@ -149,7 +151,21 @@ class NoteRepository @Inject constructor(
         val oldFile = File(note.filePath)
         val newFile = File(oldFile.parent, "$newTitle.dpn")
         if (oldFile.renameTo(newFile)) {
-            dao.updateNotePathAndTitle(noteId, newFile.absolutePath, newTitle)
+            dao.updateNotePathAndTitle(
+                noteId = noteId,
+                absolutePath = newFile.absolutePath,
+                newTitle = newTitle,
+                lastModified = System.currentTimeMillis()
+            )
         }
+    }
+
+    private fun createDefaultContent(): NoteContent {
+        return NoteContent(
+            schemaVersion = 1,
+            pages = mutableListOf(
+                PageData(pageNo = 0)
+            )
+        )
     }
 }
