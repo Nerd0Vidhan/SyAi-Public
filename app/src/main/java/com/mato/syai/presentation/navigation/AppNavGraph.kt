@@ -68,7 +68,10 @@ fun AppNavGraph(navController: NavHostController) {
         }
         composable("note_editor/{noteId}") { backStackEntry ->
             val noteId = backStackEntry.arguments?.getString("noteId")?.toLongOrNull() ?: 0L
-            NoteEditorScreen(noteId = noteId, onBack = { navController.popBackStack() })
+            NoteEditorScreen(
+                noteId = noteId,
+                onBack = { navController.popBackStack() }
+            )
         }
     }
 
@@ -120,11 +123,9 @@ fun BottomNavigationGraph(
 
         composable("notes_list") {
             NotesHomeScreen(
-                // Navigate using parentNavController to go full screen
                 onNoteClick = { noteId ->
                     parentNavController.navigate("note_editor/$noteId")
-                },
-                onFabClick = { /* Handled inside the Composable via ViewModel */ }
+                }
             )
         }
 
