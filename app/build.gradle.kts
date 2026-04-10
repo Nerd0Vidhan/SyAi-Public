@@ -163,5 +163,6 @@ dependencies {
     implementation("com.google.protobuf:protobuf-javalite:3.25.1")
     implementation("com.google.protobuf:protobuf-kotlin-lite:3.25.1")
     implementation("androidx.datastore:datastore:1.1.1")
+    implementation("io.coil-kt:coil-compose:2.6.0")
 
 }

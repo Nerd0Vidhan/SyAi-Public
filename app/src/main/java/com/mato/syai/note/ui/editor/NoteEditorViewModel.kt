@@ -1,246 +1,431 @@
 package com.mato.syai.note.ui.editor
 
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.gson.Gson
+import com.google.gson.GsonBuilder
+import com.mato.syai.note.data.local.parser.ObjectPayloadAdapter
 import com.mato.syai.note.data.local.repository.NoteRepository
+import com.mato.syai.note.domain.editor.EditorState
+import com.mato.syai.note.domain.editor.UndoRedoManager
 import com.mato.syai.note.domain.local.model.*
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
-import java.util.Stack
 
 @HiltViewModel
 class NoteEditorViewModel @Inject constructor(
     private val repository: NoteRepository,
-    private val gson: Gson
+    gson: Gson
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(NoteContent())
-    val uiState = _uiState.asStateFlow()
+    private val undoRedoManager = UndoRedoManager(gson)
 
-    private val _noteTitle = MutableStateFlow("Loading...")
+    private val _uiState = MutableStateFlow(EditorState())
+    val uiState: StateFlow<EditorState> = _uiState.asStateFlow()
+
+    private val _noteTitle = MutableStateFlow("")
+    private var activeTextObjectId: String? = null
     val noteTitle = _noteTitle.asStateFlow()
 
-    // Tool Management
-    private val _currentTool = MutableStateFlow(ActiveTool.TEXT)
-    val currentTool = _currentTool.asStateFlow()
+    private var autoSaveJob: Job? = null
 
-    // Drawing Settings (Global to scope)
-    var currentDrawColor = 0xFF0D0127.toInt()
-    var currentDrawThickness = 5f
-
-    // Undo/Redo (Storing raw JSON strings for perfect deep copies)
-    private val undoStack = Stack<String>()
-    private val redoStack = Stack<String>()
-
-    private var currentNoteId: Long = -1L
-
-    // Inside NoteEditorViewModel
-    private val _currentPath = MutableStateFlow<SerializablePath?>(null)
-    val currentPath = _currentPath.asStateFlow()
-
-
-    // Track the current active style (what the user has selected in the toolbar)
-    private val _activeTextStyle = MutableStateFlow(TextBlockData())
-    val activeTextStyle = _activeTextStyle.asStateFlow()
-
-    // Track which object is currently being edited/focused
-    private val _focusedObjectId = MutableStateFlow<String?>(null)
-    val focusedObjectId = _focusedObjectId.asStateFlow()
-
-    // Handle Page Click (The "Brain" of the tap logic)
-    fun handlePageTap(pageIndex: Int, offset: androidx.compose.ui.geometry.Offset) {
-        val currentContent = _uiState.value
-        val page = currentContent.pages[pageIndex]
-
-        // 1. Check if user tapped an EXISTING object
-        val tappedObject = page.items.find {
-            val xMatch = offset.x in it.offsetX..(it.offsetX + 500f) // Simplified hit-box
-            val yMatch = offset.y in it.offsetY..(it.offsetY + 100f)
-            xMatch && yMatch
-        }
-
-        if (tappedObject != null) {
-            _focusedObjectId.value = tappedObject.id
-            if (tappedObject.type == ObjectType.TEXT) setTool(ActiveTool.TEXT)
-        } else {
-            // 2. Tapped empty space: Create NEW block if tool is active
-            if (currentTool.value == ActiveTool.TEXT) {
-                val newId = java.util.UUID.randomUUID().toString()
-                val newTextBlock = CustomObject(
-                    id = newId,
-                    layer = page.items.size + 1,
-                    type = ObjectType.TEXT,
-                    offsetX = offset.x,
-                    offsetY = offset.y,
-                    data = mutableMapOf("textData" to _activeTextStyle.value.copy(text = ""))
-                )
-                page.items.add(newTextBlock)
-                _focusedObjectId.value = newId
-                _uiState.value = currentContent.copy()
-                takeSnapshot()
-            }
-        }
-    }
-
-    fun addNewPage() {
-        val currentContent = _uiState.value
-        val newPageNum = currentContent.pages.size + 1
-        currentContent.pages.add(PageData(pageNo = newPageNum))
-        _uiState.value = currentContent.copy()
-        takeSnapshot()
-    }
-
-    fun updateText(pageIndex: Int, blockId: String, newText: String) {
-        val currentContent = _uiState.value
-        val page = currentContent.pages[pageIndex]
-        val itemIndex = page.items.indexOfFirst { it.id == blockId }
-
-        if (itemIndex != -1) {
-            val item = page.items[itemIndex]
-            // Update the text value inside the generic data map
-            val data = item.data["textData"] as? TextBlockData ?: TextBlockData()
-            item.data["textData"] = data.copy(text = newText)
-
-            _uiState.value = currentContent.copy()
-            // Note: Don't take snapshot on every keystroke (performance).
-            // We take snapshots on "Pause" or "Focus Lost".
-        }
-    }
-
-    fun toggleBold() {
-        _activeTextStyle.value = _activeTextStyle.value.copy(isBold = !_activeTextStyle.value.isBold)
-    }
-
-    fun setFontSize(size: Float) {
-        _activeTextStyle.value = _activeTextStyle.value.copy(fontSize = size)
-    }
-
-    // Logic to create a NEW block when formatting changes
-    fun createNewTextBlock(pageIndex: Int) {
-        val newBlock = CustomObject(
-            layer = _uiState.value.pages[pageIndex].items.size + 1,
-            type = ObjectType.TEXT,
-            data = mutableMapOf("textData" to _activeTextStyle.value)
-        )
-
-        val currentContent = _uiState.value
-        currentContent.pages[pageIndex].items.add(newBlock)
-        _uiState.value = currentContent.copy()
-        takeSnapshot()
-    }
-
-    fun startDrawing(x: Float, y: Float) {
-        _currentPath.value = SerializablePath(
-            points = listOf(PointData(x, y)),
-            color = currentDrawColor,
-            thickness = currentDrawThickness
-        )
-    }
-
-    fun updateDrawing(x: Float, y: Float) {
-        _currentPath.value?.let { path ->
-            val newPoints = path.points + PointData(x, y)
-            _currentPath.value = path.copy(points = newPoints)
-        }
-    }
-
-    fun finishDrawing(pageIndex: Int) {
-        val path = _currentPath.value ?: return
-
-        val currentContent = _uiState.value
-        val pages = currentContent.pages.toMutableList()
-        val page = pages[pageIndex]
-
-        // Create a new CustomObject for this drawing
-        val drawingObject = CustomObject(
-            layer = page.items.size + 1,
-            type = ObjectType.DRAWING,
-            data = mutableMapOf("pathData" to path)
-        )
-
-        page.items.add(drawingObject)
-        _uiState.value = currentContent.copy(pages = pages)
-
-        _currentPath.value = null // Reset live path
-        takeSnapshot() // Save to Undo/Redo stack
-    }
-    fun loadNote(id: Long) {
-        currentNoteId = id
+    fun loadNote(noteId: Long) {
         viewModelScope.launch {
-            val content = repository.loadNoteContent(id) ?: NoteContent(mutableListOf(PageData(1)))
-            _uiState.value = content
-            val note = repository.getNoteById(id)
-            _noteTitle.value = note?.title ?: "Untitled"
-        }
-    }
+            _uiState.update { it.copy(isLoading = true, noteId = noteId) }
 
-    fun setTool(tool: ActiveTool) {
-        _currentTool.value = tool
-    }
+            val noteEntity = repository.getNoteById(noteId)
+            val content = repository.loadNoteContent(noteId)
 
-    // --- Undo / Redo Logic ---
-    private fun takeSnapshot() {
-        undoStack.push(gson.toJson(_uiState.value))
-        redoStack.clear() // Clear redo on new action
-        saveToDisk()
-    }
+            undoRedoManager.clear()
+            undoRedoManager.push(content)
 
-    fun undo() {
-        if (undoStack.isNotEmpty()) {
-            redoStack.push(gson.toJson(_uiState.value))
-            _uiState.value = gson.fromJson(undoStack.pop(), NoteContent::class.java)
-            saveToDisk()
-        }
-    }
+            _noteTitle.value = noteEntity?.title ?: "Untitled"
 
-    fun redo() {
-        if (redoStack.isNotEmpty()) {
-            undoStack.push(gson.toJson(_uiState.value))
-            _uiState.value = gson.fromJson(redoStack.pop(), NoteContent::class.java)
-            saveToDisk()
-        }
-    }
-
-    // --- Object Manipulation ---
-    fun updateObjectPosition(pageIndex: Int, objectId: String, deltaX: Float, deltaY: Float) {
-        // We do NOT take a snapshot on every pixel move (that would destroy memory).
-        // We only take a snapshot when the drag *ends*.
-        val currentContent = _uiState.value
-        val pages = currentContent.pages.toMutableList()
-        val page = pages[pageIndex]
-
-        val itemIndex = page.items.indexOfFirst { it.id == objectId }
-        if (itemIndex != -1 && !page.items[itemIndex].isLocked) {
-            val item = page.items[itemIndex]
-            item.offsetX += deltaX
-            item.offsetY += deltaY
-            _uiState.value = currentContent.copy(pages = pages)
+            _uiState.update {
+                it.copy(
+                    noteId = noteId,
+                    title = noteEntity?.title ?: "Untitled",
+                    content = content,
+                    isLoading = false
+                )
+            }
         }
     }
 
     fun persistToDisk() {
         viewModelScope.launch {
-            // We ensure any active drawing is finished before saving
-            if (_currentPath.value != null) {
-                // If the user was mid-stroke when they quit, save that stroke to the first page
-                finishDrawing(0)
-            }
-            repository.saveNoteContent(currentNoteId, _uiState.value)
+            repository.saveNoteContent(_uiState.value.noteId, _uiState.value.content)
         }
     }
 
-    fun finalizeObjectMove() {
-        // Called when user lifts finger after dragging
-        takeSnapshot()
+    private fun scheduleAutoSave() {
+        autoSaveJob?.cancel()
+        autoSaveJob = viewModelScope.launch {
+            delay(800)
+            persistToDisk()
+        }
     }
 
-    private fun saveToDisk() {
-        if (currentNoteId != -1L) {
-            viewModelScope.launch {
-                repository.saveNoteContent(currentNoteId, _uiState.value)
+    fun addImage(pageIndex: Int, uri: String, x: Float, y: Float) {
+        mutateContent { content ->
+            val page = content.pages[pageIndex]
+
+            val obj = NoteObject(
+                layer = page.items.size + 1,
+                type = ObjectType.IMAGE,
+                transform = Transform(x = x, y = y),
+                bounds = Bounds(250f, 200f),
+                payload = ImagePayload(uri = uri)
+            )
+
+            page.items.add(obj)
+        }
+    }
+
+    private fun mutateContent(mutator: (NoteContent) -> Unit) {
+        val current = _uiState.value.content
+        undoRedoManager.push(deepCopy(current))
+
+        mutator(current)
+
+        _uiState.update { it.copy(content = current) }
+        scheduleAutoSave()
+    }
+
+    private val gson = GsonBuilder()
+        .registerTypeAdapter(ObjectPayload::class.java, ObjectPayloadAdapter())
+        .create()
+
+    private fun deepCopy(content: NoteContent): NoteContent {
+        return gson.fromJson(gson.toJson(content), NoteContent::class.java)
+    }
+
+    // ---------------- TOOL STATE ----------------
+
+    fun setTool(tool: ActiveTool) {
+        activeTextObjectId = null
+        _uiState.update { it.copy(activeTool = tool) }
+    }
+
+    fun updateTextStyle(style: TextStyleData) {
+        _uiState.update { it.copy(textStyle = style) }
+    }
+
+    fun updateDrawColor(color: Int) {
+        _uiState.update { it.copy(drawColor = color) }
+    }
+
+    fun updateDrawWidth(width: Float) {
+        _uiState.update { it.copy(drawWidth = width) }
+    }
+
+    fun toggleViewOnly() {
+        _uiState.update { it.copy(isViewOnly = !it.isViewOnly) }
+    }
+
+    // ---------------- TITLE ----------------
+
+    fun updateTitle(newTitle: String) {
+        _noteTitle.value = newTitle
+        _uiState.update { it.copy(title = newTitle) }
+
+        viewModelScope.launch {
+            repository.updateTitle(_uiState.value.noteId, newTitle)
+        }
+    }
+
+    // ---------------- OBJECT SELECTION ----------------
+
+    fun selectObject(objectId: String?) {
+        _uiState.update { it.copy(selectedObjectId = objectId) }
+    }
+
+    fun toggleSelection(id: String) {
+        val current = _uiState.value.selectedObjectIds.toMutableSet()
+
+        if (current.contains(id)) current.remove(id)
+        else current.add(id)
+
+        _uiState.update { it.copy(selectedObjectIds = current) }
+    }
+
+    // ---------------- TEXT ----------------
+
+    fun addText(pageIndex: Int, x: Float, y: Float) {
+
+        val current = activeTextObjectId
+
+        if (current != null) {
+            _uiState.update { it.copy(selectedObjectId = current) }
+            return
+        }
+
+        mutateContent { content ->
+            val page = content.pages[pageIndex]
+
+            val obj = NoteObject(
+                layer = page.items.size + 1,
+                type = ObjectType.TEXT,
+                transform = Transform(x = x, y = y),
+                payload = TextPayload("")
+            )
+
+            page.items.add(obj)
+
+            activeTextObjectId = obj.id
+
+            _uiState.update {
+                it.copy(selectedObjectId = obj.id)
+            }
+        }
+    }
+
+    fun updateTextObject(pageIndex: Int, objectId: String, newText: String) {
+        mutateContent { content ->
+            val obj = content.pages[pageIndex].items.find { it.id == objectId } ?: return@mutateContent
+            val payload = obj.payload as? TextPayload ?: return@mutateContent
+            obj.payload = payload.copy(text = newText)
+        }
+    }
+
+    fun updateTextColor(color: Int) {
+
+        val selectedId = _uiState.value.selectedObjectId
+
+        // ✅ if object selected → apply to object
+        if (selectedId != null) {
+            mutateContent { content ->
+                content.pages.forEach { page ->
+                    val obj = page.items.find { it.id == selectedId } ?: return@forEach
+                    val payload = obj.payload as? TextPayload ?: return@forEach
+
+                    obj.payload = payload.copy(
+                        style = payload.style.copy(color = color)
+                    )
+                }
+            }
+        }
+
+        // ✅ also update default style
+        _uiState.update {
+            it.copy(
+                textStyle = it.textStyle.copy(color = color)
+            )
+        }
+    }
+
+    // ---------------- DRAWING ----------------
+
+    fun addStroke(pageIndex: Int, stroke: Stroke) {
+        mutateContent { content ->
+            val page = content.pages[pageIndex]
+
+            val drawingObj = page.items
+                .lastOrNull { it.type == ObjectType.DRAWING }
+                ?.takeIf { it.payload is DrawingPayload }
+
+            if (drawingObj != null) {
+                val payload = drawingObj.payload as DrawingPayload
+                payload.strokes.add(stroke)
+            } else {
+                val newDrawing = NoteObject(
+                    layer = page.items.size + 1,
+                    type = ObjectType.DRAWING,
+                    transform = Transform(),
+                    bounds = Bounds(),
+                    payload = DrawingPayload(
+                        strokes = mutableListOf(stroke)
+                    )
+                )
+                page.items.add(newDrawing)
+            }
+        }
+    }
+
+    // ---------------- MOVE ----------------
+
+    fun updateObjectPosition(
+        pageIndex: Int,
+        objectId: String,
+        deltaX: Float,
+        deltaY: Float,
+        pageWidth: Float,
+        pageHeight: Float
+    ) {
+        val content = _uiState.value.content
+        val currentPage = content.pages.getOrNull(pageIndex) ?: return
+        val obj = currentPage.items.find { it.id == objectId } ?: return
+
+        val newX = obj.transform.x + deltaX
+        val newY = obj.transform.y + deltaY
+
+        // --- CROSS-PAGE LOGIC ---
+
+        // 1. Move to Previous Page
+        if (newY < -20f && pageIndex > 0) {
+            moveObjectToPage(fromPage = pageIndex, toPage = pageIndex - 1, objectId = objectId, newY = pageHeight + newY)
+            return
+        }
+
+        // 2. Move to Next Page
+        if (newY > pageHeight + 20f && pageIndex < content.pages.lastIndex) {
+            moveObjectToPage(fromPage = pageIndex, toPage = pageIndex + 1, objectId = objectId, newY = newY - pageHeight)
+            return
+        }
+
+        // --- INTERNAL CLAMPING (if not switching pages) ---
+        obj.transform.x = newX.coerceIn(0f, pageWidth - obj.bounds.width)
+        obj.transform.y = newY // Allow slight overflow during drag for handoff
+
+        _uiState.update { it.copy(content = content) }
+    }
+
+    fun finalizeObjectMove() {
+        scheduleAutoSave()
+    }
+
+    // ---------------- UNDO REDO ----------------
+
+    fun undo() {
+        val current = _uiState.value.content
+        val previous = undoRedoManager.undo(current) ?: return
+        _uiState.update { it.copy(content = previous, selectedObjectId = null) }
+        scheduleAutoSave()
+    }
+
+    fun redo() {
+        val current = _uiState.value.content
+        val next = undoRedoManager.redo(current) ?: return
+        _uiState.update { it.copy(content = next, selectedObjectId = null) }
+        scheduleAutoSave()
+    }
+
+    // ---------------- PAGE AUTO ADD ----------------
+
+    fun ensureNextPageIfNeeded(pageIndex: Int, currentY: Float, pageHeight: Float) {
+        val threshold = pageHeight * 0.7f
+        if (currentY < threshold) return
+
+        mutateContent { content ->
+            if (pageIndex == content.pages.lastIndex) {
+                content.pages.add(
+                    PageData(
+                        pageNo = content.pages.size
+                    )
+                )
+            }
+        }
+    }
+
+    fun bringToFront(pageIndex: Int, objectId: String) {
+        mutateContent { content ->
+            val page = content.pages[pageIndex]
+            val obj = page.items.find { it.id == objectId } ?: return@mutateContent
+
+            obj.layer = (page.items.maxOfOrNull { it.layer } ?: 0) + 1
+        }
+    }
+
+    fun resizeObject(
+        pageIndex: Int,
+        objectId: String,
+        dx: Float,
+        dy: Float,
+        pageWidth: Float,
+        pageHeight: Float
+    ) {
+        val content = _uiState.value.content
+        val obj = content.pages[pageIndex].items.find { it.id == objectId } ?: return
+
+        val newWidth = (obj.bounds.width + dx).coerceIn(80f, pageWidth)
+        val newHeight = (obj.bounds.height + dy).coerceIn(40f, pageHeight)
+
+        obj.bounds.width = newWidth
+        obj.bounds.height = newHeight
+
+        _uiState.update { it.copy(content = content) }
+    }
+
+    fun selectObjectsInRegion(pageIndex: Int, path: List<Point>) {
+
+        val content = _uiState.value.content
+        val page = content.pages[pageIndex]
+
+        val selected = page.items.filter { obj ->
+            path.any {
+                it.x in obj.transform.x..(obj.transform.x + obj.bounds.width) &&
+                        it.y in obj.transform.y..(obj.transform.y + obj.bounds.height)
+            }
+        }.map { it.id }.toSet()
+
+        _uiState.update {
+            it.copy(selectedObjectIds = selected)
+        }
+    }
+
+    fun selectObjectsInRect(pageIndex: Int, selectionRect: Rect?) {
+        if (selectionRect == null) return
+
+        val page = uiState.value.content.pages.getOrNull(pageIndex) ?: return
+        val newlySelectedIds = mutableSetOf<String>()
+
+        page.items.forEach { obj ->
+            // Create a Rect representing the object's current bounds
+            val objRect = Rect(
+                offset = Offset(obj.transform.x, obj.transform.y),
+                size = androidx.compose.ui.geometry.Size(obj.bounds.width, obj.bounds.height)
+            )
+
+            // Check if the selection rectangle overlaps the object
+            if (selectionRect.overlaps(objRect)) {
+                newlySelectedIds.add(obj.id)
+            }
+        }
+
+        _uiState.update { it.copy(selectedObjectIds = newlySelectedIds) }
+    }
+
+    private fun moveObjectToPage(fromPage: Int, toPage: Int, objectId: String, newY: Float) {
+        mutateContent { content ->
+            val sourceItems = content.pages[fromPage].items
+            val targetItems = content.pages[toPage].items
+
+            val obj = sourceItems.find { it.id == objectId } ?: return@mutateContent
+
+            // Remove from current page
+            sourceItems.remove(obj)
+
+            // Update Y coordinate relative to the NEW page
+            obj.transform.y = newY
+
+            // Add to target page
+            targetItems.add(obj)
+
+            // Update selection to the new page context
+            _uiState.update { it.copy(currentPageIndex = toPage) }
+        }
+    }
+
+
+    // Inside NoteEditorViewModel
+    fun toggleChecklistItem(objectId: String, itemId: String) {
+        mutateContent { content ->
+            // Search through all pages for the object
+            content.pages.forEach { page ->
+                page.items.find { it.id == objectId }?.let { obj ->
+                    val payload = obj.payload as? ChecklistPayload
+                    payload?.items?.find { it.id == itemId }?.let { item ->
+                        // Toggle the boolean
+                        item.isChecked = !item.isChecked
+                    }
+                }
             }
         }
     }

@@ -1,12 +1,7 @@
 package com.mato.syai.note.data.local.database
 
-import androidx.room.Dao
-import androidx.room.Insert
-import androidx.room.OnConflictStrategy
-import androidx.room.Query
-import androidx.room.Transaction
+import androidx.room.*
 import kotlinx.coroutines.flow.Flow
-
 
 @Dao
 interface NoteDao {
@@ -29,16 +24,27 @@ interface NoteDao {
     @Query("SELECT filePath FROM notes_path")
     suspend fun getAllStoredPaths(): List<String>
 
-    @Query("SELECT * FROM notes_path WHERE noteId = :noteId")
+    @Query("SELECT * FROM notes_path WHERE noteId = :noteId LIMIT 1")
     suspend fun getNoteById(noteId: Long): NoteEntity?
 
-    @Query("UPDATE notes_path SET filePath = :absolutePath, title = :newTitle WHERE noteId = :noteId")
-    suspend fun updateNotePathAndTitle(noteId: Long, absolutePath: String, newTitle: String)
+    @Query("SELECT * FROM note_metadata WHERE noteId = :noteId LIMIT 1")
+    suspend fun getMetadataByNoteId(noteId: Long): MetadataEntity?
+
+    @Query("UPDATE notes_path SET filePath = :absolutePath, title = :newTitle, lastModified = :lastModified WHERE noteId = :noteId")
+    suspend fun updateNotePathAndTitle(noteId: Long, absolutePath: String, newTitle: String, lastModified: Long)
+
+    @Query("UPDATE notes_path SET title = :title, lastModified = :lastModified WHERE noteId = :noteId")
+    suspend fun updateTitle(noteId: Long, title: String, lastModified: Long)
+
+    @Query("UPDATE notes_path SET lastModified = :lastModified WHERE noteId = :noteId")
+    suspend fun updateLastModified(noteId: Long, lastModified: Long)
+
+    @Query("SELECT EXISTS(SELECT 1 FROM notes_path WHERE noteId = :noteId)")
+    suspend fun exists(noteId: Long): Boolean
 
     @Transaction
     suspend fun insertNoteWithMetadata(note: NoteEntity, metadata: MetadataEntity): Long {
         val id = insertNote(note)
-        // Ensure we use the freshly generated ID for the child record
         insertMetadata(metadata.copy(noteId = id))
         return id
     }

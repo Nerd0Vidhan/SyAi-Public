@@ -1,3 +1,4 @@
+/*
 package com.mato.syai.note.domain.local.model
 
 enum class PageSize(val ratio: Float) {
@@ -47,12 +48,4 @@ data class TextSpan(
     val color: Int = 0xFF000000.toInt(),
     val fontSize: Float = 12f
 )
-
-data class TextBlockData(
-    var text: String = "",
-    val fontSize: Float = 12f,
-    val color: Int = 0xFF000000.toInt(),
-    val isBold: Boolean = false,
-    val isItalic: Boolean = false,
-    val alignment: String = "LEFT" // LEFT, CENTER, RIGHT, JUSTIFY
-)
+*/

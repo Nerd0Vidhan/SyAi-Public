@@ -1,6 +1,5 @@
 package com.mato.syai.note.ui.home
 
-import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
@@ -31,7 +30,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.mato.syai.R
 import com.mato.syai.note.domain.local.model.Note
 
-// Theme Colors
 private val PrimaryDark = Color(0xFF0D0127)
 private val SecondaryCream = Color(0xFFF8E0C3)
 private val AuraPurple = Color(0xFF3F2A7A)
@@ -40,15 +38,13 @@ private val AuraPurple = Color(0xFF3F2A7A)
 @Composable
 fun NotesHomeScreen(
     viewModel: NotesHomeViewModel = hiltViewModel(),
-    onNoteClick: (Long) -> Unit,
-    onFabClick: () -> Unit
+    onNoteClick: (Long) -> Unit
 ) {
     val notes by viewModel.notes.collectAsState()
     val folders by viewModel.folders.collectAsState()
     val selectedFolder by viewModel.selectedFolder.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
 
-    // Setup for custom refresh indicator
     val state = rememberPullToRefreshState()
     LaunchedEffect(Unit) {
         viewModel.navigationEvent.collect { newNoteId ->
@@ -61,7 +57,6 @@ fun NotesHomeScreen(
             .fillMaxSize()
             .background(PrimaryDark)
     ) {
-        // --- 1. Background Aura Glow ---
         Box(
             modifier = Modifier
                 .size(350.dp)
@@ -76,13 +71,11 @@ fun NotesHomeScreen(
                 )
         )
 
-        // --- 2. Pull To Refresh Container ---
         PullToRefreshBox(
             isRefreshing = isRefreshing,
             state = state,
             onRefresh = { viewModel.refresh() },
             indicator = {
-                // This is your custom refresh section
                 CustomRefreshIndicator(
                     isRefreshing = isRefreshing,
                     state = state,
@@ -91,9 +84,7 @@ fun NotesHomeScreen(
             },
             modifier = Modifier.fillMaxSize()
         ) {
-            // Main Content
             Column(modifier = Modifier.fillMaxSize()) {
-                // FOLDERS Section
                 Text(
                     text = "FOLDERS",
                     color = Color.Gray,
@@ -115,7 +106,6 @@ fun NotesHomeScreen(
                     }
                 }
 
-                // FILES Section
                 Text(
                     text = "FILES",
                     color = Color.Gray,
@@ -155,7 +145,6 @@ fun NotesHomeScreen(
             }
         }
 
-        // --- 3. Floating Action Button ---
         FloatingActionButton(
             onClick = {
                 viewModel.createNewNote()
@@ -176,10 +165,6 @@ fun NotesHomeScreen(
     }
 }
 
-/**
- * A custom refresh indicator that appears at the top when pulling.
- * You can expand this with Lottie animations or more complex Canvas drawing later.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CustomRefreshIndicator(
@@ -187,7 +172,6 @@ fun CustomRefreshIndicator(
     state: PullToRefreshState,
     modifier: Modifier = Modifier
 ) {
-    // Simple rotation animation for the icon
     val transition = rememberInfiniteTransition(label = "refresh_anim")
     val rotation by transition.animateFloat(
         initialValue = 0f,
@@ -212,10 +196,8 @@ fun CustomRefreshIndicator(
                 shadowElevation = 8.dp,
                 modifier = Modifier
                     .size(45.dp)
-                    // Scale effect based on pull distance
                     .graphicsLayer {
-                        val scale =
-                            if (isRefreshing) 1f else state.distanceFraction.coerceIn(0f, 1f)
+                        val scale = if (isRefreshing) 1f else state.distanceFraction.coerceIn(0f, 1f)
                         scaleX = scale
                         scaleY = scale
                         alpha = scale
