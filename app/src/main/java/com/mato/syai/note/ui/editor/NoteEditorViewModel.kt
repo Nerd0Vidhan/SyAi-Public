@@ -1,5 +1,6 @@
 package com.mato.syai.note.ui.editor
 
+import android.util.Log
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -7,6 +8,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
+import com.mato.syai.note.ai.GeminiClient
 import com.mato.syai.note.data.local.parser.ObjectPayloadAdapter
 import com.mato.syai.note.data.local.repository.NoteRepository
 import com.mato.syai.note.domain.editor.EditorState
@@ -17,6 +19,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 import javax.inject.Inject
 
 @HiltViewModel
@@ -35,6 +38,7 @@ class NoteEditorViewModel @Inject constructor(
     val noteTitle = _noteTitle.asStateFlow()
 
     private var autoSaveJob: Job? = null
+    private val gemini = GeminiClient()
 
     fun loadNote(noteId: Long) {
         viewModelScope.launch {
@@ -68,7 +72,7 @@ class NoteEditorViewModel @Inject constructor(
     private fun scheduleAutoSave() {
         autoSaveJob?.cancel()
         autoSaveJob = viewModelScope.launch {
-            delay(800)
+            delay(300)
             persistToDisk()
         }
     }
@@ -95,7 +99,7 @@ class NoteEditorViewModel @Inject constructor(
 
         mutator(current)
 
-        _uiState.update { it.copy(content = current) }
+        _uiState.update { it.copy(content = deepCopy(current)) }
         scheduleAutoSave()
     }
 
@@ -427,6 +431,134 @@ class NoteEditorViewModel @Inject constructor(
                     }
                 }
             }
+        }
+    }
+
+    fun addChecklist(pageIndex: Int, x: Float, y: Float) {
+        mutateContent { content ->
+            val page = content.pages[pageIndex]
+
+            val obj = NoteObject(
+                layer = page.items.size + 1,
+                type = ObjectType.CHECKLIST,
+                transform = Transform(x = x, y = y),
+                bounds = Bounds(300f, 200f),
+                payload = ChecklistPayload(
+                    mutableListOf(
+                        ChecklistItem(text = "Item 1")
+                    )
+                )
+            )
+
+            page.items.add(obj)
+        }
+    }
+
+    fun addChecklistItem(objectId: String) {
+        mutateContent { content ->
+            content.pages.forEach { page ->
+                val obj = page.items.find { it.id == objectId } ?: return@forEach
+                val payload = obj.payload as? ChecklistPayload ?: return@forEach
+
+                payload.items.add(
+                    ChecklistItem(text = "New Item")
+                )
+            }
+        }
+    }
+
+    fun updateChecklistItem(objectId: String, itemId: String, text: String) {
+        mutateContent { content ->
+            content.pages.forEach { page ->
+                val obj = page.items.find { it.id == objectId } ?: return@forEach
+                val payload = obj.payload as? ChecklistPayload ?: return@forEach
+
+                payload.items.find { it.id == itemId }?.text = text
+            }
+        }
+    }
+
+    fun applyAIObjects(pageIndex: Int, aiJson: JSONObject) {
+
+        mutateContent { content ->
+
+            val page = content.pages[pageIndex]
+
+            val objects = aiJson.optJSONArray("objects") ?: return@mutateContent
+
+            for (i in 0 until objects.length()) {
+
+                val obj = objects.getJSONObject(i)
+                val type = obj.optString("type")
+
+                when (type) {
+
+                    "TEXT" -> {
+                        page.items.add(
+                            NoteObject(
+                                layer = page.items.size + 1,
+                                type = ObjectType.TEXT,
+                                transform = Transform(
+                                    x = obj.optDouble("x", 100.0).toFloat(),
+                                    y = obj.optDouble("y", 200.0).toFloat()
+                                ),
+                                payload = TextPayload(
+                                    text = obj.optString("text")
+                                )
+                            )
+                        )
+                    }
+
+                    "DRAWING" -> {
+
+                        val pointsJson = obj.optJSONArray("points") ?: continue
+
+                        val points = mutableListOf<Point>()
+
+                        for (j in 0 until pointsJson.length()) {
+                            val p = pointsJson.getJSONObject(j)
+                            points.add(
+                                Point(
+                                    p.getDouble("x").toFloat(),
+                                    p.getDouble("y").toFloat()
+                                )
+                            )
+                        }
+
+                        page.items.add(
+                            NoteObject(
+                                layer = page.items.size + 1,
+                                type = ObjectType.DRAWING,
+                                payload = DrawingPayload(
+                                    strokes = mutableListOf(
+                                        Stroke(
+                                            color = 0xFF000000.toInt(),
+                                            width = 5f,
+                                            points = points
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+
+    fun generateAIContent(pageIndex: Int, prompt: String) {
+        viewModelScope.launch {
+
+            _uiState.update { it.copy(isLoading = true) }
+
+            val json = gemini.generateObjects(prompt)
+            Log.d("Aidata","Aidata: $json")
+            if (json != null) {
+                applyAIObjects(pageIndex, json)
+            }
+
+            _uiState.update { it.copy(isLoading = false) }
         }
     }
 }

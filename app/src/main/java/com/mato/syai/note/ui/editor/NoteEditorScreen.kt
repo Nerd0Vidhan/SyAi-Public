@@ -1,5 +1,6 @@
 package com.mato.syai.note.ui.editor
 
+import android.content.Intent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -29,6 +30,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke as CanvasStroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -55,13 +58,26 @@ fun NoteEditorScreen(
     viewModel: NoteEditorViewModel = hiltViewModel(),
     onBack: () -> Unit
 ) {
+    val context = LocalContext.current
     val state by viewModel.uiState.collectAsState()
     val noteTitle by viewModel.noteTitle.collectAsState()
     var isDragging by remember { mutableStateOf(false) }
     val imagePicker = rememberImagePicker { uri ->
         val pageIndex = state.currentPageIndex
+        context.contentResolver.takePersistableUriPermission(
+            uri,
+            Intent.FLAG_GRANT_READ_URI_PERMISSION
+        )
         viewModel.addImage(pageIndex, uri.toString(), 200f, 200f)
     }
+    var showAI by remember { mutableStateOf(false) }
+
+    LaunchedEffect(state.activeTool) {
+        if (state.activeTool == ActiveTool.AI_TOOL) {
+            showAI = true
+        }
+    }
+
 
     val pages = state.content.pages
     val current = state.currentPageIndex
@@ -80,7 +96,10 @@ fun NoteEditorScreen(
 
 
     LaunchedEffect(noteTitle) {
-        titleField = TextFieldValue(noteTitle)
+        titleField = titleField.copy(
+            text = noteTitle,
+            selection = TextRange(noteTitle.length)
+        )
     }
 
     DisposableEffect(noteId) {
@@ -115,6 +134,7 @@ fun NoteEditorScreen(
                 onTextColorChange = {int->
                     viewModel.updateTextColor(int)
                 },
+                onCheckListSelect = { viewModel.addChecklist(state.currentPageIndex, 200f, 200f) }
             )
         },
         containerColor = PrimaryDark
@@ -159,6 +179,24 @@ fun NoteEditorScreen(
                     Spacer(modifier = Modifier.height(120.dp))
                 }
             }
+        }
+    }
+    if (showAI) {
+        ModalBottomSheet(
+            onDismissRequest = {
+                showAI = false
+                viewModel.setTool(ActiveTool.SELECT) // reset tool
+            }
+        ) {
+            AIToolSheet(
+                onGenerate = { prompt ->
+                    viewModel.generateAIContent(
+                        state.currentPageIndex,
+                        prompt
+                    )
+                    showAI = false
+                }
+            )
         }
     }
 }
@@ -217,6 +255,7 @@ fun EditorTopBar(
             IconButton(onClick = { }) {
                 Icon(Icons.Default.MoreVert, contentDescription = "Options", tint = Color.White)
             }
+
         },
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = PrimaryDark,
@@ -253,7 +292,11 @@ fun NotePage(
                     when (state.activeTool) {
                         ActiveTool.TEXT -> {
                             viewModel.addText(pageIndex, offset.x, offset.y)
-                            viewModel.ensureNextPageIfNeeded(pageIndex, offset.y, pageHeightPx.toFloat())
+                            viewModel.ensureNextPageIfNeeded(
+                                pageIndex,
+                                offset.y,
+                                pageHeightPx.toFloat()
+                            )
                         }
 
                         ActiveTool.SELECT -> {
@@ -350,7 +393,7 @@ fun NotePage(
                 RenderObject(
                     pageIndex = pageIndex,
                     obj = obj,
-                    isSelected = state.selectedObjectId == obj.id,
+                    isSelected = state.selectedObjectIds.contains(obj.id),
                     activeTool = state.activeTool,
                     isViewOnly = state.isViewOnly,
                     viewModel = viewModel,
@@ -522,10 +565,15 @@ fun RenderObject(
             }
 
             ObjectType.CHECKLIST -> {
-                val payload = obj.payload as ChecklistPayload
+                val payload = obj.payload as? ChecklistPayload
 
                 Column {
-                    payload.items.forEach { item ->
+                    payload?.items?.forEach { item ->
+
+                        var text by remember(item.id) {
+                            mutableStateOf(item.text)
+                        }
+
                         Row(verticalAlignment = Alignment.CenterVertically) {
 
                             Checkbox(
@@ -535,8 +583,22 @@ fun RenderObject(
                                 }
                             )
 
-                            Text(item.text, color = Color.White)
+                            OutlinedTextField(
+                                value = text,
+                                onValueChange = {
+                                    text = it
+                                    viewModel.updateChecklistItem(obj.id, item.id, it)
+                                },
+                                textStyle = TextStyle(color = Color.White),
+                                modifier = Modifier.weight(1f)
+                            )
                         }
+                    }
+
+                    Button(onClick = {
+                        viewModel.addChecklistItem(obj.id)
+                    }) {
+                        Text("+ Add Item")
                     }
                 }
             }
@@ -563,7 +625,7 @@ fun RenderTextBlock(
     viewModel: NoteEditorViewModel
 ) {
     val payload = obj.payload as? TextPayload ?: return
-    var textField by remember(obj.id, payload.text) {
+    var textField by remember(obj.id) {
         mutableStateOf(TextFieldValue(payload.text))
     }
 
@@ -633,7 +695,8 @@ fun EditorBottomToolbar(
     onDrawColorChange: (Int) -> Unit,
     onDrawWidthChange: (Float) -> Unit,
     onImagePicker: () -> Unit,
-    onTextColorChange: (Int) -> Unit
+    onTextColorChange: (Int) -> Unit,
+    onCheckListSelect:()->Unit
 ){
     Column(
         modifier = Modifier
@@ -691,6 +754,15 @@ fun EditorBottomToolbar(
                 ToolbarIcon(Icons.Default.Image, state.activeTool == ActiveTool.IMAGE_PICKER) {
 //                    onToolSelect(ActiveTool.IMAGE_PICKER)
                     onImagePicker()
+                }
+                ToolbarIcon(Icons.Default.Gesture, state.activeTool == ActiveTool.LASSO) {
+                    onToolSelect(ActiveTool.LASSO)
+                }
+                ToolbarIcon(Icons.Default.Checklist, false) {
+                    onCheckListSelect()
+                }
+                ToolbarIcon(Icons.Default.AutoAwesome, state.activeTool == ActiveTool.AI_TOOL) {
+                    onToolSelect(ActiveTool.AI_TOOL)
                 }
             }
         }

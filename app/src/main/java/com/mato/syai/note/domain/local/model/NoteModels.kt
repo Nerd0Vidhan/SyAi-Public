@@ -43,7 +43,8 @@ enum class ActiveTool {
     TEXT,
     DRAW,
     IMAGE_PICKER,
-    LASSO
+    LASSO,
+    AI_TOOL
 }
 
 // ---------------------- ROOT CONTENT ----------------------

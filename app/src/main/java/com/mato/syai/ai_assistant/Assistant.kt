@@ -15,9 +15,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.mato.syai.BuildConfig
 
 object GeminiProvider {
-    private const val API_KEY = "GeminiapiKey"
+    private const val API_KEY = BuildConfig.GEMINI_API
 
     val generativeModel = GenerativeModel(
         modelName = "gemini-1.5-flash",
