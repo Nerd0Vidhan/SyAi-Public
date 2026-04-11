@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -14,6 +16,13 @@ android {
     namespace = "com.mato.syai"
     compileSdk = 36
 
+
+    val localProperties = Properties()
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        localProperties.load(localPropertiesFile.inputStream())
+    }
+
     defaultConfig {
         applicationId = "com.mato.syai"
         minSdk = 31
@@ -22,8 +31,10 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-    }
 
+        val apiKey = localProperties.getProperty("GEMINI_API") ?: ""
+        buildConfigField("String", "GEMINI_API", "\"$apiKey\"")
+    }
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -40,6 +51,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     kotlinOptions {
         jvmTarget = "17"
