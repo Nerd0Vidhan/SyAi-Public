@@ -2,6 +2,7 @@ package com.mato.syai.note.ui.home
 
 import androidx.lifecycle.*
 import com.mato.syai.note.data.local.repository.NoteRepository
+import com.mato.syai.note.domain.local.model.Note
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
@@ -56,4 +57,25 @@ class NotesHomeViewModel @Inject constructor(
     }
 
     fun selectFolder(name: String) { _selectedFolder.value = name }
+
+    // In NotesHomeViewModel.kt
+
+    fun deleteNote(note: Note) {
+        viewModelScope.launch {
+            repository.deleteNote(note)
+            refresh() // Ensure UI is in sync with filesystem
+        }
+    }
+
+    fun toggleFavorite(note: Note) {
+        viewModelScope.launch {
+            repository.updateFavorite(note.id, !note.isFavorite)
+        }
+    }
+
+    fun updateNoteMetadata(noteId: Long, newTitle: String, folder: String, textSize: Float, color: Int) {
+        viewModelScope.launch {
+            repository.updateNoteMetadata(noteId, newTitle, folder, textSize, color)
+        }
+    }
 }

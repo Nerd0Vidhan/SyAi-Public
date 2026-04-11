@@ -39,6 +39,15 @@ interface NoteDao {
     @Query("UPDATE notes_path SET lastModified = :lastModified WHERE noteId = :noteId")
     suspend fun updateLastModified(noteId: Long, lastModified: Long)
 
+    @Query("UPDATE notes_path SET isFavorite = :isFavorite WHERE noteId = :noteId")
+    suspend fun updateFavorite(noteId: Long, isFavorite: Boolean)
+
+    @Query("UPDATE note_metadata SET textSize = :textSize, colorHex = :colorHex WHERE noteId = :noteId")
+    suspend fun updateMetadata(noteId: Long, textSize: Float, colorHex: Int)
+
+    @Query("UPDATE notes_path SET filePath = :newPath, folderName = :folderName WHERE noteId = :noteId")
+    suspend fun updateFolder(noteId: Long, newPath: String, folderName: String)
+
     @Query("SELECT EXISTS(SELECT 1 FROM notes_path WHERE noteId = :noteId)")
     suspend fun exists(noteId: Long): Boolean
 
