@@ -1,6 +1,11 @@
 package com.mato.syai.note.ui.editor
 
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.util.Log
+import android.view.View
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -10,6 +15,7 @@ import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.mato.syai.note.ai.GeminiClient
 import com.mato.syai.note.data.local.parser.ObjectPayloadAdapter
+import com.mato.syai.note.data.local.parser.PdfExporter
 import com.mato.syai.note.data.local.repository.NoteRepository
 import com.mato.syai.note.domain.editor.EditorState
 import com.mato.syai.note.domain.editor.UndoRedoManager
@@ -227,29 +233,31 @@ class NoteEditorViewModel @Inject constructor(
 
     // ---------------- DRAWING ----------------
 
+    // In NoteEditorViewModel.kt
+
     fun addStroke(pageIndex: Int, stroke: Stroke) {
         mutateContent { content ->
             val page = content.pages[pageIndex]
 
-            val drawingObj = page.items
-                .lastOrNull { it.type == ObjectType.DRAWING }
-                ?.takeIf { it.payload is DrawingPayload }
+            // Calculate the bounding box for this specific stroke
+            val minX = stroke.points.minOf { it.x }
+            val maxX = stroke.points.maxOf { it.x }
+            val minY = stroke.points.minOf { it.y }
+            val maxY = stroke.points.maxOf { it.y }
 
-            if (drawingObj != null) {
-                val payload = drawingObj.payload as DrawingPayload
-                payload.strokes.add(stroke)
-            } else {
-                val newDrawing = NoteObject(
-                    layer = page.items.size + 1,
-                    type = ObjectType.DRAWING,
-                    transform = Transform(),
-                    bounds = Bounds(),
-                    payload = DrawingPayload(
-                        strokes = mutableListOf(stroke)
-                    )
+            // Create a NEW NoteObject for this specific drawing/stroke
+            val newDrawing = NoteObject(
+                layer = (page.items.maxOfOrNull { it.layer } ?: 0) + 1,
+                type = ObjectType.DRAWING,
+                // The transform X,Y is the top-left of the drawing
+                transform = Transform(x = minX, y = minY),
+                // The bounds are the width/height of the stroke
+                bounds = Bounds(width = maxX - minX, height = maxY - minY),
+                payload = DrawingPayload(
+                    strokes = mutableListOf(stroke)
                 )
-                page.items.add(newDrawing)
-            }
+            )
+            page.items.add(newDrawing)
         }
     }
 
@@ -382,10 +390,34 @@ class NoteEditorViewModel @Inject constructor(
 
         page.items.forEach { obj ->
             // Create a Rect representing the object's current bounds
-            val objRect = Rect(
-                offset = Offset(obj.transform.x, obj.transform.y),
-                size = androidx.compose.ui.geometry.Size(obj.bounds.width, obj.bounds.height)
-            )
+            val objRect = when (obj.type) {
+
+                ObjectType.DRAWING -> {
+                    val drawing = obj.payload as? DrawingPayload
+
+                    val points = drawing?.strokes
+                        ?.flatMap { it.points } ?: emptyList()
+
+                    if (points.isEmpty()) return@forEach
+
+                    val minX = points.minOf { it.x }
+                    val minY = points.minOf { it.y }
+                    val maxX = points.maxOf { it.x }
+                    val maxY = points.maxOf { it.y }
+
+                    Rect(
+                        Offset(minX, minY),
+                        Size(maxX - minX, maxY - minY)
+                    )
+                }
+
+                else -> {
+                    Rect(
+                        Offset(obj.transform.x, obj.transform.y),
+                        Size(obj.bounds.width, obj.bounds.height)
+                    )
+                }
+            }
 
             // Check if the selection rectangle overlaps the object
             if (selectionRect.overlaps(objRect)) {
@@ -556,6 +588,55 @@ class NoteEditorViewModel @Inject constructor(
             Log.d("Aidata","Aidata: $json")
             if (json != null) {
                 applyAIObjects(pageIndex, json)
+            }
+
+            _uiState.update { it.copy(isLoading = false) }
+        }
+    }
+
+    fun deleteSelectedObjects() {
+        val selectedIds = _uiState.value.selectedObjectIds.toMutableSet()
+        _uiState.value.selectedObjectId?.let { selectedIds.add(it) }
+
+        if (selectedIds.isEmpty()) return
+
+        mutateContent { content ->
+            content.pages.forEach { page ->
+                page.items.removeAll { selectedIds.contains(it.id) }
+            }
+        }
+
+        // Reset UI State
+        _uiState.update {
+            it.copy(
+                selectedObjectIds = emptySet(),
+                selectedObjectId = null
+            )
+        }
+    }
+
+    fun captureBitmap(view: View): Bitmap {
+        val bitmap = Bitmap.createBitmap(
+            view.width,
+            view.height,
+            Bitmap.Config.ARGB_8888
+        )
+        val canvas = Canvas(bitmap)
+        view.draw(canvas)
+        return bitmap
+    }
+
+    // In NoteEditorViewModel.kt
+    fun exportToPdf(context: Context) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+
+            val exporter = PdfExporter(context)
+            val file = exporter.exportFromData(_uiState.value.content, _noteTitle.value)
+
+            if (file != null) {
+                // You can trigger a System Share Intent here or show a Snackbar
+                Log.d("PDF", "Exported to: ${file.absolutePath}")
             }
 
             _uiState.update { it.copy(isLoading = false) }
