@@ -1,6 +1,7 @@
 package com.mato.syai.note.data.local.repository
 
 import android.os.Environment
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.gson.Gson
 import com.mato.syai.note.data.local.database.*
 import com.mato.syai.note.data.local.security.CryptoManager
@@ -167,5 +168,34 @@ class NoteRepository @Inject constructor(
                 PageData(pageNo = 0)
             )
         )
+    }
+
+    suspend fun updateFavorite(id: Long, bool: Boolean) {
+        dao.updateFavorite(id, bool)
+    }
+
+    suspend fun updateNoteMetadata(
+        noteId: Long,
+        newTitle: String,
+        folder: String,
+        textSize: Float,
+        color: Int
+    ) = withContext(Dispatchers.IO) {
+        val note = dao.getNoteById(noteId) ?: return@withContext
+
+        val oldFile = File(note.filePath)
+        val root = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
+        val newDir = File(root, "SyAi/$folder").apply { if (!exists()) mkdirs() }
+        val newFile = File(newDir, "$newTitle.dpn")
+
+        if (oldFile.absolutePath != newFile.absolutePath) {
+            if (oldFile.renameTo(newFile)) {
+                dao.updateNotePathAndTitle(noteId, newFile.absolutePath, newTitle, System.currentTimeMillis())
+                dao.updateFolder(noteId, newFile.absolutePath, folder)
+            }
+        } else {
+            dao.updateTitle(noteId, newTitle, System.currentTimeMillis())
+        }
+        dao.updateMetadata(noteId, textSize, color)
     }
 }

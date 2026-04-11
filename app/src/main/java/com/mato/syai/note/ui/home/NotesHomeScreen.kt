@@ -2,13 +2,17 @@ package com.mato.syai.note.ui.home
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshState
@@ -21,6 +25,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -29,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.mato.syai.R
 import com.mato.syai.note.domain.local.model.Note
+import com.mato.syai.note.ui.noteSettings.EditNoteMetadataSheet
 
 private val PrimaryDark = Color(0xFF0D0127)
 private val SecondaryCream = Color(0xFFF8E0C3)
@@ -44,6 +50,7 @@ fun NotesHomeScreen(
     val folders by viewModel.folders.collectAsState()
     val selectedFolder by viewModel.selectedFolder.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
+    var noteToEditMeta by remember { mutableStateOf<Note?>(null) }
 
     val state = rememberPullToRefreshState()
     LaunchedEffect(Unit) {
@@ -136,11 +143,26 @@ fun NotesHomeScreen(
                         items(notes) { note ->
                             NoteListItem(
                                 note = note,
-                                onClick = { onNoteClick(note.id) }
+                                onClick = { onNoteClick(note.id) },
+                                onDelete = { viewModel.deleteNote(note) },
+                                onFavorite = { viewModel.toggleFavorite(note) },
+                                onEditMeta = { noteToEditMeta = note }
                             )
                         }
                         item { Spacer(modifier = Modifier.height(100.dp)) }
                     }
+                }
+                if (noteToEditMeta != null) {
+                    EditNoteMetadataSheet(
+                        note = noteToEditMeta!!,
+                        onDismiss = { noteToEditMeta = null },
+                        onSave = { t, f, ts, c ->
+                            viewModel.updateNoteMetadata(noteToEditMeta!!.id, t, f, ts, c)
+                        },
+                        onExportPdf = {
+                            // Call your existing export logic
+                        }
+                    )
                 }
             }
         }
@@ -197,7 +219,8 @@ fun CustomRefreshIndicator(
                 modifier = Modifier
                     .size(45.dp)
                     .graphicsLayer {
-                        val scale = if (isRefreshing) 1f else state.distanceFraction.coerceIn(0f, 1f)
+                        val scale =
+                            if (isRefreshing) 1f else state.distanceFraction.coerceIn(0f, 1f)
                         scaleX = scale
                         scaleY = scale
                         alpha = scale
@@ -249,50 +272,107 @@ fun FolderCard(name: String, isSelected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-fun NoteListItem(note: Note, onClick: () -> Unit) {
-    Surface(
-        onClick = onClick,
-        color = Color.White.copy(alpha = 0.06f),
-        shape = RoundedCornerShape(24.dp),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Text(
-                text = note.title,
-                color = Color.White,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "File: ${note.filePath.substringAfterLast("/")}",
-                color = Color.LightGray.copy(alpha = 0.7f),
-                fontSize = 13.sp,
-                maxLines = 1
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "Sync Active",
-                    color = Color.Gray,
-                    fontSize = 11.sp
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Surface(
-                    color = AuraPurple.copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text(
-                        text = "#${note.folderName.lowercase()}",
-                        color = SecondaryCream,
-                        fontSize = 10.sp,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+fun NoteListItem(
+    note: Note,
+    onClick: () -> Unit,
+    onDelete: () -> Unit,
+    onFavorite: () -> Unit,
+    onEditMeta: () -> Unit
+) {
+
+    var showMenu by remember { mutableStateOf(false) }
+    Box {
+        Surface(
+            color = Color.White.copy(alpha = 0.06f),
+            shape = RoundedCornerShape(24.dp),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .pointerInput(note) {
+                    detectTapGestures(
+                        onTap = { onClick() },
+                        onLongPress = { showMenu = true }
                     )
                 }
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = note.title,
+                        color = Color.White,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1, // Added max lines
+                        overflow = TextOverflow.Ellipsis, // Added ellipsis
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (note.isFavorite) {
+                        Icon(
+                            imageVector = Icons.Default.Star,
+                            contentDescription = "Fav",
+                            tint = SecondaryCream,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+                /*Text(
+                    text = note.title,
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )*/
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "File: ${note.filePath.substringAfterLast("/")}",
+                    color = Color.LightGray.copy(alpha = 0.7f),
+                    fontSize = 13.sp,
+                    maxLines = 1
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Sync Active",
+                        color = Color.Gray,
+                        fontSize = 11.sp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Surface(
+                        color = AuraPurple.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = "#${note.folderName.lowercase()}",
+                            color = SecondaryCream,
+                            fontSize = 10.sp,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
             }
+        }
+        DropdownMenu(
+            expanded = showMenu,
+            onDismissRequest = { showMenu = false },
+            modifier = Modifier.background(AuraPurple)
+        ) {
+            DropdownMenuItem(
+                text = { Text("Edit Metadata", color = Color.White) },
+                leadingIcon = { Icon(Icons.Default.Settings, null, tint = Color.White) },
+                onClick = { showMenu = false; onEditMeta() }
+            )
+            DropdownMenuItem(
+                text = { Text(if (note.isFavorite) "Unfavorite" else "Mark Favorite", color = Color.White) },
+                leadingIcon = { Icon(Icons.Default.Star, null, tint = Color.White) },
+                onClick = { showMenu = false; onFavorite() }
+            )
+            Divider(color = Color.White.copy(0.1f))
+            DropdownMenuItem(
+                text = { Text("Delete", color = Color.Red) },
+                leadingIcon = { Icon(Icons.Default.Delete, null, tint = Color.Red) },
+                onClick = { showMenu = false; onDelete() }
+            )
         }
     }
 }
