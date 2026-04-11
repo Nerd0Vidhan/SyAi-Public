@@ -120,7 +120,8 @@ fun NoteEditorScreen(
                 onBack = onBack,
                 onUndo = { viewModel.undo() },
                 onRedo = { viewModel.redo() },
-                onToggleViewOnly = { viewModel.toggleViewOnly() }
+                onToggleViewOnly = { viewModel.toggleViewOnly() },
+                onExportPdf = {viewModel.exportToPdf(context)}
             )
         },
         bottomBar = {
@@ -134,7 +135,8 @@ fun NoteEditorScreen(
                 onTextColorChange = {int->
                     viewModel.updateTextColor(int)
                 },
-                onCheckListSelect = { viewModel.addChecklist(state.currentPageIndex, 200f, 200f) }
+                onCheckListSelect = { viewModel.addChecklist(state.currentPageIndex, 200f, 200f) },
+                onDelete = { viewModel.deleteSelectedObjects() }
             )
         },
         containerColor = PrimaryDark
@@ -210,7 +212,8 @@ fun EditorTopBar(
     onBack: () -> Unit,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
-    onToggleViewOnly: () -> Unit
+    onToggleViewOnly: () -> Unit,
+    onExportPdf: () -> Unit
 ) {
     TopAppBar(
         title = {
@@ -239,6 +242,7 @@ fun EditorTopBar(
             }
         },
         actions = {
+            var menuExpanded by remember { mutableStateOf(false) }
             IconButton(onClick = onUndo) {
                 Icon(Icons.Default.Undo, contentDescription = "Undo", tint = Color.White)
             }
@@ -252,8 +256,21 @@ fun EditorTopBar(
                     tint = Color.White
                 )
             }
-            IconButton(onClick = { }) {
+            IconButton(onClick = { menuExpanded = true }) {
                 Icon(Icons.Default.MoreVert, contentDescription = "Options", tint = Color.White)
+            }
+            DropdownMenu(
+                expanded = menuExpanded,
+                onDismissRequest = { menuExpanded = false },
+                modifier = Modifier.background(PrimaryDark).border(1.dp, Color.White.copy(0.1f))
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Export PDF", color = Color.White) },
+                    onClick = {
+                        menuExpanded = false
+                        onExportPdf()
+                    }
+                )
             }
 
         },
@@ -323,7 +340,7 @@ fun NotePage(
                 }
             }
     ) {
-        // Layer 1 - Drawings
+        /*// Layer 1 - Drawings
         Canvas(modifier = Modifier.fillMaxSize()) {
             page.items
                 .filter { it.type == ObjectType.DRAWING }
@@ -344,7 +361,7 @@ fun NotePage(
                         }
                     }
                 }
-        }
+        }*/
 
         // Layer 2 - Live drawing
         if (state.activeTool == ActiveTool.DRAW && !state.isViewOnly) {
@@ -543,6 +560,25 @@ fun RenderObject(
     ) {
         when (obj.type) {
 
+            ObjectType.DRAWING -> {
+                val payload = obj.payload as? DrawingPayload ?: return@Box
+                Canvas(modifier = Modifier.size(obj.bounds.width.dp, obj.bounds.height.dp)) {
+                    payload.strokes.forEach { stroke ->
+                        if (stroke.points.size >= 2) {
+                            for (i in 0 until stroke.points.lastIndex) {
+                                // Subtract obj.transform to draw relative to the Box container
+                                drawLine(
+                                    color = Color(stroke.color),
+                                    start = Offset(stroke.points[i].x - obj.transform.x, stroke.points[i].y - obj.transform.y),
+                                    end = Offset(stroke.points[i+1].x - obj.transform.x, stroke.points[i+1].y - obj.transform.y),
+                                    strokeWidth = stroke.width,
+                                    cap = StrokeCap.Round
+                                )
+                            }
+                        }
+                    }
+                }
+            }
             ObjectType.TEXT -> RenderTextBlock(
                 pageIndex,
                 obj,
@@ -696,7 +732,8 @@ fun EditorBottomToolbar(
     onDrawWidthChange: (Float) -> Unit,
     onImagePicker: () -> Unit,
     onTextColorChange: (Int) -> Unit,
-    onCheckListSelect:()->Unit
+    onCheckListSelect:()->Unit,
+    onDelete:()-> Unit
 ){
     Column(
         modifier = Modifier
@@ -763,6 +800,12 @@ fun EditorBottomToolbar(
                 }
                 ToolbarIcon(Icons.Default.AutoAwesome, state.activeTool == ActiveTool.AI_TOOL) {
                     onToolSelect(ActiveTool.AI_TOOL)
+                }
+                if (state.selectedObjectIds.isNotEmpty()) {
+
+                    ToolbarIcon(Icons.Default.Delete, false) {
+                        onDelete()
+                    }
                 }
             }
         }
