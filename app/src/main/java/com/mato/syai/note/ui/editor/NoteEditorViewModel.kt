@@ -239,25 +239,25 @@ class NoteEditorViewModel @Inject constructor(
         mutateContent { content ->
             val page = content.pages[pageIndex]
 
-            // Calculate the bounding box for this specific stroke
-            val minX = stroke.points.minOf { it.x }
-            val maxX = stroke.points.maxOf { it.x }
-            val minY = stroke.points.minOf { it.y }
-            val maxY = stroke.points.maxOf { it.y }
+            val drawingObj = page.items
+                .lastOrNull { it.type == ObjectType.DRAWING }
+                ?.takeIf { it.payload is DrawingPayload }
 
-            // Create a NEW NoteObject for this specific drawing/stroke
-            val newDrawing = NoteObject(
-                layer = (page.items.maxOfOrNull { it.layer } ?: 0) + 1,
-                type = ObjectType.DRAWING,
-                // The transform X,Y is the top-left of the drawing
-                transform = Transform(x = minX, y = minY),
-                // The bounds are the width/height of the stroke
-                bounds = Bounds(width = maxX - minX, height = maxY - minY),
-                payload = DrawingPayload(
-                    strokes = mutableListOf(stroke)
+            if (drawingObj != null) {
+                val payload = drawingObj.payload as DrawingPayload
+                payload.strokes.add(stroke)
+            } else {
+                val newDrawing = NoteObject(
+                    layer = page.items.size + 1,
+                    type = ObjectType.DRAWING,
+                    transform = Transform(),
+                    bounds = Bounds(),
+                    payload = DrawingPayload(
+                        strokes = mutableListOf(stroke)
+                    )
                 )
-            )
-            page.items.add(newDrawing)
+                page.items.add(newDrawing)
+            }
         }
     }
 
