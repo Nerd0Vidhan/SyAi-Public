@@ -32,6 +32,13 @@ class ObjectPayloadAdapter : JsonSerializer<ObjectPayload>, JsonDeserializer<Obj
             is TextSpan -> context.serialize(src).asJsonObject.apply {
                 addProperty("payloadType", "TEXTSPAN")
             }
+
+            is LinearTextPayload -> context.serialize(src).asJsonObject.apply {
+                addProperty("payloadType", "LINEARTEXTPAYLOAD")
+            }
+            is ListPayload -> context.serialize(src).asJsonObject.apply {
+                addProperty("payloadType", "LISTPAYLOAD")
+            }
         }
 
         return jsonObject
@@ -54,14 +61,17 @@ class ObjectPayloadAdapter : JsonSerializer<ObjectPayload>, JsonDeserializer<Obj
             "TEXT" -> context.deserialize(obj, TextPayload::class.java)
             "IMAGE" -> context.deserialize(obj, ImagePayload::class.java)
             "DRAWING" -> context.deserialize(obj, DrawingPayload::class.java)
+            "LISTPAYLOAD" -> context.deserialize(obj, ListPayload::class.java)
+            "LINEARTEXTPAYLOAD" -> context.deserialize(obj, LinearTextPayload::class.java)
 
             // 🔥 BACKWARD COMPAT (important)
             else -> {
                 when {
+                    obj.has("listStyle") || obj.has("items") -> context.deserialize(obj, ListPayload::class.java)
                     obj.has("text") -> context.deserialize(obj, TextPayload::class.java)
                     obj.has("uri") -> context.deserialize(obj, ImagePayload::class.java)
                     obj.has("strokes") -> context.deserialize(obj, DrawingPayload::class.java)
-                    else -> TextPayload("")
+                    else -> context.deserialize(obj, TextPayload::class.java)
                 }
             }
         }

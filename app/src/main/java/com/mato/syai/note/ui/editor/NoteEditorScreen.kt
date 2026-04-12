@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -132,11 +133,14 @@ fun NoteEditorScreen(
                 onDrawColorChange = viewModel::updateDrawColor,
                 onDrawWidthChange = viewModel::updateDrawWidth,
                 onImagePicker = { imagePicker() },
-                onTextColorChange = {int->
+                onTextColorChange = { int ->
                     viewModel.updateTextColor(int)
                 },
                 onCheckListSelect = { viewModel.addChecklist(state.currentPageIndex, 200f, 200f) },
-                onDelete = { viewModel.deleteSelectedObjects() }
+                onDelete = { viewModel.deleteSelectedObjects() },
+                onListSelection = {marker->
+                    viewModel.handleListInsertion(marker)
+                }
             )
         },
         containerColor = PrimaryDark
@@ -320,6 +324,10 @@ fun NotePage(
                             viewModel.selectObject(null)
                         }
 
+                        ActiveTool.LINEAR_TEXT -> {
+                            viewModel.handlePageTapForLinearText(pageIndex, offset.x, offset.y)
+                        }
+
                         else -> Unit
                     }
                 }
@@ -337,6 +345,17 @@ fun NotePage(
                             selectionRect = null
                         }
                     )
+                }
+                if (state.activeTool == ActiveTool.LINEAR_TEXT) {
+
+                    detectTapGestures { offset ->
+
+                        // rough estimation (can improve later)
+                        val lineHeight = 50f
+                        val position = (offset.y / lineHeight).toInt()
+
+                        viewModel.setCursorPosition(position)
+                    }
                 }
             }
     ) {
@@ -410,7 +429,7 @@ fun NotePage(
                 RenderObject(
                     pageIndex = pageIndex,
                     obj = obj,
-                    isSelected = state.selectedObjectIds.contains(obj.id),
+                    isSelected = state.selectedObjectId == obj.id || state.selectedObjectIds.contains(obj.id),
                     activeTool = state.activeTool,
                     isViewOnly = state.isViewOnly,
                     viewModel = viewModel,
@@ -559,6 +578,50 @@ fun RenderObject(
             .padding(4.dp)
     ) {
         when (obj.type) {
+
+            ObjectType.LINEAR_TEXT -> {
+                val payload = obj.payload as? TextPayload ?: return@Box
+
+                // Use the object ID as the key so each block has its own state
+                var textFieldValue by remember(obj.id) {
+                    mutableStateOf(
+                        TextFieldValue(
+                            text = payload.text,
+                            selection = TextRange(payload.text.length)
+                        )
+                    )
+                }
+
+                BasicTextField(
+                    value = textFieldValue,
+                    onValueChange = {
+                        textFieldValue = it
+                        // Pass the object ID so we know WHICH block to update
+                        viewModel.updateLinearTextValue(pageIndex, obj.id, it.text)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    textStyle = TextStyle(
+                        fontSize = payload.style.fontSize.sp,
+                        color = Color(payload.style.color),
+                        fontWeight = if (payload.style.isBold) FontWeight.Bold else FontWeight.Normal
+                    ),
+                    cursorBrush = SolidColor(SecondaryCream)
+                )
+            }
+
+            ObjectType.LIST -> {
+                val payload = obj.payload as? ListPayload ?: return@Box
+
+                RenderListRecursive(
+                    payload = payload,
+                    onUpdate = { updatedPayload ->
+                        // Use the ViewModel function we just created
+                        viewModel.updateObjectPayload(pageIndex, obj.id, updatedPayload)
+                    }
+                )
+            }
 
             ObjectType.DRAWING -> {
                 val payload = obj.payload as? DrawingPayload ?: return@Box
@@ -733,7 +796,8 @@ fun EditorBottomToolbar(
     onImagePicker: () -> Unit,
     onTextColorChange: (Int) -> Unit,
     onCheckListSelect:()->Unit,
-    onDelete:()-> Unit
+    onDelete:()-> Unit,
+    onListSelection :(ListMarker)-> Unit
 ){
     Column(
         modifier = Modifier
@@ -756,6 +820,14 @@ fun EditorBottomToolbar(
                     width = state.drawWidth,
                     onColorChange = onDrawColorChange,
                     onWidthChange = onDrawWidthChange
+                )
+            }
+
+            ActiveTool.LIST -> {
+                ListToolSubToolbar(
+                    onMarkerSelect = { marker ->
+                        onListSelection(marker)
+                    }
                 )
             }
 
@@ -795,7 +867,7 @@ fun EditorBottomToolbar(
                 ToolbarIcon(Icons.Default.Gesture, state.activeTool == ActiveTool.LASSO) {
                     onToolSelect(ActiveTool.LASSO)
                 }
-                ToolbarIcon(Icons.Default.Checklist, false) {
+                ToolbarIcon(Icons.Default.Checklist, state.activeTool == ActiveTool.LIST) {
                     onCheckListSelect()
                 }
                 ToolbarIcon(Icons.Default.AutoAwesome, state.activeTool == ActiveTool.AI_TOOL) {
@@ -806,6 +878,9 @@ fun EditorBottomToolbar(
                     ToolbarIcon(Icons.Default.Delete, false) {
                         onDelete()
                     }
+                }
+                ToolbarIcon(Icons.Default.EditNote, state.activeTool == ActiveTool.LINEAR_TEXT) {
+                    onToolSelect(ActiveTool.LINEAR_TEXT)
                 }
             }
         }

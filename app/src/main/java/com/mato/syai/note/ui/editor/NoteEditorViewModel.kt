@@ -26,6 +26,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+import java.util.UUID
 import javax.inject.Inject
 
 @HiltViewModel
@@ -42,6 +43,11 @@ class NoteEditorViewModel @Inject constructor(
     private val _noteTitle = MutableStateFlow("")
     private var activeTextObjectId: String? = null
     val noteTitle = _noteTitle.asStateFlow()
+
+    private val _cursorPosition = MutableStateFlow(0)
+    val cursorPosition = _cursorPosition.asStateFlow()
+
+    private var activeLinearTextId = MutableStateFlow<String?>(null)
 
     private var autoSaveJob: Job? = null
     private val gemini = GeminiClient()
@@ -209,7 +215,7 @@ class NoteEditorViewModel @Inject constructor(
 
         val selectedId = _uiState.value.selectedObjectId
 
-        // ✅ if object selected → apply to object
+        // if object selected → apply to object
         if (selectedId != null) {
             mutateContent { content ->
                 content.pages.forEach { page ->
@@ -223,7 +229,7 @@ class NoteEditorViewModel @Inject constructor(
             }
         }
 
-        // ✅ also update default style
+        // also update default style
         _uiState.update {
             it.copy(
                 textStyle = it.textStyle.copy(color = color)
@@ -231,6 +237,52 @@ class NoteEditorViewModel @Inject constructor(
         }
     }
 
+    fun handlePageTapForLinearText(pageIndex: Int, x: Float, y: Float) {
+        mutateContent { content ->
+            val page = content.pages[pageIndex]
+
+            // Find the top-most linear text object if it exists near the tap
+            // or just create a new one to ensure it stays "on top" of current drawings
+            val newObj = NoteObject(
+                id = UUID.randomUUID().toString(),
+                layer = (page.items.maxOfOrNull { it.layer } ?: 0) + 1,
+                type = ObjectType.LINEAR_TEXT,
+                transform = Transform(x = 0f, y = y), // Starts at tap Y, full width
+                bounds = Bounds(width = 1000f, height = 100f), // Will expand
+                payload = TextPayload(
+                    text = "",
+                    style = _uiState.value.textStyle // Use current toolbar style
+                )
+            )
+
+            page.items.add(newObj)
+            activeLinearTextId.value = newObj.id
+            _uiState.update { it.copy(selectedObjectId = newObj.id) }
+        }
+    }
+
+    fun updateLinearTextValue(pageIndex: Int, objectId: String, text: String) {
+        mutateContent { content ->
+            val obj = content.pages[pageIndex].items.find { it.id == objectId } ?: return@mutateContent
+            val payload = obj.payload as? TextPayload ?: return@mutateContent
+            obj.payload = payload.copy(text = text)
+
+            // Optional: Auto-expand bounds height based on text length
+            obj.bounds.height = (text.split("\n").size * 60f).coerceAtLeast(100f)
+        }
+    }
+
+    fun setCursorPosition(pos: Int) {
+        _cursorPosition.value = pos
+    }
+
+    fun updateObjectPayload(pageIndex: Int, objectId: String, payload: ObjectPayload) {
+        mutateContent { content ->
+            val page = content.pages.getOrNull(pageIndex)
+            val target = page?.items?.find { it.id == objectId }
+            target?.payload = payload
+        }
+    }
     // ---------------- DRAWING ----------------
 
     // In NoteEditorViewModel.kt
@@ -573,6 +625,39 @@ class NoteEditorViewModel @Inject constructor(
                             )
                         )
                     }
+                    "LINEAR_TEXT" -> NoteObject(
+                        layer = (page.items.maxOfOrNull { it.layer } ?: 0) + 1,
+                        type = ObjectType.LINEAR_TEXT,
+                        transform = Transform(x = obj.optDouble("x", 50.0).toFloat(), y = obj.optDouble("y", 50.0).toFloat()),
+                        bounds = Bounds(width = 600f, height = 100f),
+                        payload = TextPayload(text = obj.optString("text"))
+                    )
+
+                    "LIST" -> {
+                        val styleStr = obj.optString("listStyle", "BULLET")
+                        val style = try { ListMarker.valueOf(styleStr) } catch (e: Exception) { ListMarker.BULLET }
+
+                        val itemsJson = obj.optJSONArray("items")
+                        val listItems = mutableListOf<ListItem>()
+
+                        if (itemsJson != null) {
+                            for (j in 0 until itemsJson.length()) {
+                                val item = itemsJson.getJSONObject(j)
+                                listItems.add(ListItem(
+                                    text = item.optString("text"),
+                                    isChecked = item.optBoolean("isChecked", false)
+                                ))
+                            }
+                        }
+
+                        NoteObject(
+                            layer = (page.items.maxOfOrNull { it.layer } ?: 0) + 1,
+                            type = ObjectType.LIST,
+                            transform = Transform(x = obj.optDouble("x", 80.0).toFloat(), y = obj.optDouble("y", 100.0).toFloat()),
+                            bounds = Bounds(width = 500f, height = 200f),
+                            payload = ListPayload(style = style, items = listItems)
+                        )
+                    }
                 }
             }
         }
@@ -642,4 +727,94 @@ class NoteEditorViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = false) }
         }
     }
+
+    // In NoteEditorViewModel.kt
+
+    fun handleListInsertion(marker: ListMarker) {
+        val activeId = _uiState.value.selectedObjectId
+        val content = _uiState.value.content
+        val pageIndex = _uiState.value.currentPageIndex
+
+        // Check if the currently selected object is a LINEAR_TEXT block
+        val activeObj = content.pages[pageIndex].items.find { it.id == activeId }
+
+        if (activeObj?.type == ObjectType.LINEAR_TEXT) {
+            // OPTION A: Insert internally into the typing flow
+            insertMarkerIntoLinearText(activeObj, marker)
+        } else {
+            // OPTION B: Create a new movable LIST object
+            addNewMovableList(pageIndex, marker)
+        }
+    }
+
+    private fun insertMarkerIntoLinearText(obj: NoteObject, marker: ListMarker) {
+        val payload = obj.payload as? TextPayload ?: return
+        val prefix = when(marker) {
+            ListMarker.BULLET -> "\n• "
+            ListMarker.NUMBER -> "\n1. "
+            ListMarker.ROMAN -> "\nI. "
+            ListMarker.CHECKBOX -> "\n[ ] "
+        }
+        updateTextObject(_uiState.value.currentPageIndex, obj.id, payload.text + prefix)
+    }
+
+    private fun addNewMovableList(pageIndex: Int, marker: ListMarker) {
+        mutateContent { content ->
+            val page = content.pages[pageIndex]
+
+            // Calculate standard position (center-ish)
+            val defaultX = 100f
+            val defaultY = 300f
+
+            val newListObject = NoteObject(
+                id = UUID.randomUUID().toString(),
+                layer = (page.items.maxOfOrNull { it.layer } ?: 0) + 1,
+                type = ObjectType.LIST,
+                transform = Transform(x = defaultX, y = defaultY),
+                bounds = Bounds(width = 400f, height = 200f),
+                payload = ListPayload(
+                    style = marker,
+                    items = mutableListOf(
+                        ListItem(text = "New Item")
+                    )
+                )
+            )
+
+            page.items.add(newListObject)
+
+            // Auto-select the new list so the sub-toolbar stays active
+            _uiState.update { it.copy(selectedObjectId = newListObject.id) }
+        }
+    }
+
+
+
+
+    /**
+     * Scenario A: The user is already in "Type Mode".
+     * We append the list prefix (e.g., "• ") to the existing text block.
+     */
+    private fun insertMarkerIntoLinearText(pageIndex: Int, obj: NoteObject, marker: ListMarker) {
+        val payload = obj.payload as? TextPayload ?: return
+
+        // Define the prefix based on the marker type
+        val prefix = when (marker) {
+            ListMarker.BULLET -> "\n• "
+            ListMarker.NUMBER -> "\n1. "
+            ListMarker.ROMAN -> "\nI. "
+            ListMarker.CHECKBOX -> "\n" // Checkboxes in linear text use custom logic or a prefix like "[ ] "
+        }
+
+        // Update the text value in the block
+        val newText = payload.text + prefix
+        updateLinearTextValue(pageIndex, obj.id, newText)
+
+        // Update cursor position to the end
+        _cursorPosition.value = newText.length
+    }
+
+    /**
+     * Scenario B: Nothing is selected or a non-text object is selected.
+     * we create a fresh, movable List Object.
+     */
 }
