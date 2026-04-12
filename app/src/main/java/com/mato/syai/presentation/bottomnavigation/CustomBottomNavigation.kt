@@ -53,7 +53,7 @@ fun CustomBottomNavigation(navController: NavController) {
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = { navController.navigate("dashboard") }) {
+                IconButton(onClick = { navController.navigate("notes_list") }) {
                     Icon(
                         imageVector = Icons.Default.Home,
                         contentDescription = "Dashboard",

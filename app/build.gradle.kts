@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -14,6 +16,13 @@ android {
     namespace = "com.mato.syai"
     compileSdk = 36
 
+
+    val localProperties = Properties()
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        localProperties.load(localPropertiesFile.inputStream())
+    }
+
     defaultConfig {
         applicationId = "com.mato.syai"
         minSdk = 31
@@ -22,8 +31,10 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-    }
 
+        val apiKey = localProperties.getProperty("GEMINI_API") ?: ""
+        buildConfigField("String", "GEMINI_API", "\"$apiKey\"")
+    }
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -40,6 +51,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     kotlinOptions {
         jvmTarget = "17"
@@ -93,6 +105,7 @@ dependencies {
     implementation(libs.firebase.config.ktx)
     implementation(libs.androidx.compose.animation)
     implementation(libs.androidx.compose.foundation.layout)
+    implementation(libs.androidx.compose.runtime)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 
@@ -162,5 +175,6 @@ dependencies {
     implementation("com.google.protobuf:protobuf-javalite:3.25.1")
     implementation("com.google.protobuf:protobuf-kotlin-lite:3.25.1")
     implementation("androidx.datastore:datastore:1.1.1")
+    implementation("io.coil-kt:coil-compose:2.6.0")
 
 }

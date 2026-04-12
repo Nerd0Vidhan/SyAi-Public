@@ -10,19 +10,24 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import com.google.firebase.auth.FirebaseAuth
 import com.mato.syai.CutePrompts.PromptUI
 import com.mato.syai.splashScreen.ui.SplashScreen
 import com.mato.syai.ai_assistant.MainAssistantScreen
 import com.mato.syai.mood_tracker.MoodTrackerApp
-import com.mato.syai.notes.ui.screen.DebugNotesScreen
+import com.mato.syai.note.ui.editor.NoteEditorScreen
+import com.mato.syai.note.ui.home.NotesHomeScreen
 import com.mato.syai.presentation.main.HomeScreen
 import com.mato.syai.profile.LoginScreen
-import com.mato.syai.profile.presentation.SettingsScreen
+import com.mato.syai.presentation.settings.SettingsScreen
+import com.mato.syai.presentation.settings.SettingsScreenPremium
 import com.mato.syai.remainder.ReminderAlarmScreen
 import com.mato.syai.task_management.TaskManagementScreen
 import com.mato.syai.tools.ToolsScreen
@@ -55,7 +60,18 @@ fun AppNavGraph(navController: NavHostController) {
         composable("login") { LoginScreen(navController) }
 
         composable("settings") {
-            SettingsScreen(navController)
+            if(/*userIsPremium()*/true){
+                SettingsScreenPremium(navController)
+            } else {
+                SettingsScreen(navController)
+            }
+        }
+        composable("note_editor/{noteId}") { backStackEntry ->
+            val noteId = backStackEntry.arguments?.getString("noteId")?.toLongOrNull() ?: 0L
+            NoteEditorScreen(
+                noteId = noteId,
+                onBack = { navController.popBackStack() }
+            )
         }
     }
 
@@ -63,19 +79,17 @@ fun AppNavGraph(navController: NavHostController) {
 
 
 @Composable
-fun BottomNavigationGraph(navController: NavHostController, paddingValues: PaddingValues){
+fun BottomNavigationGraph(
+    navController: NavHostController,
+    parentNavController: NavController,
+    paddingValues: PaddingValues
+){
     NavHost(
         navController = navController,
-        startDestination = "dashboard",
+        startDestination = "notes_list",
         modifier = Modifier.padding(paddingValues)
     ) {
-        composable ("dashboard") {
-            DebugNotesScreen()
-        }
         composable ("finance") { FinanceTrackerScreen() }
-        composable("notes") {
-           ComingSoonScreen("notes")
-        }
         composable("digital_wellbeing") {
             ComingSoonScreen("Digital Wellbeing")
         }
@@ -105,6 +119,14 @@ fun BottomNavigationGraph(navController: NavHostController, paddingValues: Paddi
         }
         composable("speech_to_voice") {
             ComingSoonScreen("Speech to Voice")
+        }
+
+        composable("notes_list") {
+            NotesHomeScreen(
+                onNoteClick = { noteId ->
+                    parentNavController.navigate("note_editor/$noteId")
+                }
+            )
         }
 
     }
