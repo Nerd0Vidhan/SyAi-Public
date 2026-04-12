@@ -35,7 +35,8 @@ enum class ObjectType {
     IMAGE,
     DRAWING,
     LIST,
-    CHECKLIST
+    CHECKLIST,
+    LINEAR_TEXT
 }
 
 enum class ActiveTool {
@@ -44,7 +45,17 @@ enum class ActiveTool {
     DRAW,
     IMAGE_PICKER,
     LASSO,
-    AI_TOOL
+    AI_TOOL,
+    LINEAR_TEXT,
+    LIST
+}
+
+// --- List Markers ---
+enum class ListMarker {
+    BULLET,
+    NUMBER,
+    ROMAN,
+    CHECKBOX
 }
 
 // ---------------------- ROOT CONTENT ----------------------
@@ -61,7 +72,10 @@ data class PageData(
     val pageNo: Int,
     val backgroundColor: Int = 0xFFFFFFFF.toInt(),
     val pageSize: PageSize = PageSize.A4,
-    val items: MutableList<NoteObject> = mutableListOf()
+    val items: MutableList<NoteObject> = mutableListOf(),
+
+    var linearText: String = "",
+    var linearTextStyle: TextStyleData = TextStyleData()
 )
 
 // ---------------------- OBJECT ----------------------
@@ -152,11 +166,22 @@ data class ChecklistPayload(
     val items: MutableList<ChecklistItem>
 ) : ObjectPayload
 
+// -------------------List ------------
+
+data class LinearTextPayload(
+    var text: String = "",
+    var style: TextStyleData = TextStyleData()
+    // In a production app, this would hold a list of "Spans" or "Blocks"
+) : ObjectPayload
+
 data class ListPayload(
-    val items: MutableList<ListItem>
-)
+    val style: ListMarker = ListMarker.BULLET,
+    val items: MutableList<ListItem> = mutableListOf()
+) : ObjectPayload
 
 data class ListItem(
-    val text: String,
-    val checked: Boolean
+    val id: String = UUID.randomUUID().toString(),
+    var text: String = "",
+    var isChecked: Boolean = false, // Used if parent style is CHECKBOX
+    val nestedList: ListPayload? = null // 🔥 Recursive Nesting
 )

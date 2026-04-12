@@ -20,7 +20,7 @@ class GeminiClient {
     )
 
     /**
-     * 🔥 MAIN FUNCTION
+     * MAIN FUNCTION
      * Returns structured JSON for editor (TEXT + DRAWING)
      */
     suspend fun generateObjects(prompt: String): JSONObject? {
@@ -51,7 +51,7 @@ class GeminiClient {
     }
 
     /**
-     * 🔥 FALLBACK TEXT
+     * FALLBACK TEXT
      */
     suspend fun generateRawText(prompt: String): String {
         return withContext(Dispatchers.IO) {
