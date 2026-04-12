@@ -340,7 +340,7 @@ fun NotePage(
                 }
             }
     ) {
-        /*// Layer 1 - Drawings
+        // Layer 1 - Drawings
         Canvas(modifier = Modifier.fillMaxSize()) {
             page.items
                 .filter { it.type == ObjectType.DRAWING }
@@ -361,7 +361,7 @@ fun NotePage(
                         }
                     }
                 }
-        }*/
+        }
 
         // Layer 2 - Live drawing
         if (state.activeTool == ActiveTool.DRAW && !state.isViewOnly) {
