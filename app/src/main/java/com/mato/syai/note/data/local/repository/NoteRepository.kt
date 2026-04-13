@@ -1,6 +1,7 @@
 package com.mato.syai.note.data.local.repository
 
 import android.os.Environment
+import android.util.Log
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.gson.Gson
 import com.mato.syai.note.data.local.database.*
@@ -140,6 +141,7 @@ class NoteRepository @Inject constructor(
             val iv = bytes.take(12).toByteArray()
             val encrypted = bytes.drop(12).toByteArray()
             val decrypted = cryptoManager.decrypt(iv, encrypted).decodeToString()
+            Log.d("Note Content","Note Data : ${gson.fromJson(decrypted, NoteContent::class.java) ?: createDefaultContent()}")
             gson.fromJson(decrypted, NoteContent::class.java) ?: createDefaultContent()
         } catch (e: Exception) {
             e.printStackTrace()
