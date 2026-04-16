@@ -14,6 +14,7 @@ import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
 import com.mato.syai.note.domain.local.model.ChecklistPayload
+import com.mato.syai.note.domain.local.model.BrushStyle
 import com.mato.syai.note.domain.local.model.DrawingPayload
 import com.mato.syai.note.domain.local.model.ImagePayload
 import com.mato.syai.note.domain.local.model.NoteContent
@@ -63,12 +64,9 @@ class PdfExporter(private val context: Context) {
     fun exportFromData(content: NoteContent, fileName: String): File? {
         val pdf = PdfDocument()
 
-        // A4 Dimensions at 72 DPI (595 x 842 units)
-        // Adjust these if your app uses different coordinate scaling
-        val pageWidth = 595
-        val pageHeight = 842
-
         content.pages.forEachIndexed { index, pageData ->
+            val pageWidth = pageData.widthPoints.toInt()
+            val pageHeight = pageData.heightPoints.toInt()
             val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, index + 1).create()
             val page = pdf.startPage(pageInfo)
             val canvas = page.canvas
@@ -77,9 +75,10 @@ class PdfExporter(private val context: Context) {
             canvas.drawColor(pageData.backgroundColor)
 
             // Render each object based on its type
-            pageData.items.sortedBy { it.layer }.forEach { obj ->
+            pageData.renderableItems.forEach { obj ->
                 when (obj.type) {
                     ObjectType.TEXT -> drawText(canvas, obj)
+                    ObjectType.LINEAR_TEXT -> drawText(canvas, obj)
                     ObjectType.DRAWING -> drawDrawing(canvas, obj)
                     ObjectType.IMAGE -> drawImage(canvas, obj)
                     ObjectType.CHECKLIST -> drawChecklist(canvas, obj)
@@ -147,7 +146,18 @@ class PdfExporter(private val context: Context) {
 
         payload.strokes.forEach { stroke ->
             paint.color = stroke.color
-            paint.strokeWidth = stroke.width
+            paint.alpha = when (stroke.brushStyle) {
+                BrushStyle.PENCIL -> 170
+                BrushStyle.MARKER -> 230
+                BrushStyle.HIGHLIGHTER -> 90
+                BrushStyle.PEN -> 255
+            }
+            paint.strokeWidth = when (stroke.brushStyle) {
+                BrushStyle.PENCIL -> stroke.width * 0.8f
+                BrushStyle.MARKER -> stroke.width * 1.2f
+                BrushStyle.HIGHLIGHTER -> stroke.width * 1.5f
+                BrushStyle.PEN -> stroke.width
+            }
             val path = Path()
             if (stroke.points.isNotEmpty()) {
                 path.moveTo(stroke.points[0].x, stroke.points[0].y)
