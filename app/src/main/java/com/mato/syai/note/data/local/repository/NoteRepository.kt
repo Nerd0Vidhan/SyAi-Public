@@ -1,5 +1,7 @@
 package com.mato.syai.note.data.local.repository
 
+import android.content.Context
+import android.graphics.Bitmap
 import android.os.Environment
 import android.util.Log
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -7,6 +9,7 @@ import com.google.gson.Gson
 import com.mato.syai.note.data.local.database.*
 import com.mato.syai.note.data.local.security.CryptoManager
 import com.mato.syai.note.domain.local.model.*
+import com.mato.syai.note.utils.ThumbnailUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -17,7 +20,8 @@ import javax.inject.Inject
 class NoteRepository @Inject constructor(
     private val dao: NoteDao,
     private val cryptoManager: CryptoManager,
-    private val gson: Gson
+    private val gson: Gson,
+    private val utils: ThumbnailUtils
 ) {
 
     val allNotes: Flow<List<Note>> = dao.getNotesWithMetadata().map { list ->
@@ -29,6 +33,7 @@ class NoteRepository @Inject constructor(
                 folderName = item.note.folderName,
                 lastModified = item.note.lastModified,
                 isFavorite = item.note.isFavorite,
+                imagePreview = item.note.imagePreview,
                 metadata = NoteMetadata(
                     textSize = item.metadata?.textSize ?: 16f,
                     colorHex = item.metadata?.colorHex ?: 0xFF000000.toInt(),
@@ -52,7 +57,7 @@ class NoteRepository @Inject constructor(
             folderName = folder,
             lastModified = System.currentTimeMillis(),
             preview = "",
-            isFavorite = false
+            isFavorite = false,
         )
 
         val noteId = dao.insertNote(entity)
@@ -201,5 +206,16 @@ class NoteRepository @Inject constructor(
             dao.updateTitle(noteId, newTitle, System.currentTimeMillis())
         }
         dao.updateMetadata(noteId, textSize, color)
+    }
+
+    suspend fun generateNotePreview(context: Context, content: NoteContent,noteId: Long){
+        val previewId = utils.generateAndSave(context = context, content = content)
+
+        Log.d("GeneratePreview","Preview id:$previewId")
+        dao.savePreviewId(noteId,previewId)
+    }
+
+    suspend fun loadNotePreview(context: Context,noteId: Long): Bitmap?{
+        return utils.loadThumbnail(context,dao.fetchPreviewId(noteId)?:"")
     }
 }

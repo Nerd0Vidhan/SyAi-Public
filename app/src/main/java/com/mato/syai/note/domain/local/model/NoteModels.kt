@@ -2,7 +2,7 @@ package com.mato.syai.note.domain.local.model
 
 import java.util.UUID
 
-const val NOTE_SCHEMA_VERSION = 2
+const val NOTE_SCHEMA_VERSION = 3
 
 data class Note(
     val id: Long,
@@ -10,6 +10,7 @@ data class Note(
     val title: String,
     val folderName: String,
     val lastModified: Long,
+    val imagePreview: String? = null,
     val isFavorite: Boolean,
     val metadata: NoteMetadata
 )
@@ -18,6 +19,13 @@ data class NoteMetadata(
     val textSize: Float = 16f,
     val colorHex: Int = 0xFF000000.toInt()
 )
+
+enum class BackGroundType(
+    val type:String
+){
+    SOLID("SOLID"),
+    IMAGE("IMAGE");
+}
 
 enum class PageSize(
     val widthPoints: Float,
