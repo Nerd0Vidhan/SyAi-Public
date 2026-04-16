@@ -2,6 +2,7 @@ package com.mato.syai.note.ui.editor
 
 import android.content.Intent
 import android.os.Build
+import android.util.Log
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -53,6 +54,7 @@ import com.mato.syai.note.domain.local.model.*
 import com.mato.syai.utils.GlassEffect
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 private val PrimaryDark = Color(0xFF0D0127)
@@ -71,6 +73,7 @@ fun NoteEditorScreen(
     val noteTitle by viewModel.noteTitle.collectAsState()
     var isDragging by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
     val imagePicker = rememberImagePicker { uri ->
         val pageIndex = state.currentPageIndex
         context.contentResolver.takePersistableUriPermission(
@@ -126,6 +129,8 @@ fun NoteEditorScreen(
     DisposableEffect(noteId) {
         onDispose {
             viewModel.persistToDisk()
+            Log.d("GeneratePreview","Preview Sucess:")
+            viewModel.savePreview(noteId = noteId, context = context, content = state.content)
         }
     }
 

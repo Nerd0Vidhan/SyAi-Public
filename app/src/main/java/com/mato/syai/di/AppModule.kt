@@ -13,4 +13,7 @@ object AppModule {
     @Provides
     @Singleton
     fun provideCryptoManager() = CryptoManager()
+
+    @Provides
+    fun provideThumbnailUtils() = com.mato.syai.note.utils.ThumbnailUtils
 }

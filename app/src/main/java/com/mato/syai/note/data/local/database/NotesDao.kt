@@ -57,4 +57,10 @@ interface NoteDao {
         insertMetadata(metadata.copy(noteId = id))
         return id
     }
+
+    @Query("UPDATE notes_path SET imagePreview = :previewId WHERE noteId = :noteId")
+    suspend fun savePreviewId(noteId: Long, previewId: String?)
+
+    @Query("SELECT imagePreview from notes_path WHERE noteId = :noteId")
+    suspend fun fetchPreviewId(noteId: Long): String?
 }

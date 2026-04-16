@@ -989,10 +989,12 @@ class NoteEditorViewModel @Inject constructor(
         _cursorPosition.value = newText.length
     }
 
-    /**
-     * Scenario B: Nothing is selected or a non-text object is selected.
-     * we create a fresh, movable List Object.
-     */
+    fun savePreview(context: Context, content: NoteContent,noteId: Long){
+        viewModelScope.launch {
+            Log.d("GeneratePreview","Preview Started viewModel:")
+            repository.generateNotePreview(context = context, content = content, noteId = noteId)
+        }
+    }
 }
 
 private fun ObjectPayload.asLinearTextValue(): String? = when (this) {

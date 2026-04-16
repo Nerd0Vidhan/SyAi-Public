@@ -198,4 +198,34 @@ class PdfExporter(private val context: Context) {
             currentY += 24f
         }
     }
+
+    public fun renderFirstPageToBitmap(content: NoteContent): Bitmap? {
+        val page = content.pages.firstOrNull() ?: return null
+
+        val bitmap = Bitmap.createBitmap(
+            page.widthPoints.toInt(),
+            page.heightPoints.toInt(),
+            Bitmap.Config.ARGB_8888
+        )
+
+        val canvas = Canvas(bitmap)
+
+        // draw background
+        canvas.drawColor(page.backgroundColor)
+
+        // reuse SAME rendering logic as PdfExporter
+        page.renderableItems.forEach { obj ->
+            when (obj.type) {
+                ObjectType.TEXT,
+                ObjectType.LINEAR_TEXT -> drawText(canvas, obj)
+
+                ObjectType.DRAWING -> drawDrawing(canvas, obj)
+                ObjectType.IMAGE -> drawImage(canvas, obj)
+                ObjectType.CHECKLIST -> drawChecklist(canvas, obj)
+                else -> {}
+            }
+        }
+
+        return bitmap
+    }
 }

@@ -1,6 +1,9 @@
 package com.mato.syai.note.data.local.database
 
 import androidx.room.*
+import com.mato.syai.note.domain.local.model.BackGroundType
+import com.mato.syai.note.domain.local.model.PageDimensions
+import com.mato.syai.note.domain.local.model.PagePadding
 import com.mato.syai.note.domain.local.model.PageSize
 import kotlinx.coroutines.flow.Flow
 
@@ -12,6 +15,7 @@ data class NoteEntity(
     val folderName: String,
     val lastModified: Long,
     val preview: String = "",
+    val imagePreview:String?=null,
     val isFavorite: Boolean = false
 )
 
@@ -31,7 +35,7 @@ data class MetadataEntity(
     val colorHex : Int = 0xFFF8E0C3.toInt(),
     val defaultTextSize: Float = 12f,
     val cursorColor: Int = 0xFF0D0127.toInt(),
-    val backgroundType: String = "SOLID",
+    val backgroundType: String = BackGroundType.SOLID.type,
     val totalPages: Int = 1,
     val pageSize: PageSize = PageSize.A4
 )

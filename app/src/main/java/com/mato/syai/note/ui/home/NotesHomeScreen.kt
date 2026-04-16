@@ -21,20 +21,26 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import coil.compose.AsyncImage
 import com.mato.syai.R
 import com.mato.syai.note.domain.local.model.Note
 import com.mato.syai.note.ui.noteSettings.EditNoteMetadataSheet
+import com.mato.syai.note.utils.formatTime
+import java.io.File
 
 private val PrimaryDark = Color(0xFF0D0127)
 private val SecondaryCream = Color(0xFFF8E0C3)
@@ -277,10 +283,13 @@ fun NoteListItem(
     onClick: () -> Unit,
     onDelete: () -> Unit,
     onFavorite: () -> Unit,
-    onEditMeta: () -> Unit
+    onEditMeta: () -> Unit,
+    viewModel: NotesHomeViewModel = hiltViewModel()
 ) {
 
+    val context = LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
+
     Box {
         Surface(
             color = Color.White.copy(alpha = 0.06f),
@@ -324,8 +333,28 @@ fun NoteListItem(
                     overflow = TextOverflow.Ellipsis
                 )*/
                 Spacer(modifier = Modifier.height(8.dp))
+                val fileName = note.imagePreview // from DB
+                if (fileName!=null){
+                    val file = File(context.filesDir, fileName)
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(100.dp)
+                    ) {
+                        AsyncImage(
+                            model = file,
+                            contentDescription = "Preview",
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(RoundedCornerShape(20.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = "File: ${note.filePath.substringAfterLast("/")}",
+                    text = " ${note.lastModified.formatTime()}",
                     color = Color.LightGray.copy(alpha = 0.7f),
                     fontSize = 13.sp,
                     maxLines = 1
