@@ -11,15 +11,18 @@ class UndoRedoManager(
     private val redoStack = ArrayDeque<String>()
 
     fun push(content: NoteContent) {
-        undoStack.addLast(gson.toJson(content))
+        val snapshot = gson.toJson(content)
+        if (undoStack.lastOrNull() == snapshot) return
+        undoStack.addLast(snapshot)
         if (undoStack.size > 50) undoStack.removeFirst()
         redoStack.clear()
     }
 
     fun undo(current: NoteContent): NoteContent? {
-        if (undoStack.isEmpty()) return null
+        if (undoStack.size <= 1) return null
         redoStack.addLast(gson.toJson(current))
-        return gson.fromJson(undoStack.removeLast(), NoteContent::class.java)
+        undoStack.removeLast()
+        return gson.fromJson(undoStack.last(), NoteContent::class.java)
     }
 
     fun redo(current: NoteContent): NoteContent? {

@@ -1,15 +1,18 @@
 package com.mato.syai.note.ui.editor
 
 import android.content.Intent
+import android.os.Build
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -26,6 +29,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.drawscope.Stroke as CanvasStroke
 import androidx.compose.ui.input.pointer.pointerInput
@@ -46,6 +50,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.mato.syai.note.domain.editor.EditorState
 import com.mato.syai.note.domain.local.model.*
+import com.mato.syai.utils.GlassEffect
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import kotlin.math.roundToInt
 
 private val PrimaryDark = Color(0xFF0D0127)
@@ -63,6 +70,7 @@ fun NoteEditorScreen(
     val state by viewModel.uiState.collectAsState()
     val noteTitle by viewModel.noteTitle.collectAsState()
     var isDragging by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
     val imagePicker = rememberImagePicker { uri ->
         val pageIndex = state.currentPageIndex
         context.contentResolver.takePersistableUriPermission(
@@ -72,6 +80,7 @@ fun NoteEditorScreen(
         viewModel.addImage(pageIndex, uri.toString(), 200f, 200f)
     }
     var showAI by remember { mutableStateOf(false) }
+    var showPageSettings by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.activeTool) {
         if (state.activeTool == ActiveTool.AI_TOOL) {
@@ -85,8 +94,8 @@ fun NoteEditorScreen(
 
     var selectionRect by remember { mutableStateOf<Rect?>(null) }
 
-    val visiblePages = pages.filterIndexed { index, _ ->
-        index in (current - 3)..(current + 3)
+    val visiblePages = pages.mapIndexedNotNull { index, page ->
+        if (index in (current - 3)..(current + 3)) index to page else null
     }
 
     var titleField by remember { mutableStateOf(TextFieldValue("")) }
@@ -101,6 +110,17 @@ fun NoteEditorScreen(
             text = noteTitle,
             selection = TextRange(noteTitle.length)
         )
+    }
+
+    LaunchedEffect(state.pendingViewportPageIndex, state.content.pages.size) {
+        val targetPage = state.pendingViewportPageIndex ?: return@LaunchedEffect
+        if (targetPage !in state.content.pages.indices) return@LaunchedEffect
+        listState.animateScrollToItem(targetPage)
+        val viewportHeight = listState.layoutInfo.viewportEndOffset - listState.layoutInfo.viewportStartOffset
+        if (viewportHeight > 0) {
+            listState.animateScrollBy(-(viewportHeight * 0.3f))
+        }
+        viewModel.consumeViewportRequest()
     }
 
     DisposableEffect(noteId) {
@@ -122,7 +142,8 @@ fun NoteEditorScreen(
                 onUndo = { viewModel.undo() },
                 onRedo = { viewModel.redo() },
                 onToggleViewOnly = { viewModel.toggleViewOnly() },
-                onExportPdf = {viewModel.exportToPdf(context)}
+                onExportPdf = {viewModel.exportToPdf(context)},
+                onPageSettings = { showPageSettings = true }
             )
         },
         bottomBar = {
@@ -132,6 +153,7 @@ fun NoteEditorScreen(
                 onTextStyleChange = viewModel::updateTextStyle,
                 onDrawColorChange = viewModel::updateDrawColor,
                 onDrawWidthChange = viewModel::updateDrawWidth,
+                onBrushStyleChange = viewModel::updateBrushStyle,
                 onImagePicker = { imagePicker() },
                 onTextColorChange = { int ->
                     viewModel.updateTextColor(int)
@@ -161,10 +183,13 @@ fun NoteEditorScreen(
                     .fillMaxSize()
                     .padding(padding)
                     .background(PrimaryDark),
+                state = listState,
                 horizontalAlignment = Alignment.CenterHorizontally,
                 contentPadding = PaddingValues(vertical = 24.dp)
             ) {
-                itemsIndexed(visiblePages/*state.content.pages*/) { pageIndex, page ->
+                itemsIndexed(visiblePages) { _, entry ->
+                    val pageIndex = entry.first
+                    val page = entry.second
                     NotePage(
                         pageIndex = pageIndex,
                         page = page,
@@ -182,6 +207,11 @@ fun NoteEditorScreen(
                 }
 
                 item {
+                    TextButton(onClick = { viewModel.addPage() }) {
+                        Icon(Icons.Default.NoteAdd, contentDescription = null, tint = SecondaryCream)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Add page", color = SecondaryCream)
+                    }
                     Spacer(modifier = Modifier.height(120.dp))
                 }
             }
@@ -217,7 +247,8 @@ fun EditorTopBar(
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onToggleViewOnly: () -> Unit,
-    onExportPdf: () -> Unit
+    onExportPdf: () -> Unit,
+    onPageSettings: () -> Unit
 ) {
     TopAppBar(
         title = {
@@ -269,6 +300,13 @@ fun EditorTopBar(
                 modifier = Modifier.background(PrimaryDark).border(1.dp, Color.White.copy(0.1f))
             ) {
                 DropdownMenuItem(
+                    text = { Text("Page Settings", color = Color.White) },
+                    onClick = {
+                        menuExpanded = false
+                        onPageSettings()
+                    }
+                )
+                DropdownMenuItem(
                     text = { Text("Export PDF", color = Color.White) },
                     onClick = {
                         menuExpanded = false
@@ -286,6 +324,68 @@ fun EditorTopBar(
 }
 
 @Composable
+fun PageSettingsDialog(
+    page: PageData?,
+    onDismiss: () -> Unit,
+    onApply: (Float, Int, PagePadding, PageBorderStyle) -> Unit
+) {
+    if (page == null) return
+
+    var textSize by remember(page.pageId) { mutableStateOf(page.linearTextStyle.fontSize) }
+    var padding by remember(page.pageId) { mutableStateOf(page.pagePadding.startPoints) }
+    var borderVisible by remember(page.pageId) { mutableStateOf(page.borderStyle.isVisible) }
+    var backgroundColor by remember(page.pageId) { mutableStateOf(page.backgroundColor) }
+    val backgroundChoices = listOf(
+        Color.White.toArgb(),
+        Color(0xFFFFFBF2).toArgb(),
+        Color(0xFFF6F8FC).toArgb(),
+        Color(0xFFFDF2F8).toArgb(),
+        Color(0xFFECFEFF).toArgb()
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onApply(
+                        textSize,
+                        backgroundColor,
+                        PagePadding(padding, padding, padding, padding),
+                        page.borderStyle.copy(isVisible = borderVisible)
+                    )
+                }
+            ) { Text("Apply") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+        title = { Text("Page Settings") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Default text size: ${textSize.toInt()} pt")
+                Slider(value = textSize, onValueChange = { textSize = it }, valueRange = 10f..36f)
+                Text("Default page padding: ${padding.toInt()} pt")
+                Slider(value = padding, onValueChange = { padding = it }, valueRange = 12f..72f)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    backgroundChoices.forEach { choice ->
+                        ColorCircle(
+                            color = Color(choice),
+                            selected = choice == backgroundColor,
+                            onClick = { backgroundColor = choice }
+                        )
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = borderVisible, onCheckedChange = { borderVisible = it })
+                    Text("Show page border")
+                }
+            }
+        }
+    )
+}
+
+@Composable
 fun NotePage(
     pageIndex: Int,
     page: PageData,
@@ -295,13 +395,19 @@ fun NotePage(
     var pageHeightPx by remember { mutableStateOf(1) }
     var pageWidthPx by remember { mutableStateOf(1) }
     var selectionRect by remember { mutableStateOf<Rect?>(null) }
+    val pageScaleX = pageWidthPx / page.widthPoints.coerceAtLeast(1f)
+    val pageScaleY = pageHeightPx / page.heightPoints.coerceAtLeast(1f)
 
     Box(
         modifier = Modifier
             .fillMaxWidth(0.92f)
-            .aspectRatio(1 / page.pageSize.ratio)
+            .aspectRatio(1 / page.ratio)
             .background(Color(page.backgroundColor), RoundedCornerShape(6.dp))
-            .border(1.dp, Color.LightGray.copy(alpha = 0.2f), RoundedCornerShape(6.dp))
+            .border(
+                width = if (page.borderStyle.isVisible) PageUnitConverter.pointsToDp(page.borderStyle.widthPoints, PageSize.A4).dp else 0.dp,
+                color = if (page.borderStyle.isVisible) Color(page.borderStyle.color) else Color.Transparent,
+                shape = RoundedCornerShape(6.dp)
+            )
             .onSizeChanged {
                 pageWidthPx = it.width
                 pageHeightPx = it.height
@@ -309,10 +415,11 @@ fun NotePage(
             .pointerInput(state.activeTool, state.isViewOnly) {
                 detectTapGestures { offset ->
                     if (state.isViewOnly) return@detectTapGestures
+                    viewModel.selectPage(pageIndex)
 
                     when (state.activeTool) {
                         ActiveTool.TEXT -> {
-                            viewModel.addText(pageIndex, offset.x, offset.y)
+                            viewModel.addText(pageIndex, offset.x / pageScaleX, offset.y / pageScaleY)
                             viewModel.ensureNextPageIfNeeded(
                                 pageIndex,
                                 offset.y,
@@ -321,11 +428,12 @@ fun NotePage(
                         }
 
                         ActiveTool.SELECT -> {
-                            viewModel.selectObject(null)
+                            viewModel.clearEditorFocus()
                         }
 
                         ActiveTool.LINEAR_TEXT -> {
-                            viewModel.handlePageTapForLinearText(pageIndex, offset.x, offset.y)
+                            viewModel.handlePageTapForLinearText(pageIndex, offset.x / pageScaleX, offset.y / pageScaleY)
+                            viewModel.selectLinearPage(page.pageId)
                         }
 
                         else -> Unit
@@ -338,30 +446,31 @@ fun NotePage(
                         },
                         onDrag = { change, drag ->
                             val end = change.position
-                            selectionRect = Rect(selectionRect!!.topLeft, end)
+                            val start = selectionRect?.topLeft ?: end
+                            selectionRect = normalizedRect(start, end)
                         },
                         onDragEnd = {
-                            viewModel.selectObjectsInRect(pageIndex, selectionRect)
+                            val rect = selectionRect
+                            viewModel.selectObjectsInRect(
+                                pageIndex,
+                                rect?.let {
+                                    Rect(
+                                        left = it.left / pageScaleX,
+                                        top = it.top / pageScaleY,
+                                        right = it.right / pageScaleX,
+                                        bottom = it.bottom / pageScaleY
+                                    )
+                                }
+                            )
                             selectionRect = null
                         }
                     )
-                }
-                if (state.activeTool == ActiveTool.LINEAR_TEXT) {
-
-                    detectTapGestures { offset ->
-
-                        // rough estimation (can improve later)
-                        val lineHeight = 50f
-                        val position = (offset.y / lineHeight).toInt()
-
-                        viewModel.setCursorPosition(position)
-                    }
                 }
             }
     ) {
         // Layer 1 - Drawings
         Canvas(modifier = Modifier.fillMaxSize()) {
-            page.items
+            page.renderableItems
                 .filter { it.type == ObjectType.DRAWING }
                 .sortedBy { it.layer }
                 .forEach { obj ->
@@ -370,10 +479,20 @@ fun NotePage(
                         if (stroke.points.size >= 2) {
                             for (i in 0 until stroke.points.lastIndex) {
                                 drawLine(
-                                    color = Color(stroke.color),
-                                    start = Offset(stroke.points[i].x, stroke.points[i].y),
-                                    end = Offset(stroke.points[i + 1].x, stroke.points[i + 1].y),
-                                    strokeWidth = stroke.width,
+                                    color = when (stroke.brushStyle) {
+                                        BrushStyle.PENCIL -> Color(stroke.color).copy(alpha = 0.65f)
+                                        BrushStyle.MARKER -> Color(stroke.color).copy(alpha = 0.9f)
+                                        BrushStyle.HIGHLIGHTER -> Color(stroke.color).copy(alpha = 0.35f)
+                                        BrushStyle.PEN -> Color(stroke.color)
+                                    },
+                                    start = Offset(stroke.points[i].x * pageScaleX, stroke.points[i].y * pageScaleY),
+                                    end = Offset(stroke.points[i + 1].x * pageScaleX, stroke.points[i + 1].y * pageScaleY),
+                                    strokeWidth = when (stroke.brushStyle) {
+                                        BrushStyle.PENCIL -> stroke.width * pageScaleX * 0.8f
+                                        BrushStyle.MARKER -> stroke.width * pageScaleX * 1.2f
+                                        BrushStyle.HIGHLIGHTER -> stroke.width * pageScaleX * 1.5f
+                                        BrushStyle.PEN -> stroke.width * pageScaleX
+                                    },
                                     cap = StrokeCap.Round
                                 )
                             }
@@ -382,47 +501,75 @@ fun NotePage(
                 }
         }
 
+        page.primaryLinearEntry?.let { entry ->
+            Box(
+                modifier = Modifier
+                    .offset {
+                        IntOffset(
+                            (entry.transform.x * pageScaleX).roundToInt(),
+                            (entry.transform.y * pageScaleY).roundToInt()
+                        )
+                    }
+                    .padding(2.dp)
+            ) {
+                ManualLinearTextEditor(
+                    payload = TextPayload(
+                        text = entry.value,
+                        style = entry.style
+                    ),
+                    widthPoints = entry.bounds.width,
+                    uiScale = pageScaleX,
+                    isSelected = state.selectedLinearPageId == page.pageId && state.activeTool == ActiveTool.LINEAR_TEXT && !state.isViewOnly,
+                    onTextChange = { newText ->
+                        viewModel.updatePageLinearText(pageIndex, newText)
+                    },
+                    onSelectionChange = { cursor ->
+                        viewModel.selectPage(pageIndex)
+                        viewModel.selectLinearPage(page.pageId)
+                        viewModel.setCursorPosition(cursor)
+                    }
+                )
+            }
+        }
+
         // Layer 2 - Live drawing
         if (state.activeTool == ActiveTool.DRAW && !state.isViewOnly) {
             DrawingCanvas(
                 pageIndex = pageIndex,
                 drawColor = state.drawColor,
                 drawWidth = state.drawWidth,
+                pageScaleX = pageScaleX,
+                pageScaleY = pageScaleY,
                 onStrokeFinished = { stroke ->
                     viewModel.addStroke(pageIndex, stroke)
                 },
                 modifier = Modifier.fillMaxSize()
             )
         }
-        if (state.activeTool == ActiveTool.LASSO) {
-
-            LassoCanvas(
-                onComplete = { path ->
-
-                    viewModel.selectObjectsInRegion(pageIndex, path)
-                }
-            )
-        }
 
         selectionRect?.let { rect ->
             Canvas(modifier = Modifier.fillMaxSize()) {
-                // Draw the semi-transparent fill
                 drawRect(
-                    color = AuraPurple.copy(alpha = 0.15f),
+                    color = AuraPurple.copy(alpha = 0.10f),
                     topLeft = rect.topLeft,
                     size = rect.size
                 )
-                // Draw the stroke/border
                 drawRect(
-                    color = AuraPurple,
+                    color = SecondaryCream,
                     topLeft = rect.topLeft,
                     size = rect.size,
-                    style = CanvasStroke(width = 1.dp.toPx())
+                    style = CanvasStroke(
+                        width = 1.5.dp.toPx(),
+                        pathEffect = PathEffect.dashPathEffect(
+                            intervals = floatArrayOf(14f, 10f),
+                            phase = 0f
+                        )
+                    )
                 )
             }
         }
         // Layer 3 - Objects
-        page.items
+        page.renderableItems
             .filter { it.type != ObjectType.DRAWING }
             .sortedBy { it.layer }
             .forEach { obj ->
@@ -434,7 +581,9 @@ fun NotePage(
                     isViewOnly = state.isViewOnly,
                     viewModel = viewModel,
                     pageWidth = pageWidthPx.toFloat(),
-                    pageHeight = pageHeightPx.toFloat()
+                    pageHeight = pageHeightPx.toFloat(),
+                    pageScaleX = pageScaleX,
+                    pageScaleY = pageScaleY
                 )
             }
     }
@@ -445,7 +594,9 @@ fun DrawingCanvas(
     pageIndex: Int,
     drawColor: Int,
     drawWidth: Float,
-    onStrokeFinished: (Stroke) -> Unit,
+    pageScaleX: Float,
+    pageScaleY: Float,
+    onStrokeFinished: (com.mato.syai.note.domain.local.model.Stroke) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var currentPoints by remember(pageIndex) { mutableStateOf<List<Point>>(emptyList()) }
@@ -454,18 +605,18 @@ fun DrawingCanvas(
         modifier = modifier.pointerInput(drawColor, drawWidth) {
             detectDragGestures(
                 onDragStart = { offset ->
-                    currentPoints = listOf(Point(offset.x, offset.y))
+                    currentPoints = listOf(Point(x = offset.x / pageScaleX, y = offset.y / pageScaleY))
                 },
                 onDrag = { change, _ ->
                     change.consume()
-                    currentPoints = currentPoints + Point(change.position.x, change.position.y)
+                    currentPoints = currentPoints + Point(x = change.position.x / pageScaleX, y = change.position.y / pageScaleY)
                 },
                 onDragEnd = {
                     if (currentPoints.size > 1) {
                         onStrokeFinished(
                             Stroke(
                                 color = drawColor,
-                                width = drawWidth,
+                                width = drawWidth / pageScaleX,
                                 points = currentPoints
                             )
                         )
@@ -479,8 +630,8 @@ fun DrawingCanvas(
             for (i in 0 until currentPoints.lastIndex) {
                 drawLine(
                     color = Color(drawColor),
-                    start = Offset(currentPoints[i].x, currentPoints[i].y),
-                    end = Offset(currentPoints[i + 1].x, currentPoints[i + 1].y),
+                    start = Offset(currentPoints[i].x * pageScaleX, currentPoints[i].y * pageScaleY),
+                    end = Offset(currentPoints[i + 1].x * pageScaleX, currentPoints[i + 1].y * pageScaleY),
                     strokeWidth = drawWidth,
                     cap = StrokeCap.Round
                 )
@@ -498,7 +649,9 @@ fun RenderObject(
     isViewOnly: Boolean,
     viewModel: NoteEditorViewModel,
     pageWidth: Float,
-    pageHeight: Float
+    pageHeight: Float,
+    pageScaleX: Float,
+    pageScaleY: Float
 ) {
     var isDragging by remember { mutableStateOf(false) }
 
@@ -509,8 +662,8 @@ fun RenderObject(
         modifier = Modifier
             .offset {
                 IntOffset(
-                    obj.transform.x.roundToInt(),
-                    obj.transform.y.roundToInt()
+                    (obj.transform.x * pageScaleX).roundToInt(),
+                    (obj.transform.y * pageScaleY).roundToInt()
                 )
             }
 
@@ -524,7 +677,7 @@ fun RenderObject(
 
                             // ✅ select + bring front ONLY ONCE
 //                            viewModel.selectObject(obj.id)
-                            viewModel.toggleSelection(obj.id)
+                            viewModel.selectObject(obj.id)
                             viewModel.bringToFront(pageIndex, obj.id)
                         },
 
@@ -540,10 +693,10 @@ fun RenderObject(
                         viewModel.updateObjectPosition(
                             pageIndex = pageIndex,
                             objectId = obj.id,
-                            deltaX = dragAmount.x,
-                            deltaY = dragAmount.y,
-                            pageWidth = pageWidth.toFloat(),
-                            pageHeight = pageHeight.toFloat()
+                            deltaX = dragAmount.x / pageScaleX,
+                            deltaY = dragAmount.y / pageScaleY,
+                            pageWidth = pageWidth.toFloat() / pageScaleX,
+                            pageHeight = pageHeight.toFloat() / pageScaleY
                         )
                     }
                 }
@@ -553,8 +706,7 @@ fun RenderObject(
             .pointerInput(Unit) {
                 detectTapGestures(
                     onTap = {
-//                        viewModel.selectObject(obj.id)
-                        viewModel.toggleSelection(obj.id)
+                        viewModel.selectObject(obj.id)
                     },
                     onLongPress = {
                         viewModel.toggleSelection(obj.id)
@@ -568,48 +720,27 @@ fun RenderObject(
                 scaleY = if (isDragging) 1.05f else 1f
                 alpha = if (isDragging) 0.6f else 1f
             }
-
-            .then(
-                if (isSelected)
-                    Modifier.border(2.dp, AuraPurple, RoundedCornerShape(8.dp))
-                else Modifier
-            )
+            .drawBehind {
+                if (isSelected) {
+                    drawRoundRect(
+                        color = SecondaryCream,
+                        style = Stroke(
+                            width = 1.5.dp.toPx(),
+                            pathEffect = PathEffect.dashPathEffect(
+                                intervals = floatArrayOf(12f, 8f),
+                                phase = 0f
+                            )
+                        ),
+                        cornerRadius = CornerRadius(12.dp.toPx(), 12.dp.toPx())
+                    )
+                }
+            }
 
             .padding(4.dp)
     ) {
         when (obj.type) {
 
-            ObjectType.LINEAR_TEXT -> {
-                val payload = obj.payload as? TextPayload ?: return@Box
-
-                // Use the object ID as the key so each block has its own state
-                var textFieldValue by remember(obj.id) {
-                    mutableStateOf(
-                        TextFieldValue(
-                            text = payload.text,
-                            selection = TextRange(payload.text.length)
-                        )
-                    )
-                }
-
-                BasicTextField(
-                    value = textFieldValue,
-                    onValueChange = {
-                        textFieldValue = it
-                        // Pass the object ID so we know WHICH block to update
-                        viewModel.updateLinearTextValue(pageIndex, obj.id, it.text)
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    textStyle = TextStyle(
-                        fontSize = payload.style.fontSize.sp,
-                        color = Color(payload.style.color),
-                        fontWeight = if (payload.style.isBold) FontWeight.Bold else FontWeight.Normal
-                    ),
-                    cursorBrush = SolidColor(SecondaryCream)
-                )
-            }
+            ObjectType.LINEAR_TEXT -> Unit
 
             ObjectType.LIST -> {
                 val payload = obj.payload as? ListPayload ?: return@Box
@@ -625,16 +756,36 @@ fun RenderObject(
 
             ObjectType.DRAWING -> {
                 val payload = obj.payload as? DrawingPayload ?: return@Box
-                Canvas(modifier = Modifier.size(obj.bounds.width.dp, obj.bounds.height.dp)) {
+                Canvas(
+                    modifier = Modifier.size(
+                        (obj.bounds.width * pageScaleX).dp,
+                        (obj.bounds.height * pageScaleY).dp
+                    )
+                ) {
                     payload.strokes.forEach { stroke ->
                         if (stroke.points.size >= 2) {
                             for (i in 0 until stroke.points.lastIndex) {
-                                // Subtract obj.transform to draw relative to the Box container
                                 drawLine(
-                                    color = Color(stroke.color),
-                                    start = Offset(stroke.points[i].x - obj.transform.x, stroke.points[i].y - obj.transform.y),
-                                    end = Offset(stroke.points[i+1].x - obj.transform.x, stroke.points[i+1].y - obj.transform.y),
-                                    strokeWidth = stroke.width,
+                                    color = when (stroke.brushStyle) {
+                                        BrushStyle.PENCIL -> Color(stroke.color).copy(alpha = 0.65f)
+                                        BrushStyle.MARKER -> Color(stroke.color).copy(alpha = 0.9f)
+                                        BrushStyle.HIGHLIGHTER -> Color(stroke.color).copy(alpha = 0.35f)
+                                        BrushStyle.PEN -> Color(stroke.color)
+                                    },
+                                    start = Offset(
+                                        (stroke.points[i].x - obj.transform.x) * pageScaleX,
+                                        (stroke.points[i].y - obj.transform.y) * pageScaleY
+                                    ),
+                                    end = Offset(
+                                        (stroke.points[i + 1].x - obj.transform.x) * pageScaleX,
+                                        (stroke.points[i + 1].y - obj.transform.y) * pageScaleY
+                                    ),
+                                    strokeWidth = when (stroke.brushStyle) {
+                                        BrushStyle.PENCIL -> stroke.width * pageScaleX * 0.8f
+                                        BrushStyle.MARKER -> stroke.width * pageScaleX * 1.2f
+                                        BrushStyle.HIGHLIGHTER -> stroke.width * pageScaleX * 1.5f
+                                        BrushStyle.PEN -> stroke.width * pageScaleX
+                                    },
                                     cap = StrokeCap.Round
                                 )
                             }
@@ -647,7 +798,8 @@ fun RenderObject(
                 obj,
                 isSelected,
                 isViewOnly,
-                viewModel
+                viewModel,
+                pageScaleX
             )
 
             ObjectType.IMAGE -> {
@@ -657,7 +809,10 @@ fun RenderObject(
                     model = payload?.uri,
                     contentDescription = null,
                     modifier = Modifier
-                        .size(obj.bounds.width.dp, obj.bounds.height.dp)
+                        .size(
+                            PageUnitConverter.pointsToDp(obj.bounds.width * pageScaleX, PageSize.A4).dp,
+                            PageUnitConverter.pointsToDp(obj.bounds.height * pageScaleY, PageSize.A4).dp
+                        )
                         .clip(RoundedCornerShape(12.dp)),
                     contentScale = ContentScale.Crop
                 )
@@ -706,7 +861,6 @@ fun RenderObject(
         }
         if (isSelected && activeTool == ActiveTool.SELECT) {
             ResizeHandles(
-                obj = obj,
                 onResize = { dx, dy ->
                     viewModel.resizeObject(pageIndex, obj.id, dx, dy, pageWidth, pageHeight)
                 }
@@ -721,69 +875,23 @@ fun RenderTextBlock(
     obj: NoteObject,
     isSelected: Boolean,
     isViewOnly: Boolean,
-    viewModel: NoteEditorViewModel
+    viewModel: NoteEditorViewModel,
+    pageScale: Float
 ) {
     val payload = obj.payload as? TextPayload ?: return
-    var textField by remember(obj.id) {
-        mutableStateOf(TextFieldValue(payload.text))
-    }
-
-    val style = payload.style
-
-    val textAlign = when (style.alignment) {
-        "CENTER" -> TextAlign.Center
-        "RIGHT" -> TextAlign.Right
-        "JUSTIFY" -> TextAlign.Justify
-        else -> TextAlign.Left
-    }
-
-    if (isSelected && !isViewOnly) {
-        OutlinedTextField(
-            value = textField,
-            onValueChange = {
-                if (it.text.contains("\n")) {
-                    val parts = it.text.split("\n")
-
-                    viewModel.updateTextObject(pageIndex, obj.id, parts[0])
-
-                    viewModel.addText(
-                        pageIndex,
-                        obj.transform.x,
-                        obj.transform.y + 80f
-                    )
-
-                } else {
-                    textField = it
-                    viewModel.updateTextObject(pageIndex, obj.id, it.text)
-                }
-            },
-            textStyle = TextStyle(
-                color = Color(style.color),
-                fontSize = style.fontSize.sp,
-                fontWeight = if (style.isBold) FontWeight.Bold else FontWeight.Normal,
-                fontStyle = if (style.isItalic) FontStyle.Italic else FontStyle.Normal,
-                textAlign = textAlign
-            ),
-            modifier = Modifier.width(obj.bounds.width.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = AuraPurple,
-                unfocusedBorderColor = Color.Transparent,
-                cursorColor = AuraPurple,
-                focusedContainerColor = Color.Transparent,
-                unfocusedContainerColor = Color.Transparent
-            )
-        )
-    } else {
-        Text(
-            text = payload.text.ifBlank { "Text" },
-            color = Color(style.color),
-            fontSize = style.fontSize.sp,
-            fontWeight = if (style.isBold) FontWeight.Bold else FontWeight.Normal,
-            fontStyle = if (style.isItalic) FontStyle.Italic else FontStyle.Normal,
-            textAlign = textAlign,
-            modifier = Modifier.width(obj.bounds.width.dp)
-        )
-    }
+    ManualLinearTextEditor(
+        payload = payload,
+        widthPoints = obj.bounds.width,
+        uiScale = pageScale,
+        isSelected = isSelected && !isViewOnly,
+        onTextChange = { newText ->
+            viewModel.updateTextObject(pageIndex, obj.id, newText)
+        },
+        onSelectionChange = { cursor ->
+            viewModel.selectObject(obj.id)
+            viewModel.setCursorPosition(cursor)
+        }
+    )
 }
 
 @Composable
@@ -793,6 +901,7 @@ fun EditorBottomToolbar(
     onTextStyleChange: (TextStyleData) -> Unit,
     onDrawColorChange: (Int) -> Unit,
     onDrawWidthChange: (Float) -> Unit,
+    onBrushStyleChange: (BrushStyle) -> Unit,
     onImagePicker: () -> Unit,
     onTextColorChange: (Int) -> Unit,
     onCheckListSelect:()->Unit,
@@ -816,10 +925,12 @@ fun EditorBottomToolbar(
 
             ActiveTool.DRAW -> {
                 DrawToolSubToolbar(
+                    brushStyle = state.brushStyle,
                     color = state.drawColor,
                     width = state.drawWidth,
                     onColorChange = onDrawColorChange,
-                    onWidthChange = onDrawWidthChange
+                    onWidthChange = onDrawWidthChange,
+                    onBrushStyleChange = onBrushStyleChange
                 )
             }
 
@@ -836,10 +947,24 @@ fun EditorBottomToolbar(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        Surface(
-            shape = RoundedCornerShape(28.dp),
-            color = SecondaryCream,
-            shadowElevation = 8.dp,
+        UniversalColorToolbar(
+            activeTool = state.activeTool,
+            selectedColor = when (state.activeTool) {
+                ActiveTool.DRAW -> Color(state.drawColor)
+                else -> Color(state.textStyle.color)
+            },
+            onColorSelected = { color ->
+                when (state.activeTool) {
+                    ActiveTool.DRAW -> onDrawColorChange(color.toArgb())
+                    ActiveTool.LINEAR_TEXT, ActiveTool.TEXT, ActiveTool.LIST -> onTextColorChange(color.toArgb())
+                    else -> onTextColorChange(color.toArgb())
+                }
+            }
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        EditorGlassContainer(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 10.dp, vertical = 10.dp)
@@ -851,6 +976,9 @@ fun EditorBottomToolbar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
+                ToolbarIcon(Icons.Default.EditNote, state.activeTool == ActiveTool.LINEAR_TEXT) {
+                    onToolSelect(ActiveTool.LINEAR_TEXT)
+                }
                 ToolbarIcon(Icons.Default.NearMe, state.activeTool == ActiveTool.SELECT) {
                     onToolSelect(ActiveTool.SELECT)
                 }
@@ -864,9 +992,6 @@ fun EditorBottomToolbar(
 //                    onToolSelect(ActiveTool.IMAGE_PICKER)
                     onImagePicker()
                 }
-                ToolbarIcon(Icons.Default.Gesture, state.activeTool == ActiveTool.LASSO) {
-                    onToolSelect(ActiveTool.LASSO)
-                }
                 ToolbarIcon(Icons.Default.Checklist, state.activeTool == ActiveTool.LIST) {
                     onCheckListSelect()
                 }
@@ -879,9 +1004,53 @@ fun EditorBottomToolbar(
                         onDelete()
                     }
                 }
-                ToolbarIcon(Icons.Default.EditNote, state.activeTool == ActiveTool.LINEAR_TEXT) {
-                    onToolSelect(ActiveTool.LINEAR_TEXT)
-                }
+            }
+        }
+    }
+}
+
+@Composable
+fun UniversalColorToolbar(
+    activeTool: ActiveTool,
+    selectedColor: Color,
+    onColorSelected: (Color) -> Unit
+) {
+    val palette = listOf(
+        Color(0xFF111827),
+        Color(0xFFB91C1C),
+        Color(0xFF1D4ED8),
+        Color(0xFF047857),
+        Color(0xFF7C3AED),
+        Color(0xFFF59E0B)
+    )
+
+    EditorGlassContainer(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = when (activeTool) {
+                    ActiveTool.DRAW -> "Brush"
+                    ActiveTool.LIST -> "List"
+                    else -> "Text"
+                },
+                color = Color.White,
+                fontSize = 12.sp
+            )
+            palette.forEach { color ->
+                ColorCircle(
+                    color = color,
+                    selected = color == selectedColor,
+                    onClick = { onColorSelected(color) }
+                )
             }
         }
     }
@@ -913,9 +1082,7 @@ fun TextToolSubToolbar(
     onStyleChange: (TextStyleData) -> Unit,
     onColorChange: (Int) -> Unit
 ) {
-    Surface(
-        shape = RoundedCornerShape(24.dp),
-        color = Color.White.copy(alpha = 0.08f),
+    EditorGlassContainer(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 14.dp)
@@ -938,6 +1105,18 @@ fun TextToolSubToolbar(
 
             ToolbarIcon(Icons.Default.FormatUnderlined, style.isUnderline) {
                 onStyleChange(style.copy(isUnderline = !style.isUnderline))
+            }
+
+            ToolbarIcon(Icons.Default.FormatAlignLeft, style.alignment == "LEFT") {
+                onStyleChange(style.copy(alignment = "LEFT"))
+            }
+
+            ToolbarIcon(Icons.Default.FormatAlignCenter, style.alignment == "CENTER") {
+                onStyleChange(style.copy(alignment = "CENTER"))
+            }
+
+            ToolbarIcon(Icons.Default.FormatAlignRight, style.alignment == "RIGHT") {
+                onStyleChange(style.copy(alignment = "RIGHT"))
             }
 
             Spacer(modifier = Modifier.width(10.dp))
@@ -980,14 +1159,14 @@ fun TextToolSubToolbar(
 
 @Composable
 fun DrawToolSubToolbar(
+    brushStyle: BrushStyle,
     color: Int,
     width: Float,
     onColorChange: (Int) -> Unit,
-    onWidthChange: (Float) -> Unit
+    onWidthChange: (Float) -> Unit,
+    onBrushStyleChange: (BrushStyle) -> Unit
 ) {
-    Surface(
-        shape = RoundedCornerShape(24.dp),
-        color = Color.White.copy(alpha = 0.08f),
+    EditorGlassContainer(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 14.dp)
@@ -1009,6 +1188,21 @@ fun DrawToolSubToolbar(
             }
             ColorCircle(Color.Green, color == Color.Green.toArgb()) {
                 onColorChange(Color.Green.toArgb())
+            }
+
+            Spacer(modifier = Modifier.width(10.dp))
+
+            ToolbarIcon(Icons.Default.Edit, brushStyle == BrushStyle.PEN) {
+                onBrushStyleChange(BrushStyle.PEN)
+            }
+            ToolbarIcon(Icons.Default.Create, brushStyle == BrushStyle.PENCIL) {
+                onBrushStyleChange(BrushStyle.PENCIL)
+            }
+            ToolbarIcon(Icons.Default.Brush, brushStyle == BrushStyle.MARKER) {
+                onBrushStyleChange(BrushStyle.MARKER)
+            }
+            ToolbarIcon(Icons.Default.FormatPaint, brushStyle == BrushStyle.HIGHLIGHTER) {
+                onBrushStyleChange(BrushStyle.HIGHLIGHTER)
             }
 
             Spacer(modifier = Modifier.width(10.dp))
@@ -1044,4 +1238,54 @@ fun ColorCircle(
             .padding(horizontal = 4.dp)
             .size(28.dp)
     ) {}
+}
+
+@Composable
+fun EditorGlassContainer(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        GlassEffect(
+            modifier = modifier,
+            cornerRadius = 24.dp,
+            glassTintColor = Color(0x11000000).copy(alpha = 0.5f),
+            content = content
+        )
+    } else {
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = Color.White.copy(alpha = 0.08f),
+            modifier = modifier
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                content = content
+            )
+        }
+    }
+    /*if (showPageSettings) {
+        PageSettingsDialog(
+            page = state.content.pages.getOrNull(state.currentPageIndex),
+            onDismiss = { showPageSettings = false },
+            onApply = { textSize, background, padding, border ->
+                viewModel.updateCurrentPageStyle(
+                    textSize = textSize,
+                    backgroundColor = background,
+                    padding = padding,
+                    borderStyle = border
+                )
+                showPageSettings = false
+            }
+        )
+    }*/
+}
+
+private fun normalizedRect(start: Offset, end: Offset): Rect {
+    return Rect(
+        left = minOf(start.x, end.x),
+        top = minOf(start.y, end.y),
+        right = maxOf(start.x, end.x),
+        bottom = maxOf(start.y, end.y)
+    )
 }
