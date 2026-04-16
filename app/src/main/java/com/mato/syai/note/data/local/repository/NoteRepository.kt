@@ -141,8 +141,10 @@ class NoteRepository @Inject constructor(
             val iv = bytes.take(12).toByteArray()
             val encrypted = bytes.drop(12).toByteArray()
             val decrypted = cryptoManager.decrypt(iv, encrypted).decodeToString()
-            Log.d("Note Content","Note Data : ${gson.fromJson(decrypted, NoteContent::class.java) ?: createDefaultContent()}")
-            gson.fromJson(decrypted, NoteContent::class.java) ?: createDefaultContent()
+            val content = gson.fromJson(decrypted, NoteContent::class.java)?.normalizeForCurrentSchema()
+                ?: createDefaultContent()
+            Log.d("Note Content", "Note Data : $content")
+            content
         } catch (e: Exception) {
             e.printStackTrace()
             createDefaultContent()
@@ -165,9 +167,9 @@ class NoteRepository @Inject constructor(
 
     private fun createDefaultContent(): NoteContent {
         return NoteContent(
-            schemaVersion = 1,
+            schemaVersion = NOTE_SCHEMA_VERSION,
             pages = mutableListOf(
-                PageData(pageNo = 0)
+                PageData(pageNo = 0).apply { normalizeFromLegacyItems() }
             )
         )
     }

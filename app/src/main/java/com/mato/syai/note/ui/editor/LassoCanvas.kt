@@ -28,11 +28,11 @@ fun LassoCanvas(
         modifier = Modifier.pointerInput(Unit) {
             detectDragGestures(
                 onDragStart = { offset ->
-                    pathPoints = listOf(Point(offset.x, offset.y))
+                    pathPoints = listOf(Point( x = offset.x,y = offset.y))
                 },
                 onDrag = { change, _ ->
                     change.consume()
-                    pathPoints = pathPoints + Point(change.position.x, change.position.y)
+                    pathPoints = pathPoints + Point(x = change.position.x, y = change.position.y)
                 },
                 onDragEnd = {
                     onComplete(pathPoints)
