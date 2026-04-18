@@ -176,5 +176,7 @@ dependencies {
     implementation("com.google.protobuf:protobuf-kotlin-lite:3.25.1")
     implementation("androidx.datastore:datastore:1.1.1")
     implementation("io.coil-kt:coil-compose:2.6.0")
+    implementation("com.airbnb.android:lottie:6.7.1")
+    implementation("com.airbnb.android:lottie-compose:6.7.1")
 
 }
