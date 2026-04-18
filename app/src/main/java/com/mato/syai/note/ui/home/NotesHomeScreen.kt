@@ -1,5 +1,6 @@
 package com.mato.syai.note.ui.home
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -40,10 +41,9 @@ import com.mato.syai.R
 import com.mato.syai.note.domain.local.model.Note
 import com.mato.syai.note.ui.noteSettings.EditNoteMetadataSheet
 import com.mato.syai.note.utils.formatTime
+import com.mato.syai.utils.GlassEffect
 import java.io.File
 
-private val PrimaryDark = Color(0xFF0D0127)
-private val SecondaryCream = Color(0xFFF8E0C3)
 private val AuraPurple = Color(0xFF3F2A7A)
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -68,21 +68,8 @@ fun NotesHomeScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(PrimaryDark)
+            .background(MaterialTheme.colorScheme.primary)
     ) {
-        Box(
-            modifier = Modifier
-                .size(350.dp)
-                .align(Alignment.TopEnd)
-                .offset(x = 100.dp, y = (-80).dp)
-                .blur(100.dp)
-                .background(
-                    brush = Brush.radialGradient(
-                        colors = listOf(AuraPurple.copy(alpha = 0.6f), Color.Transparent)
-                    ),
-                    shape = RoundedCornerShape(175.dp)
-                )
-        )
 
         PullToRefreshBox(
             isRefreshing = isRefreshing,
@@ -177,9 +164,9 @@ fun NotesHomeScreen(
             onClick = {
                 viewModel.createNewNote()
             },
-            containerColor = SecondaryCream,
-            contentColor = PrimaryDark,
-            shape = RoundedCornerShape(18.dp),
+            containerColor = MaterialTheme.colorScheme.secondary,
+            contentColor = MaterialTheme.colorScheme.primary,
+            shape = RoundedCornerShape(30.dp),
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(bottom = 120.dp, end = 24.dp)
@@ -219,7 +206,7 @@ fun CustomRefreshIndicator(
     ) {
         if (state.distanceFraction > 0f || isRefreshing) {
             Surface(
-                color = AuraPurple.copy(alpha = 0.9f),
+                color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.9f),
                 shape = CircleShape,
                 shadowElevation = 8.dp,
                 modifier = Modifier
@@ -236,7 +223,7 @@ fun CustomRefreshIndicator(
                     Icon(
                         imageVector = Icons.Default.Refresh,
                         contentDescription = "Refreshing",
-                        tint = SecondaryCream,
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier
                             .size(24.dp)
                             .rotate(if (isRefreshing) rotation else state.distanceFraction * 180f)
@@ -248,32 +235,66 @@ fun CustomRefreshIndicator(
 }
 
 @Composable
-fun FolderCard(name: String, isSelected: Boolean, onClick: () -> Unit) {
-    Surface(
-        onClick = onClick,
-        color = SecondaryCream,
-        shape = RoundedCornerShape(20.dp),
-        border = if (isSelected) BorderStroke(2.dp, AuraPurple) else null,
-        modifier = Modifier.size(width = 115.dp, height = 90.dp)
+fun FolderCard(
+    name: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(width = 90.dp, height = 90.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .clickable { onClick() }
     ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            Image(
-                painter = painterResource(id = R.drawable.folder_icon),
-                contentDescription = null,
-                modifier = Modifier.size(26.dp)
-            )
-            Text(
-                text = name,
-                color = PrimaryDark,
-                fontWeight = FontWeight.ExtraBold,
-                fontSize = 14.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+
+        FolderBackground(isSelected)
+
+        Text(
+            text = name,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 14.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(14.dp)
+        )
+
+        if (isSelected) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.secondary.copy(alpha = 0.35f),
+                                Color.Transparent
+                            ),
+                            radius = 300f
+                        ),
+                        shape = RoundedCornerShape(20.dp)
+                    )
             )
         }
+    }
+}
+
+@Composable
+fun FolderBackground(isSelected: Boolean) {
+    AnimatedContent(targetState = isSelected, label = "") { selected ->
+        val res = if (selected) {
+            R.drawable.folder_open
+        } else {
+            R.drawable.folder_close
+        }
+
+        Image(
+            painter = painterResource(res),
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Fit
+        )
     }
 }
 
@@ -291,10 +312,7 @@ fun NoteListItem(
     var showMenu by remember { mutableStateOf(false) }
 
     Box {
-        Surface(
-            color = Color.White.copy(alpha = 0.06f),
-            shape = RoundedCornerShape(24.dp),
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
+        GlassEffect(
             modifier = Modifier
                 .fillMaxWidth()
                 .pointerInput(note) {
@@ -302,7 +320,8 @@ fun NoteListItem(
                         onTap = { onClick() },
                         onLongPress = { showMenu = true }
                     )
-                }
+                },
+            glassTintColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f)
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -319,7 +338,7 @@ fun NoteListItem(
                         Icon(
                             imageVector = Icons.Default.Star,
                             contentDescription = "Fav",
-                            tint = SecondaryCream,
+                            tint = MaterialTheme.colorScheme.secondary,
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -368,12 +387,12 @@ fun NoteListItem(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Surface(
-                        color = AuraPurple.copy(alpha = 0.2f),
+                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f),
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text(
                             text = "#${note.folderName.lowercase()}",
-                            color = SecondaryCream,
+                            color = MaterialTheme.colorScheme.secondary,
                             fontSize = 10.sp,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         )
@@ -384,24 +403,33 @@ fun NoteListItem(
         DropdownMenu(
             expanded = showMenu,
             onDismissRequest = { showMenu = false },
-            modifier = Modifier.background(AuraPurple)
+            modifier = Modifier.background(Color.Transparent)
         ) {
-            DropdownMenuItem(
-                text = { Text("Edit Metadata", color = Color.White) },
-                leadingIcon = { Icon(Icons.Default.Settings, null, tint = Color.White) },
-                onClick = { showMenu = false; onEditMeta() }
-            )
-            DropdownMenuItem(
-                text = { Text(if (note.isFavorite) "Unfavorite" else "Mark Favorite", color = Color.White) },
-                leadingIcon = { Icon(Icons.Default.Star, null, tint = Color.White) },
-                onClick = { showMenu = false; onFavorite() }
-            )
-            Divider(color = Color.White.copy(0.1f))
-            DropdownMenuItem(
-                text = { Text("Delete", color = Color.Red) },
-                leadingIcon = { Icon(Icons.Default.Delete, null, tint = Color.Red) },
-                onClick = { showMenu = false; onDelete() }
-            )
+            GlassEffect(
+                glassTintColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f)
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Edit Metadata", color = Color.White) },
+                    leadingIcon = { Icon(Icons.Default.Settings, null, tint = Color.White) },
+                    onClick = { showMenu = false; onEditMeta() }
+                )
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            if (note.isFavorite) "Unfavorite" else "Mark Favorite",
+                            color = Color.White
+                        )
+                    },
+                    leadingIcon = { Icon(Icons.Default.Star, null, tint = Color.White) },
+                    onClick = { showMenu = false; onFavorite() }
+                )
+                Divider(color = Color.White.copy(0.1f))
+                DropdownMenuItem(
+                    text = { Text("Delete", color = Color.Red) },
+                    leadingIcon = { Icon(Icons.Default.Delete, null, tint = Color.Red) },
+                    onClick = { showMenu = false; onDelete() }
+                )
+            }
         }
     }
 }
