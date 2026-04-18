@@ -27,16 +27,25 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.rememberNestedScrollInteropConnection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
+import com.airbnb.lottie.compose.LottieAnimation
+import com.airbnb.lottie.compose.LottieCompositionSpec
+import com.airbnb.lottie.compose.animateLottieCompositionAsState
+import com.airbnb.lottie.compose.rememberLottieComposition
 import com.mato.syai.R
 import com.mato.syai.note.domain.local.model.Note
 import com.mato.syai.note.ui.noteSettings.EditNoteMetadataSheet
@@ -82,7 +91,7 @@ fun NotesHomeScreen(
                     modifier = Modifier.align(Alignment.TopCenter)
                 )
             },
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize().nestedScroll(rememberNestedScrollInteropConnection())
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 Text(
@@ -151,9 +160,6 @@ fun NotesHomeScreen(
                         onDismiss = { noteToEditMeta = null },
                         onSave = { t, f, ts, c ->
                             viewModel.updateNoteMetadata(noteToEditMeta!!.id, t, f, ts, c)
-                        },
-                        onExportPdf = {
-                            // Call your existing export logic
                         }
                     )
                 }
@@ -282,20 +288,38 @@ fun FolderCard(
 
 @Composable
 fun FolderBackground(isSelected: Boolean) {
-    AnimatedContent(targetState = isSelected, label = "") { selected ->
-        val res = if (selected) {
-            R.drawable.folder_open
-        } else {
-            R.drawable.folder_close
-        }
 
-        Image(
-            painter = painterResource(res),
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Fit
-        )
+    var isPlaying by remember { mutableStateOf(false) }
+
+    val composition by rememberLottieComposition(
+        LottieCompositionSpec.RawRes(R.raw.folder_animation)
+    )
+
+    val progress = remember { Animatable(0f) }
+
+    LaunchedEffect(isSelected) {
+        if (isSelected) {
+            progress.snapTo(0f)
+            progress.animateTo(0.5f,
+                animationSpec = tween(
+                    durationMillis = 600,
+                    easing = FastOutSlowInEasing
+                ))
+        } else {
+            progress.snapTo(0.5f)
+            progress.animateTo(1f,
+                animationSpec = tween(
+                    durationMillis = 600,
+                    easing = FastOutSlowInEasing
+                ))
+        }
     }
+
+    LottieAnimation(
+        composition = composition,
+        progress = progress.value,
+        modifier = Modifier.fillMaxSize()
+    )
 }
 
 @Composable
@@ -310,6 +334,9 @@ fun NoteListItem(
 
     val context = LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
+    var thumbHeightX by remember { mutableStateOf(0.dp) }
+    var thumbHeightY by remember { mutableStateOf(0.dp) }
+    val density = LocalDensity.current
 
     Box {
         GlassEffect(
@@ -320,6 +347,9 @@ fun NoteListItem(
                         onTap = { onClick() },
                         onLongPress = { showMenu = true }
                     )
+                }.onGloballyPositioned { coordinates ->
+                    thumbHeightY = with(density) { coordinates.size.height.toDp() }
+                    thumbHeightX = with(density) { coordinates.size.width.toDp() }
                 },
             glassTintColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f)
         ) {
@@ -330,8 +360,8 @@ fun NoteListItem(
                         color = Color.White,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
-                        maxLines = 1, // Added max lines
-                        overflow = TextOverflow.Ellipsis, // Added ellipsis
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
                     )
                     if (note.isFavorite) {
@@ -343,16 +373,8 @@ fun NoteListItem(
                         )
                     }
                 }
-                /*Text(
-                    text = note.title,
-                    color = Color.White,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )*/
                 Spacer(modifier = Modifier.height(8.dp))
-                val fileName = note.imagePreview // from DB
+                val fileName = note.imagePreview
                 if (fileName!=null){
                     val file = File(context.filesDir, fileName)
 
@@ -380,12 +402,6 @@ fun NoteListItem(
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "Sync Active",
-                        color = Color.Gray,
-                        fontSize = 11.sp
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
                     Surface(
                         color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f),
                         shape = RoundedCornerShape(8.dp)
@@ -403,10 +419,14 @@ fun NoteListItem(
         DropdownMenu(
             expanded = showMenu,
             onDismissRequest = { showMenu = false },
-            modifier = Modifier.background(Color.Transparent)
+            modifier = Modifier.background(Color.Transparent),
+            containerColor = Color.Transparent,
+            shadowElevation = 0.dp,
+            offset = DpOffset(x = thumbHeightX, y = thumbHeightY),
         ) {
             GlassEffect(
-                glassTintColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f)
+                glassTintColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.8f),
+                modifier = Modifier.background(Color.Transparent)
             ) {
                 DropdownMenuItem(
                     text = { Text("Edit Metadata", color = Color.White) },

@@ -1,5 +1,7 @@
 package com.mato.syai.note.ui.noteSettings
 
+import android.content.Context
+import androidx.annotation.UiContext
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -32,11 +34,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.mato.syai.note.domain.local.model.Note
-import com.mato.syai.note.ui.editor.AuraPurple
+import com.mato.syai.note.ui.editor.NoteEditorViewModel
+import com.mato.syai.note.utils.OutlinedTextFieldStyled
+import com.mato.syai.note.utils.SliderStyled
+import com.mato.syai.profile.StyledOutlinedTextField
+import com.mato.syai.ui.theme.AuraPurple
 import com.mato.syai.ui.theme.PurpleDark
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -45,8 +54,9 @@ fun EditNoteMetadataSheet(
     note: Note,
     onDismiss: () -> Unit,
     onSave: (title: String, folder: String, textSize: Float, color: Int) -> Unit,
-    onExportPdf: () -> Unit
+    viewModel: NoteEditorViewModel = hiltViewModel()
 ) {
+    val context: Context = LocalContext.current
     var title by remember { mutableStateOf(note.title) }
     var folder by remember { mutableStateOf(note.folderName) }
     var textSize by remember { mutableStateOf(note.metadata.textSize) }
@@ -54,7 +64,7 @@ fun EditNoteMetadataSheet(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.primary,
+        containerColor = MaterialTheme.colorScheme.onSurfaceVariant,
         dragHandle = { BottomSheetDefaults.DragHandle(color = Color.Gray) }
     ) {
         Column(
@@ -64,31 +74,26 @@ fun EditNoteMetadataSheet(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            Text("Edit File Metadata", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text("Edit File Metadata", color = MaterialTheme.colorScheme.primary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
 
-            // Title Field
-            OutlinedTextField(
+            OutlinedTextFieldStyled(
                 value = title,
                 onValueChange = { title = it },
-                label = { Text("Title") },
-                modifier = Modifier.fillMaxWidth(),
-                colors = OutlinedTextFieldDefaults.colors(unfocusedTextColor = Color.White)
+                placeholder = "Enter Title ...",
+                keyboardType = KeyboardType.Text
             )
 
-            // Folder Field
-            OutlinedTextField(
+            OutlinedTextFieldStyled(
                 value = folder,
                 onValueChange = { folder = it },
-                label = { Text("Directory / Folder") },
-                modifier = Modifier.fillMaxWidth(),
-                colors = OutlinedTextFieldDefaults.colors(unfocusedTextColor = Color.White)
+                placeholder = "Directory / Folder",
+                keyboardType = KeyboardType.Text
             )
 
-            // Default Text Settings
-            Text("Default Text Style", color = MaterialTheme.colorScheme.secondary, fontSize = 14.sp)
+            Text("Default Text Style", color = MaterialTheme.colorScheme.primary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Size: ${textSize.toInt()}sp", color = Color.LightGray, modifier = Modifier.width(80.dp))
-                Slider(
+                Text("Size: ${textSize.toInt()}sp", color = MaterialTheme.colorScheme.primary, modifier = Modifier.width(80.dp))
+                SliderStyled(
                     value = textSize,
                     onValueChange = { textSize = it },
                     valueRange = 12f..32f,
@@ -96,9 +101,8 @@ fun EditNoteMetadataSheet(
                 )
             }
 
-            // Export Section
             Button(
-                onClick = onExportPdf,
+                onClick = { viewModel.exportToPdf(context) },
                 colors = ButtonDefaults.buttonColors(containerColor = AuraPurple),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -107,10 +111,11 @@ fun EditNoteMetadataSheet(
                 Text("Quick Export PDF")
             }
 
-            // Action Buttons
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
-                    Text("Cancel", color = Color.White)
+                OutlinedButton(onClick = onDismiss,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.onPrimary)) {
+                    Text("Cancel", color = MaterialTheme.colorScheme.primary)
                 }
                 Button(
                     onClick = { onSave(title, folder, textSize, textColor); onDismiss() },
