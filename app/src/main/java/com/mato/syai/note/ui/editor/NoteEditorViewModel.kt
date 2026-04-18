@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.util.Log
 import android.view.View
+import android.widget.Toast
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -876,18 +877,6 @@ class NoteEditorViewModel @Inject constructor(
         }
     }
 
-    fun captureBitmap(view: View): Bitmap {
-        val bitmap = Bitmap.createBitmap(
-            view.width,
-            view.height,
-            Bitmap.Config.ARGB_8888
-        )
-        val canvas = Canvas(bitmap)
-        view.draw(canvas)
-        return bitmap
-    }
-
-    // In NoteEditorViewModel.kt
     fun exportToPdf(context: Context) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
@@ -896,8 +885,8 @@ class NoteEditorViewModel @Inject constructor(
             val file = exporter.exportFromData(_uiState.value.content, _noteTitle.value)
 
             if (file != null) {
-                // You can trigger a System Share Intent here or show a Snackbar
                 Log.d("PDF", "Exported to: ${file.absolutePath}")
+                Toast.makeText(context,"Pdf saved:${file.absolutePath}",Toast.LENGTH_SHORT).show()
             }
 
             _uiState.update { it.copy(isLoading = false) }
