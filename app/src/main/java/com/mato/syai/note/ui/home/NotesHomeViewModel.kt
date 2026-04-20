@@ -73,7 +73,7 @@ class NotesHomeViewModel @Inject constructor(
 
     fun deleteNote(note: Note) {
         viewModelScope.launch {
-            repository.deleteNote(note)
+            repository.deleteNoteById(note.id)
 //            refresh() // Ensure UI is in sync with filesystem
         }
     }

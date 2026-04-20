@@ -31,7 +31,7 @@ data class NoteEntity(
 data class MetadataEntity(
     @PrimaryKey val noteId: Long,
     val textSize: Float,
-    val background : String?=null,
+    val background : String?="0xFFFFFFFF",
     val colorHex : Int = 0xFFF8E0C3.toInt(),
     val defaultTextSize: Float = 12f,
     val cursorColor: Int = 0xFF0D0127.toInt(),
