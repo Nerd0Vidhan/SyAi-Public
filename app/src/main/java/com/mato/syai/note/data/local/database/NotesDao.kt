@@ -21,6 +21,9 @@ interface NoteDao {
     @Query("DELETE FROM notes_path WHERE filePath = :path")
     suspend fun deleteByPath(path: String)
 
+    @Query("DELETE FROM notes_path WHERE noteId = :noteId")
+    suspend fun deleteById(noteId: Long)
+
     @Query("SELECT filePath FROM notes_path")
     suspend fun getAllStoredPaths(): List<String>
 

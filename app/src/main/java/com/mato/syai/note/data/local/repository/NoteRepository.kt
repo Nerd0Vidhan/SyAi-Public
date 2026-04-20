@@ -37,6 +37,12 @@ class NoteRepository @Inject constructor(
                 metadata = NoteMetadata(
                     textSize = item.metadata?.textSize ?: 16f,
                     colorHex = item.metadata?.colorHex ?: 0xFF000000.toInt(),
+                    background = item.metadata?.background,
+                    backgroundType = item.metadata?.backgroundType ?: BackGroundType.SOLID.type,
+                    defaultTextSize = item.metadata?.defaultTextSize ?: 12f,
+                    cursorColor = item.metadata?.cursorColor ?: 0xFF0D0127.toInt(),
+                    totalPages = item.metadata?.totalPages?:1,
+                    pageSize = item.metadata?.pageSize?: PageSize.A4
                 )
             )
         }
@@ -123,6 +129,15 @@ class NoteRepository @Inject constructor(
         dao.deleteByPath(note.filePath)
         val file = File(note.filePath)
         if (file.exists()) file.delete()
+    }
+
+    suspend fun deleteNoteById(noteId: Long) = withContext(Dispatchers.IO) {
+        val note = dao.getNoteById(noteId)
+        note?.let {
+            val file = File(it.filePath)
+            if (file.exists()) file.delete()
+            dao.deleteById(noteId)
+        }
     }
 
     suspend fun saveNoteContent(noteId: Long, content: NoteContent) = withContext(Dispatchers.IO) {

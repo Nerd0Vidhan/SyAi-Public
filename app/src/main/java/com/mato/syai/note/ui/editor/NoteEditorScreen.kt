@@ -523,7 +523,7 @@ fun NotePage(
                         style = entry.style
                     ),
                     widthPoints = entry.bounds.width,
-                    uiScale = pageScaleX,
+                    uiScale = pageScaleY,
                     isSelected = state.selectedLinearPageId == page.pageId && state.activeTool == ActiveTool.LINEAR_TEXT && !state.isViewOnly,
                     onTextChange = { newText ->
                         viewModel.updatePageLinearText(pageIndex, newText)

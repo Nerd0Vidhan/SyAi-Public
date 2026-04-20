@@ -1,7 +1,6 @@
 package com.mato.syai.note.ui.noteSettings
 
 import android.content.Context
-import androidx.annotation.UiContext
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,9 +21,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -44,9 +40,7 @@ import com.mato.syai.note.domain.local.model.Note
 import com.mato.syai.note.ui.editor.NoteEditorViewModel
 import com.mato.syai.note.utils.OutlinedTextFieldStyled
 import com.mato.syai.note.utils.SliderStyled
-import com.mato.syai.profile.StyledOutlinedTextField
 import com.mato.syai.ui.theme.AuraPurple
-import com.mato.syai.ui.theme.PurpleDark
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
