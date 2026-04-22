@@ -576,14 +576,16 @@ fun NotePage(
                     widthPoints = entry.bounds.width,
                     uiScale = pageScaleY,
                     isSelected = state.selectedLinearPageId == page.pageId && state.activeTool == ActiveTool.LINEAR_TEXT && !state.isViewOnly && state.activeLinearTextId == entry.id,
-                    onTextChange = { newText ->
-                        viewModel.updateLinearTextValueById(pageIndex, entry.id, newText)
+                    activeStyle = state.textStyle,
+                    onTextChange = { newText, newSpans ->
+                        viewModel.updateLinearTextValueById(pageIndex, entry.id, newText, newSpans)
                     },
-                    onSelectionChange = { cursor ->
+                    onSelectionChange = { selection ->
                         viewModel.selectPage(pageIndex)
                         viewModel.selectLinearPage(page.pageId)
                         viewModel.setActiveLinearTextId(entry.id)
-                        viewModel.setCursorPosition(cursor)
+                        viewModel.updateGlobalSelection(selection)
+                        viewModel.setCursorPosition(selection.end)
                     },
                     onCopy = { copiedText, start, end ->
                         val copiedSpans = entry.spans.mapNotNull {
@@ -994,12 +996,15 @@ fun RenderTextBlock(
         widthPoints = obj.bounds.width,
         uiScale = pageScale,
         isSelected = isSelected && !isViewOnly,
-        onTextChange = { newText ->
-            viewModel.updateTextObject(pageIndex, obj.id, newText)
+        activeStyle = viewModel.uiState.value.textStyle,
+        onTextChange = { newText, newSpans ->
+            val updatedPayload = payload.copy(text = newText, spans = newSpans.toMutableList())
+            viewModel.updateObjectPayload(pageIndex, obj.id, updatedPayload)
         },
-        onSelectionChange = { cursor ->
+        onSelectionChange = { selection ->
             viewModel.selectObject(obj.id)
-            viewModel.setCursorPosition(cursor)
+            viewModel.updateGlobalSelection(selection)
+            viewModel.setCursorPosition(selection.end)
         }
     )
 }
