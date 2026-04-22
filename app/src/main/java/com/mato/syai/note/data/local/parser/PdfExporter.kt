@@ -13,14 +13,21 @@ import android.os.Environment
 import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.AbsoluteSizeSpan
+import android.text.style.ForegroundColorSpan
+import android.text.style.StyleSpan
 import com.mato.syai.note.domain.local.model.ChecklistPayload
 import com.mato.syai.note.domain.local.model.BrushStyle
 import com.mato.syai.note.domain.local.model.DrawingPayload
 import com.mato.syai.note.domain.local.model.ImagePayload
+import com.mato.syai.note.domain.local.model.LinearContentEntry
 import com.mato.syai.note.domain.local.model.NoteContent
 import com.mato.syai.note.domain.local.model.NoteObject
 import com.mato.syai.note.domain.local.model.ObjectType
 import com.mato.syai.note.domain.local.model.TextPayload
+import com.mato.syai.note.domain.local.model.LinearTextPayload
 import java.io.File
 import java.io.FileOutputStream
 
@@ -75,14 +82,26 @@ class PdfExporter(private val context: Context) {
             canvas.drawColor(pageData.backgroundColor)
 
             // Render each object based on its type
-            pageData.renderableItems.forEach { obj ->
-                when (obj.type) {
-                    ObjectType.TEXT -> drawText(canvas, obj)
-                    ObjectType.LINEAR_TEXT -> drawText(canvas, obj)
-                    ObjectType.DRAWING -> drawDrawing(canvas, obj)
-                    ObjectType.IMAGE -> drawImage(canvas, obj)
-                    ObjectType.CHECKLIST -> drawChecklist(canvas, obj)
-                    else -> {}
+            val renderables = pageData.renderableItems
+            val linearTexts = pageData.linearContent.filter { it.type == ObjectType.LINEAR_TEXT }
+            
+            // Combine and sort by layer
+            val allDrawables = (renderables.map { it to it.layer } + linearTexts.map { it to it.layer }).sortedBy { it.second }
+            
+            allDrawables.forEach { (item, _) ->
+                when (item) {
+                    is NoteObject -> {
+                        when (item.type) {
+                            ObjectType.TEXT -> drawText(canvas, item)
+                            ObjectType.DRAWING -> drawDrawing(canvas, item)
+                            ObjectType.IMAGE -> drawImage(canvas, item)
+                            ObjectType.CHECKLIST -> drawChecklist(canvas, item)
+                            else -> {}
+                        }
+                    }
+                    is LinearContentEntry -> {
+                        drawLinearText(canvas, item)
+                    }
                 }
             }
             pdf.finishPage(page)
@@ -103,6 +122,22 @@ class PdfExporter(private val context: Context) {
 
     private fun drawText(canvas: Canvas, obj: NoteObject) {
         val payload = obj.payload as? TextPayload ?: return
+        val spannable = SpannableString(payload.text)
+        
+        payload.spans.forEach { span ->
+            val start = Math.max(0, Math.min(span.start, payload.text.length))
+            val end = Math.max(0, Math.min(span.end, payload.text.length))
+            if (start < end) {
+                spannable.setSpan(ForegroundColorSpan(span.style.color), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                spannable.setSpan(AbsoluteSizeSpan(span.style.fontSize.toInt(), true), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                val type = if (span.style.isBold && span.style.isItalic) android.graphics.Typeface.BOLD_ITALIC
+                           else if (span.style.isBold) android.graphics.Typeface.BOLD
+                           else if (span.style.isItalic) android.graphics.Typeface.ITALIC
+                           else android.graphics.Typeface.NORMAL
+                spannable.setSpan(StyleSpan(type), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+        }
+        
         val style = payload.style
 
         val paint = TextPaint().apply {
@@ -120,9 +155,9 @@ class PdfExporter(private val context: Context) {
         }
 
         val builder = StaticLayout.Builder.obtain(
-            payload.text,
+            spannable,
             0,
-            payload.text.length,
+            spannable.length,
             paint,
             obj.bounds.width.toInt()
         )
@@ -132,6 +167,56 @@ class PdfExporter(private val context: Context) {
 
         canvas.save()
         canvas.translate(obj.transform.x, obj.transform.y)
+        builder.build().draw(canvas)
+        canvas.restore()
+    }
+
+    private fun drawLinearText(canvas: Canvas, entry: LinearContentEntry) {
+        val spannable = SpannableString(entry.value)
+        
+        entry.spans.forEach { span ->
+            val start = Math.max(0, Math.min(span.start, entry.value.length))
+            val end = Math.max(0, Math.min(span.end, entry.value.length))
+            if (start < end) {
+                spannable.setSpan(ForegroundColorSpan(span.style.color), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                spannable.setSpan(AbsoluteSizeSpan(span.style.fontSize.toInt(), true), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                val type = if (span.style.isBold && span.style.isItalic) android.graphics.Typeface.BOLD_ITALIC
+                           else if (span.style.isBold) android.graphics.Typeface.BOLD
+                           else if (span.style.isItalic) android.graphics.Typeface.ITALIC
+                           else android.graphics.Typeface.NORMAL
+                spannable.setSpan(StyleSpan(type), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+        }
+        
+        val style = entry.style
+
+        val paint = TextPaint().apply {
+            color = style.color
+            textSize = style.fontSize
+            isFakeBoldText = style.isBold
+            textSkewX = if (style.isItalic) -0.25f else 0f
+            isUnderlineText = style.isUnderline
+        }
+
+        val alignment = when (style.alignment) {
+            "CENTER" -> Layout.Alignment.ALIGN_CENTER
+            "RIGHT" -> Layout.Alignment.ALIGN_OPPOSITE
+            else -> Layout.Alignment.ALIGN_NORMAL
+        }
+
+        val builder = StaticLayout.Builder.obtain(
+            spannable,
+            0,
+            spannable.length,
+            paint,
+            entry.bounds.width.toInt()
+        )
+            .setAlignment(alignment)
+            .setLineSpacing(0f, 1f)
+            .setIncludePad(true)
+
+        canvas.save()
+        canvas.translate(entry.transform.x, entry.transform.y)
         builder.build().draw(canvas)
         canvas.restore()
     }
@@ -151,12 +236,14 @@ class PdfExporter(private val context: Context) {
                 BrushStyle.MARKER -> 230
                 BrushStyle.HIGHLIGHTER -> 90
                 BrushStyle.PEN -> 255
+                BrushStyle.ERASER -> 255
             }
             paint.strokeWidth = when (stroke.brushStyle) {
                 BrushStyle.PENCIL -> stroke.width * 0.8f
                 BrushStyle.MARKER -> stroke.width * 1.2f
                 BrushStyle.HIGHLIGHTER -> stroke.width * 1.5f
                 BrushStyle.PEN -> stroke.width
+                BrushStyle.ERASER -> stroke.width
             }
             val path = Path()
             if (stroke.points.isNotEmpty()) {
@@ -213,16 +300,25 @@ class PdfExporter(private val context: Context) {
         // draw background
         canvas.drawColor(page.backgroundColor)
 
-        // reuse SAME rendering logic as PdfExporter
-        page.renderableItems.forEach { obj ->
-            when (obj.type) {
-                ObjectType.TEXT,
-                ObjectType.LINEAR_TEXT -> drawText(canvas, obj)
-
-                ObjectType.DRAWING -> drawDrawing(canvas, obj)
-                ObjectType.IMAGE -> drawImage(canvas, obj)
-                ObjectType.CHECKLIST -> drawChecklist(canvas, obj)
-                else -> {}
+        val renderables = page.renderableItems
+        val linearTexts = page.linearContent.filter { it.type == ObjectType.LINEAR_TEXT }
+        
+        val allDrawables = (renderables.map { it to it.layer } + linearTexts.map { it to it.layer }).sortedBy { it.second }
+        
+        allDrawables.forEach { (item, _) ->
+            when (item) {
+                is NoteObject -> {
+                    when (item.type) {
+                        ObjectType.TEXT -> drawText(canvas, item)
+                        ObjectType.DRAWING -> drawDrawing(canvas, item)
+                        ObjectType.IMAGE -> drawImage(canvas, item)
+                        ObjectType.CHECKLIST -> drawChecklist(canvas, item)
+                        else -> {}
+                    }
+                }
+                is LinearContentEntry -> {
+                    drawLinearText(canvas, item)
+                }
             }
         }
 

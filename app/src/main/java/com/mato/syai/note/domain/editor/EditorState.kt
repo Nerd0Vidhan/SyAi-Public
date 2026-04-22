@@ -10,6 +10,8 @@ data class EditorState(
     val activeTool: ActiveTool = ActiveTool.LINEAR_TEXT,
     val selectedObjectId: String? = null,
     val selectedLinearPageId: String? = null,
+    val activeLinearTextId: String? = null,
+    val globalSelection: androidx.compose.ui.text.TextRange? = null,
     val pendingViewportPageIndex: Int? = null,
     val pendingViewportObjectId: String? = null,
 

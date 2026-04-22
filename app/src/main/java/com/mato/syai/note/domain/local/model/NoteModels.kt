@@ -128,7 +128,8 @@ data class PageData(
     fun upsertObject(
         noteObject: NoteObject,
         textValue: String? = noteObject.payload.asTextValueOrNull(),
-        styleOverride: TextStyleData? = noteObject.payload.asTextStyleOrNull()
+        styleOverride: TextStyleData? = noteObject.payload.asTextStyleOrNull(),
+        spansOverride: List<TextSpan>? = noteObject.payload.asTextSpansOrNull()
     ) {
         val itemIndex = items.indexOfFirst { it.id == noteObject.id }
         if (itemIndex >= 0) {
@@ -146,7 +147,8 @@ data class PageData(
             value = textValue.orEmpty(),
             transform = noteObject.transform.copy(),
             bounds = noteObject.bounds.copy(),
-            style = styleOverride ?: linearTextStyle
+            style = styleOverride ?: linearTextStyle,
+            spans = spansOverride?.toMutableList() ?: mutableListOf()
         )
 
         if (linearIndex >= 0) {
@@ -165,14 +167,20 @@ data class PageData(
     }
 
     fun updateLinearEntry(
-        objectId: String,
+        objectId: String? = null,
+        id: String? = null,
         textValue: String? = null,
         transform: Transform? = null,
         bounds: Bounds? = null,
         style: TextStyleData? = null,
-        layer: Int? = null
+        layer: Int? = null,
+        spans: List<TextSpan>? = null
     ) {
-        val index = linearContent.indexOfFirst { it.objectId == objectId }
+        val index = if (id != null) {
+            linearContent.indexOfFirst { it.id == id }
+        } else {
+            linearContent.indexOfFirst { it.objectId == objectId }
+        }
         if (index == -1) return
 
         val current = linearContent[index]
@@ -181,7 +189,8 @@ data class PageData(
             transform = transform ?: current.transform,
             bounds = bounds ?: current.bounds,
             style = style ?: current.style,
-            layer = layer ?: current.layer
+            layer = layer ?: current.layer,
+            spans = spans?.toMutableList() ?: current.spans
         )
         refreshLinearTextPaste()
     }
@@ -202,7 +211,8 @@ data class PageData(
                     value = obj.payload.asTextValueOrNull().orEmpty(),
                     transform = obj.transform.copy(),
                     bounds = obj.bounds.copy(),
-                    style = obj.payload.asTextStyleOrNull() ?: linearTextStyle
+                    style = obj.payload.asTextStyleOrNull() ?: linearTextStyle,
+                    spans = obj.payload.asTextSpansOrNull()?.toMutableList() ?: mutableListOf()
                 )
             }
             .toMutableList()
@@ -317,14 +327,15 @@ sealed interface ObjectPayload
 
 data class TextPayload(
     var text: String = "",
-    var style: TextStyleData = TextStyleData()
+    var style: TextStyleData = TextStyleData(),
+    var spans: MutableList<TextSpan> = mutableListOf()
 ) : ObjectPayload
 
 data class TextSpan(
     val start: Int,
     val end: Int,
     val style: TextStyleData
-) : ObjectPayload
+)
 
 data class ImagePayload(
     val uri: String,
@@ -366,7 +377,8 @@ data class LinearContentEntry(
     val value: String = "",
     val transform: Transform = Transform(),
     val bounds: Bounds = Bounds(),
-    val style: TextStyleData = TextStyleData()
+    val style: TextStyleData = TextStyleData(),
+    var spans: MutableList<TextSpan> = mutableListOf()
 )
 
 data class ChecklistItem(
@@ -381,7 +393,8 @@ data class ChecklistPayload(
 
 data class LinearTextPayload(
     var text: String = "",
-    var style: TextStyleData = TextStyleData()
+    var style: TextStyleData = TextStyleData(),
+    var spans: MutableList<TextSpan> = mutableListOf()
 ) : ObjectPayload
 
 data class ListPayload(
@@ -431,5 +444,11 @@ private fun ObjectPayload.asTextValueOrNull(): String? = when (this) {
 private fun ObjectPayload.asTextStyleOrNull(): TextStyleData? = when (this) {
     is TextPayload -> style
     is LinearTextPayload -> style
+    else -> null
+}
+
+private fun ObjectPayload.asTextSpansOrNull(): List<TextSpan>? = when (this) {
+    is TextPayload -> spans
+    is LinearTextPayload -> spans
     else -> null
 }
