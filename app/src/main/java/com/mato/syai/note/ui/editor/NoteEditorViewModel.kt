@@ -48,10 +48,25 @@ class NoteEditorViewModel @Inject constructor(
     private val _cursorPosition = MutableStateFlow(0)
     val cursorPosition = _cursorPosition.asStateFlow()
 
-    private var activeLinearTextId = MutableStateFlow<String?>(null)
+    private val _activeLinearTextId = MutableStateFlow<String?>(null)
 
     private var autoSaveJob: Job? = null
     private val gemini = GeminiClient()
+
+    private var internalClipboardText: String? = null
+    private var internalClipboardSpans: List<TextSpan>? = null
+
+    fun copyToInternalClipboard(text: String, spans: List<TextSpan>) {
+        internalClipboardText = text
+        internalClipboardSpans = spans
+    }
+
+    fun getInternalClipboard(systemClipboardText: String): Pair<String, List<TextSpan>>? {
+        if (internalClipboardText == systemClipboardText) {
+            return Pair(internalClipboardText!!, internalClipboardSpans ?: emptyList())
+        }
+        return null
+    }
 
     fun loadNote(noteId: Long) {
         viewModelScope.launch {
@@ -98,8 +113,10 @@ class NoteEditorViewModel @Inject constructor(
         mutateContent { content ->
             val page = content.pages[pageIndex]
 
+            val maxLayer = page.linearContent.maxOfOrNull { it.layer } ?: page.items.maxOfOrNull { it.layer } ?: 0
+            
             val obj = NoteObject(
-                layer = page.items.size + 1,
+                layer = maxLayer + 1,
                 type = ObjectType.IMAGE,
                 transform = Transform(x = x, y = y),
                 bounds = Bounds(250f, 200f),
@@ -107,6 +124,29 @@ class NoteEditorViewModel @Inject constructor(
             )
 
             page.upsertObject(obj)
+
+            // Create a new empty text block to chunk text
+            val newEntryId = UUID.randomUUID().toString()
+            val newEntry = LinearContentEntry(
+                id = newEntryId,
+                objectId = null,
+                layer = maxLayer + 2,
+                type = ObjectType.LINEAR_TEXT,
+                value = "",
+                transform = Transform(
+                    x = page.pagePadding.startPoints,
+                    y = y + 220f
+                ),
+                bounds = Bounds(
+                    width = page.widthPoints - page.pagePadding.startPoints - page.pagePadding.endPoints,
+                    height = page.heightPoints - (y + 220f) - page.pagePadding.bottomPoints
+                ),
+                style = page.linearTextStyle
+            )
+            page.linearContent.add(newEntry)
+            page.refreshLinearTextPaste()
+            
+            _uiState.update { it.copy(activeLinearTextId = newEntryId) }
         }
     }
 
@@ -155,6 +195,14 @@ class NoteEditorViewModel @Inject constructor(
         }
     }
 
+    fun setActiveLinearTextId(id: String?) {
+        _uiState.update { it.copy(activeLinearTextId = id) }
+    }
+
+    fun updateGlobalSelection(range: androidx.compose.ui.text.TextRange?) {
+        _uiState.update { it.copy(globalSelection = range) }
+    }
+
     fun clearEditorFocus() {
         _uiState.update {
             it.copy(
@@ -172,8 +220,30 @@ class NoteEditorViewModel @Inject constructor(
     fun updateTextStyle(style: TextStyleData) {
         val selectedId = _uiState.value.selectedObjectId
         val selectedLinearPageId = _uiState.value.selectedLinearPageId
+        val activeLinearTextId = _uiState.value.activeLinearTextId
+        val selection = _uiState.value.globalSelection
 
-        if (selectedId != null) {
+        if (activeLinearTextId != null && selection != null && !selection.collapsed) {
+            mutateContent { content ->
+                content.pages.forEach { page ->
+                    val entryIndex = page.linearContent.indexOfFirst { it.id == activeLinearTextId }
+                    if (entryIndex != -1) {
+                        val entry = page.linearContent[entryIndex]
+                        val minSel = selection.min
+                        val maxSel = selection.max
+                        entry.spans.add(TextSpan(minSel, maxSel, style))
+                        
+                        if (entry.objectId != null) {
+                            val obj = page.items.find { it.id == entry.objectId }
+                            val payload = obj?.payload as? TextPayload
+                            if (payload != null) {
+                                payload.spans.add(TextSpan(minSel, maxSel, style))
+                            }
+                        }
+                    }
+                }
+            }
+        } else if (selectedId != null) {
             mutateContent { content ->
                 content.pages.forEach { page ->
                     val obj = page.items.find { it.id == selectedId } ?: return@forEach
@@ -373,6 +443,13 @@ class NoteEditorViewModel @Inject constructor(
         }
     }
 
+    fun updateLinearTextValueById(pageIndex: Int, id: String, text: String, spans: List<TextSpan>? = null) {
+        mutateContent { content ->
+            val page = content.pages.getOrNull(pageIndex) ?: return@mutateContent
+            page.updateLinearEntry(id = id, textValue = text, spans = spans) 
+        }
+    }
+
     fun updateLinearTextValue(pageIndex: Int, objectId: String, text: String) {
         mutateContent { content ->
             val obj = content.pages[pageIndex].items.find { it.id == objectId } ?: return@mutateContent
@@ -434,6 +511,70 @@ class NoteEditorViewModel @Inject constructor(
                 page.upsertObject(newDrawing)
             }
         }
+    }
+
+    fun eraseStrokesAt(pageIndex: Int, point: Point) {
+        val eraserRadiusSq = 400f // 20f * 20f
+        mutateContent { content ->
+            val page = content.pages.getOrNull(pageIndex) ?: return@mutateContent
+            
+            var changed = false
+            for (obj in page.items) {
+                if (obj.type == ObjectType.DRAWING) {
+                    val payload = obj.payload as? DrawingPayload ?: continue
+                    val strokesToKeep = mutableListOf<Stroke>()
+                    for (stroke in payload.strokes) {
+                        var hit = false
+                        if (stroke.points.isNotEmpty()) {
+                            if (stroke.points.size == 1) {
+                                val p = stroke.points.first()
+                                val dx = p.x - point.x
+                                val dy = p.y - point.y
+                                if (dx * dx + dy * dy <= eraserRadiusSq) hit = true
+                            } else {
+                                for (i in 0 until stroke.points.lastIndex) {
+                                    val p1 = stroke.points[i]
+                                    val p2 = stroke.points[i + 1]
+                                    if (distancePointToSegmentSq(point, p1, p2) <= eraserRadiusSq) {
+                                        hit = true
+                                        break
+                                    }
+                                }
+                            }
+                        }
+                        if (!hit) {
+                            strokesToKeep.add(stroke)
+                        }
+                    }
+                    if (strokesToKeep.size != payload.strokes.size) {
+                        changed = true
+                        obj.payload = payload.copy(strokes = strokesToKeep)
+                    }
+                }
+            }
+            
+            val initialSize = page.items.size
+            page.items.removeAll { it.type == ObjectType.DRAWING && (it.payload as? DrawingPayload)?.strokes?.isEmpty() == true }
+            if (initialSize != page.items.size) {
+                changed = true
+            }
+        }
+    }
+
+    private fun distancePointToSegmentSq(p: Point, a: Point, b: Point): Float {
+        val l2 = (b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y)
+        if (l2 == 0f) {
+            val dx = p.x - a.x
+            val dy = p.y - a.y
+            return dx * dx + dy * dy
+        }
+        var t = ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / l2
+        t = t.coerceIn(0f, 1f)
+        val projX = a.x + t * (b.x - a.x)
+        val projY = a.y + t * (b.y - a.y)
+        val dx = p.x - projX
+        val dy = p.y - projY
+        return dx * dx + dy * dy
     }
 
     // ---------------- MOVE ----------------
