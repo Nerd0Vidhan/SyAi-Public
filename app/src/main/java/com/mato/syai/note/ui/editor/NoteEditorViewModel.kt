@@ -223,21 +223,36 @@ class NoteEditorViewModel @Inject constructor(
         val activeLinearTextId = _uiState.value.activeLinearTextId
         val selection = _uiState.value.globalSelection
 
-        if (activeLinearTextId != null && selection != null && !selection.collapsed) {
+        if (activeLinearTextId != null) {
             mutateContent { content ->
                 content.pages.forEach { page ->
                     val entryIndex = page.linearContent.indexOfFirst { it.id == activeLinearTextId }
                     if (entryIndex != -1) {
                         val entry = page.linearContent[entryIndex]
-                        val minSel = selection.min
-                        val maxSel = selection.max
-                        entry.spans.add(TextSpan(minSel, maxSel, style))
                         
-                        if (entry.objectId != null) {
-                            val obj = page.items.find { it.id == entry.objectId }
-                            val payload = obj?.payload as? TextPayload
-                            if (payload != null) {
-                                payload.spans.add(TextSpan(minSel, maxSel, style))
+                        if (selection != null && !selection.collapsed) {
+                            val minSel = selection.min
+                            val maxSel = selection.max
+                            entry.spans.add(TextSpan(minSel, maxSel, style))
+                            entry.style = entry.style.copy(alignment = style.alignment)
+                            
+                            if (entry.objectId != null) {
+                                val obj = page.items.find { it.id == entry.objectId }
+                                val payload = obj?.payload as? TextPayload
+                                if (payload != null) {
+                                    payload.spans.add(TextSpan(minSel, maxSel, style))
+                                    payload.style = payload.style.copy(alignment = style.alignment)
+                                }
+                            }
+                        } else {
+                            // Update whole block style
+                            entry.style = style
+                            if (entry.objectId != null) {
+                                val obj = page.items.find { it.id == entry.objectId }
+                                val payload = obj?.payload as? TextPayload
+                                if (payload != null) {
+                                    payload.style = style
+                                }
                             }
                         }
                     }
@@ -469,6 +484,38 @@ class NoteEditorViewModel @Inject constructor(
 
     fun setCursorPosition(pos: Int) {
         _cursorPosition.value = pos
+        
+        val activeLinearTextId = _uiState.value.activeLinearTextId
+        val selectedObjectId = _uiState.value.selectedObjectId
+        
+        var resolvedStyle: TextStyleData? = null
+        
+        if (activeLinearTextId != null) {
+            val content = _uiState.value.content
+            content.pages.forEach { page ->
+                val entry = page.linearContent.find { it.id == activeLinearTextId }
+                if (entry != null) {
+                    val checkPos = if (pos > 0) pos - 1 else 0
+                    val span = entry.spans.find { checkPos >= it.start && checkPos < it.end }
+                    resolvedStyle = span?.style?.copy(alignment = entry.style.alignment) ?: entry.style
+                }
+            }
+        } else if (selectedObjectId != null) {
+             val content = _uiState.value.content
+             content.pages.forEach { page ->
+                 val obj = page.items.find { it.id == selectedObjectId }
+                 val payload = obj?.payload as? TextPayload
+                 if (payload != null) {
+                    val checkPos = if (pos > 0) pos - 1 else 0
+                    val span = payload.spans.find { checkPos >= it.start && checkPos < it.end }
+                    resolvedStyle = span?.style?.copy(alignment = payload.style.alignment) ?: payload.style
+                 }
+             }
+        }
+        
+        if (resolvedStyle != null) {
+            _uiState.update { it.copy(textStyle = resolvedStyle!!) }
+        }
     }
 
     fun updateObjectPayload(pageIndex: Int, objectId: String, payload: ObjectPayload) {
