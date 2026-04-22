@@ -19,8 +19,11 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicTextField
@@ -63,9 +66,11 @@ import androidx.compose.ui.platform.LocalDensity
 import com.mato.syai.note.domain.local.model.PageSize
 import com.mato.syai.note.domain.local.model.PageUnitConverter
 import com.mato.syai.note.domain.local.model.TextPayload
+import com.mato.syai.note.utils.RichTextParser
 import kotlin.math.max
 import kotlin.math.min
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ManualLinearTextEditor(
     payload: TextPayload,
@@ -73,7 +78,9 @@ fun ManualLinearTextEditor(
     uiScale: Float = 1f,
     isSelected: Boolean,
     onTextChange: (String) -> Unit,
-    onSelectionChange: (Int) -> Unit
+    onSelectionChange: (Int) -> Unit,
+    onCopy: (String, Int, Int) -> Unit = { _, _, _ -> },
+    onPaste: (Int) -> Unit = { _ -> }
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusRequester = remember { FocusRequester() }
@@ -81,6 +88,8 @@ fun ManualLinearTextEditor(
     val context = LocalContext.current
     val hostView = LocalView.current
     val density = LocalDensity.current
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    val isImeVisible = WindowInsets.isImeVisible
 
     var hiddenInput by remember(payload.text) {
         mutableStateOf(
@@ -126,6 +135,14 @@ fun ManualLinearTextEditor(
         }
     }
 
+    var wasImeVisible by remember { mutableStateOf(isImeVisible) }
+    LaunchedEffect(isImeVisible) {
+        if (wasImeVisible && !isImeVisible && isFocused) {
+            focusManager.clearFocus()
+        }
+        wasImeVisible = isImeVisible
+    }
+
     DisposableEffect(Unit) {
         onDispose {
             selectionActionMode?.finish()
@@ -134,7 +151,7 @@ fun ManualLinearTextEditor(
 
     val textStyle = TextStyle(
         color = androidx.compose.ui.graphics.Color(payload.style.color),
-        fontSize = PageUnitConverter.pointsToSp(payload.style.fontSize * uiScale, PageSize.A4).sp,
+        fontSize = (PageUnitConverter.pointsToSp(payload.style.fontSize * uiScale, PageSize.A4) / density.fontScale).sp,
         fontWeight = if (payload.style.isBold) FontWeight.Bold else FontWeight.Normal,
         fontStyle = if (payload.style.isItalic) FontStyle.Italic else FontStyle.Normal,
         textAlign = when (payload.style.alignment) {
@@ -145,12 +162,22 @@ fun ManualLinearTextEditor(
         }
     )
 
-    val measuredLayout = remember(hiddenInput.text, hiddenInput.selection, textStyle, canvasSize) {
+    val annotatedText = remember(hiddenInput.text, payload.spans, payload.style, uiScale, density.fontScale) {
+        RichTextParser.buildRichText(
+            text = hiddenInput.text.ifEmpty { " " },
+            defaultStyle = payload.style,
+            spans = payload.spans,
+            uiScale = uiScale,
+            fontScale = density.fontScale
+        )
+    }
+
+    val measuredLayout = remember(annotatedText, textStyle, canvasSize) {
         if (canvasSize.width <= 0) {
             null
         } else {
             textMeasurer.measure(
-                text = hiddenInput.text.ifEmpty { " " },
+                text = annotatedText,
                 style = textStyle,
                 maxLines = Int.MAX_VALUE,
                 constraints = Constraints(maxWidth = canvasSize.width)
@@ -181,7 +208,9 @@ fun ManualLinearTextEditor(
                         context = context,
                         getSelection = { hiddenInput.selection },
                         getText = { hiddenInput.text },
-                        onSelectionUpdate = { newSelection -> updateSelection(newSelection) }
+                        onSelectionUpdate = { newSelection -> updateSelection(newSelection) },
+                        onCopy = onCopy,
+                        onPaste = { onPaste(hiddenInput.selection.start) }
                     )
                     selectionActionModeCallback = callback
                     selectionActionMode = hostView.startActionMode(callback, ActionMode.TYPE_FLOATING)
@@ -241,9 +270,43 @@ fun ManualLinearTextEditor(
 
             val selection = hiddenInput.selection
             if (!selection.collapsed) {
+                val minSelection = selection.min
+                val maxSelection = selection.max
+                
                 drawPath(
-                    path = layout.getPathForRange(selection.start, selection.end),
+                    path = layout.getPathForRange(minSelection, maxSelection),
                     color = androidx.compose.ui.graphics.Color(0x334F46E5)
+                )
+                
+                // Draw teardrops
+                val startCursorRect = layout.getCursorRect(minSelection)
+                val endCursorRect = layout.getCursorRect(maxSelection)
+                val primaryColor = androidx.compose.ui.graphics.Color(0xFF4F46E5)
+                
+                // Start handle
+                drawLine(
+                    color = primaryColor,
+                    start = Offset(startCursorRect.left, startCursorRect.top),
+                    end = Offset(startCursorRect.left, startCursorRect.bottom),
+                    strokeWidth = 2.dp.toPx()
+                )
+                drawCircle(
+                    color = primaryColor,
+                    radius = 6.dp.toPx(),
+                    center = Offset(startCursorRect.left, startCursorRect.bottom + 4.dp.toPx())
+                )
+                
+                // End handle
+                drawLine(
+                    color = primaryColor,
+                    start = Offset(endCursorRect.left, endCursorRect.top),
+                    end = Offset(endCursorRect.left, endCursorRect.bottom),
+                    strokeWidth = 2.dp.toPx()
+                )
+                drawCircle(
+                    color = primaryColor,
+                    radius = 6.dp.toPx(),
+                    center = Offset(endCursorRect.left, endCursorRect.bottom + 4.dp.toPx())
                 )
             }
 
@@ -290,14 +353,17 @@ private class TextSelectionActionModeCallback(
     private val context: Context,
     private val getSelection: () -> TextRange,
     private val getText: () -> String,
-    private val onSelectionUpdate: (TextRange) -> Unit
+    private val onSelectionUpdate: (TextRange) -> Unit,
+    private val onCopy: (String, Int, Int) -> Unit,
+    private val onPaste: () -> Unit
 ) : ActionMode.Callback2() {
 
     var contentRect: Rect = Rect()
 
     override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean {
         menu?.add(0, android.R.id.copy, 0, android.R.string.copy)
-        menu?.add(0, android.R.id.selectAll, 1, android.R.string.selectAll)
+        menu?.add(0, android.R.id.paste, 1, android.R.string.paste)
+        menu?.add(0, android.R.id.selectAll, 2, android.R.string.selectAll)
         return true
     }
 
@@ -309,10 +375,16 @@ private class TextSelectionActionModeCallback(
                 val selection = getSelection()
                 val text = getText()
                 if (!selection.collapsed) {
-                    val selectedText = text.substring(selection.start, selection.end)
+                    val selectedText = text.substring(selection.min, selection.max)
+                    onCopy(selectedText, selection.min, selection.max)
                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                     clipboard.setPrimaryClip(ClipData.newPlainText("selected_text", selectedText))
                 }
+                mode?.finish()
+                return true
+            }
+            android.R.id.paste -> {
+                onPaste()
                 mode?.finish()
                 return true
             }
@@ -340,8 +412,10 @@ private fun calculateSelectionRect(
     containerInWindow: Offset
 ): Rect? {
     if (layout == null || selection.collapsed) return null
-    val endIndex = (selection.end - 1).coerceAtLeast(selection.start)
-    val startBox = layout.getBoundingBox(selection.start)
+    val minIndex = selection.min
+    val maxIndex = selection.max
+    val endIndex = (maxIndex - 1).coerceAtLeast(minIndex)
+    val startBox = layout.getBoundingBox(minIndex)
     val endBox = layout.getBoundingBox(endIndex)
     return Rect(
         (containerInWindow.x + min(startBox.left, endBox.left)).toInt(),

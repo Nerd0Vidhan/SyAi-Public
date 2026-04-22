@@ -1,5 +1,7 @@
 package com.mato.syai.note.ui.editor
 
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.util.Log
@@ -16,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -54,6 +57,8 @@ import com.mato.syai.note.domain.local.model.*
 import com.mato.syai.utils.GlassEffect
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.zIndex
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -61,7 +66,7 @@ private val PrimaryDark = Color(0xFF0D0127)
 private val SecondaryCream = Color(0xFFF8E0C3)
 val AuraPurple = Color(0xFF3F2A7A)
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun NoteEditorScreen(
     noteId: Long,
@@ -96,10 +101,7 @@ fun NoteEditorScreen(
     val current = state.currentPageIndex
 
     var selectionRect by remember { mutableStateOf<Rect?>(null) }
-
-    val visiblePages = pages.mapIndexedNotNull { index, page ->
-        if (index in (current - 3)..(current + 3)) index to page else null
-    }
+    val isImeVisible = WindowInsets.isImeVisible
 
     var titleField by remember { mutableStateOf(TextFieldValue("")) }
 
@@ -183,41 +185,82 @@ fun NoteEditorScreen(
                 CircularProgressIndicator(color = SecondaryCream)
             }
         } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .background(PrimaryDark),
-                state = listState,
-                horizontalAlignment = Alignment.CenterHorizontally,
-                contentPadding = PaddingValues(vertical = 24.dp)
-            ) {
-                itemsIndexed(visiblePages) { _, entry ->
-                    val pageIndex = entry.first
-                    val page = entry.second
-                    NotePage(
-                        pageIndex = pageIndex,
-                        page = page,
-                        state = state,
-                        viewModel = viewModel
-                    )
-                    Spacer(modifier = Modifier.height(28.dp))
-                    LaunchedEffect(pageIndex) {
-                        viewModel.ensureNextPageIfNeeded(
-                            pageIndex,
-                            currentY = 0f,
-                            pageHeight = 1000f
+            Box(modifier = Modifier.fillMaxSize()) {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding)
+                        .background(PrimaryDark),
+                    state = listState,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    contentPadding = PaddingValues(vertical = 24.dp)
+                ) {
+                    itemsIndexed(pages) { pageIndex, page ->
+                        NotePage(
+                            pageIndex = pageIndex,
+                            page = page,
+                            state = state,
+                            viewModel = viewModel
                         )
+                        Spacer(modifier = Modifier.height(28.dp))
+                        LaunchedEffect(pageIndex) {
+                            viewModel.ensureNextPageIfNeeded(
+                                pageIndex,
+                                currentY = 0f,
+                                pageHeight = 1000f
+                            )
+                        }
+                    }
+
+                    item {
+                        TextButton(onClick = { viewModel.addPage() }) {
+                            Icon(Icons.Default.NoteAdd, contentDescription = null, tint = SecondaryCream)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Add page", color = SecondaryCream)
+                        }
+                        Spacer(modifier = Modifier.height(120.dp))
                     }
                 }
 
-                item {
-                    TextButton(onClick = { viewModel.addPage() }) {
-                        Icon(Icons.Default.NoteAdd, contentDescription = null, tint = SecondaryCream)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Add page", color = SecondaryCream)
+                // Custom Scrollbar Overlay
+                val isScrollInProgress = listState.isScrollInProgress
+                var showScrollbar by remember { mutableStateOf(false) }
+
+                LaunchedEffect(isScrollInProgress) {
+                    if (isScrollInProgress) {
+                        showScrollbar = true
+                    } else {
+                        kotlinx.coroutines.delay(1500)
+                        showScrollbar = false
                     }
-                    Spacer(modifier = Modifier.height(120.dp))
+                }
+
+                if (showScrollbar && pages.isNotEmpty()) {
+                    val firstVisible = listState.firstVisibleItemIndex.coerceIn(0, pages.size - 1)
+                    val totalPages = pages.size
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .padding(end = 16.dp, top = padding.calculateTopPadding() + 64.dp)
+                            .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = "${firstVisible + 1} / $totalPages",
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+                
+                // Hovering Text Toolbar
+                if (isImeVisible && (state.activeTool == ActiveTool.LINEAR_TEXT || state.activeTool == ActiveTool.TEXT)) {
+                    HoveringTextToolbar(
+                        style = state.textStyle,
+                        onStyleChange = viewModel::updateTextStyle,
+                        modifier = Modifier.align(Alignment.BottomCenter).imePadding()
+                    )
                 }
             }
         }
@@ -400,6 +443,8 @@ fun NotePage(
     var pageHeightPx by remember { mutableStateOf(1) }
     var pageWidthPx by remember { mutableStateOf(1) }
     var selectionRect by remember { mutableStateOf<Rect?>(null) }
+    val context = LocalContext.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     val pageScaleX = pageWidthPx / page.widthPoints.coerceAtLeast(1f)
     val pageScaleY = pageHeightPx / page.heightPoints.coerceAtLeast(1f)
 
@@ -439,6 +484,7 @@ fun NotePage(
                         ActiveTool.LINEAR_TEXT -> {
                             viewModel.handlePageTapForLinearText(pageIndex, offset.x / pageScaleX, offset.y / pageScaleY)
                             viewModel.selectLinearPage(page.pageId)
+                            keyboardController?.show()
                         }
 
                         else -> Unit
@@ -489,6 +535,7 @@ fun NotePage(
                                         BrushStyle.MARKER -> Color(stroke.color).copy(alpha = 0.9f)
                                         BrushStyle.HIGHLIGHTER -> Color(stroke.color).copy(alpha = 0.35f)
                                         BrushStyle.PEN -> Color(stroke.color)
+                                        BrushStyle.ERASER -> Color(stroke.color)
                                     },
                                     start = Offset(stroke.points[i].x * pageScaleX, stroke.points[i].y * pageScaleY),
                                     end = Offset(stroke.points[i + 1].x * pageScaleX, stroke.points[i + 1].y * pageScaleY),
@@ -497,6 +544,7 @@ fun NotePage(
                                         BrushStyle.MARKER -> stroke.width * pageScaleX * 1.2f
                                         BrushStyle.HIGHLIGHTER -> stroke.width * pageScaleX * 1.5f
                                         BrushStyle.PEN -> stroke.width * pageScaleX
+                                        BrushStyle.ERASER -> stroke.width * pageScaleX
                                     },
                                     cap = StrokeCap.Round
                                 )
@@ -506,7 +554,8 @@ fun NotePage(
                 }
         }
 
-        page.primaryLinearEntry?.let { entry ->
+        val allTextBlocks = page.linearContent.filter { it.type == ObjectType.LINEAR_TEXT }
+        allTextBlocks.forEach { entry ->
             Box(
                 modifier = Modifier
                     .offset {
@@ -515,23 +564,59 @@ fun NotePage(
                             (entry.transform.y * pageScaleY).roundToInt()
                         )
                     }
+                    .zIndex(entry.layer.toFloat())
                     .padding(2.dp)
             ) {
                 ManualLinearTextEditor(
                     payload = TextPayload(
                         text = entry.value,
-                        style = entry.style
+                        style = entry.style,
+                        spans = entry.spans
                     ),
                     widthPoints = entry.bounds.width,
                     uiScale = pageScaleY,
-                    isSelected = state.selectedLinearPageId == page.pageId && state.activeTool == ActiveTool.LINEAR_TEXT && !state.isViewOnly,
+                    isSelected = state.selectedLinearPageId == page.pageId && state.activeTool == ActiveTool.LINEAR_TEXT && !state.isViewOnly && state.activeLinearTextId == entry.id,
                     onTextChange = { newText ->
-                        viewModel.updatePageLinearText(pageIndex, newText)
+                        viewModel.updateLinearTextValueById(pageIndex, entry.id, newText)
                     },
                     onSelectionChange = { cursor ->
                         viewModel.selectPage(pageIndex)
                         viewModel.selectLinearPage(page.pageId)
+                        viewModel.setActiveLinearTextId(entry.id)
                         viewModel.setCursorPosition(cursor)
+                    },
+                    onCopy = { copiedText, start, end ->
+                        val copiedSpans = entry.spans.mapNotNull {
+                            val overlapStart = kotlin.math.max(it.start, start)
+                            val overlapEnd = kotlin.math.min(it.end, end)
+                            if (overlapStart < overlapEnd) {
+                                it.copy(start = overlapStart - start, end = overlapEnd - start)
+                            } else null
+                        }
+                        viewModel.copyToInternalClipboard(copiedText, copiedSpans)
+                    },
+                    onPaste = { pasteIndex ->
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        val clip = clipboard.primaryClip
+                        if (clip != null && clip.itemCount > 0) {
+                            val textToPaste = clip.getItemAt(0).text?.toString() ?: ""
+                            val internalData = viewModel.getInternalClipboard(textToPaste)
+                            val newText = entry.value.take(pasteIndex) + textToPaste + entry.value.substring(pasteIndex)
+                            
+                            val shiftedSpans = entry.spans.map {
+                                if (it.start >= pasteIndex) it.copy(start = it.start + textToPaste.length, end = it.end + textToPaste.length)
+                                else if (it.end > pasteIndex) it.copy(end = it.end + textToPaste.length)
+                                else it
+                            }
+                            
+                            val combinedSpans = if (internalData != null) {
+                                shiftedSpans + internalData.second.map { it.copy(start = it.start + pasteIndex, end = it.end + pasteIndex) }
+                            } else {
+                                shiftedSpans
+                            }
+                            
+                            viewModel.updateLinearTextValueById(pageIndex, entry.id, newText, combinedSpans)
+                        }
                     }
                 )
             }
@@ -543,10 +628,14 @@ fun NotePage(
                 pageIndex = pageIndex,
                 drawColor = state.drawColor,
                 drawWidth = state.drawWidth,
+                brushStyle = state.brushStyle,
                 pageScaleX = pageScaleX,
                 pageScaleY = pageScaleY,
                 onStrokeFinished = { stroke ->
                     viewModel.addStroke(pageIndex, stroke)
+                },
+                onErase = { point ->
+                    viewModel.eraseStrokesAt(pageIndex, point)
                 },
                 modifier = Modifier.fillMaxSize()
             )
@@ -599,30 +688,43 @@ fun DrawingCanvas(
     pageIndex: Int,
     drawColor: Int,
     drawWidth: Float,
+    brushStyle: BrushStyle,
     pageScaleX: Float,
     pageScaleY: Float,
     onStrokeFinished: (com.mato.syai.note.domain.local.model.Stroke) -> Unit,
+    onErase: (Point) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var currentPoints by remember(pageIndex) { mutableStateOf<List<Point>>(emptyList()) }
 
     Canvas(
-        modifier = modifier.pointerInput(drawColor, drawWidth) {
+        modifier = modifier.pointerInput(drawColor, drawWidth, brushStyle) {
             detectDragGestures(
                 onDragStart = { offset ->
-                    currentPoints = listOf(Point(x = offset.x / pageScaleX, y = offset.y / pageScaleY))
+                    val p = Point(x = offset.x / pageScaleX, y = offset.y / pageScaleY)
+                    if (brushStyle == BrushStyle.ERASER) {
+                        onErase(p)
+                    } else {
+                        currentPoints = listOf(p)
+                    }
                 },
                 onDrag = { change, _ ->
                     change.consume()
-                    currentPoints = currentPoints + Point(x = change.position.x / pageScaleX, y = change.position.y / pageScaleY)
+                    val p = Point(x = change.position.x / pageScaleX, y = change.position.y / pageScaleY)
+                    if (brushStyle == BrushStyle.ERASER) {
+                        onErase(p)
+                    } else {
+                        currentPoints = currentPoints + p
+                    }
                 },
                 onDragEnd = {
-                    if (currentPoints.size > 1) {
+                    if (brushStyle != BrushStyle.ERASER && currentPoints.size > 1) {
                         onStrokeFinished(
                             Stroke(
                                 color = drawColor,
                                 width = drawWidth / pageScaleX,
-                                points = currentPoints
+                                points = currentPoints,
+                                brushStyle = brushStyle
                             )
                         )
                     }
@@ -671,6 +773,7 @@ fun RenderObject(
                     (obj.transform.y * pageScaleY).roundToInt()
                 )
             }
+            .zIndex(obj.layer.toFloat())
 
             // 🔥 DRAG SYSTEM
             .pointerInput(isDraggable) {
@@ -776,6 +879,7 @@ fun RenderObject(
                                         BrushStyle.MARKER -> Color(stroke.color).copy(alpha = 0.9f)
                                         BrushStyle.HIGHLIGHTER -> Color(stroke.color).copy(alpha = 0.35f)
                                         BrushStyle.PEN -> Color(stroke.color)
+                                        BrushStyle.ERASER -> Color(stroke.color)
                                     },
                                     start = Offset(
                                         (stroke.points[i].x - obj.transform.x) * pageScaleX,
@@ -790,6 +894,7 @@ fun RenderObject(
                                         BrushStyle.MARKER -> stroke.width * pageScaleX * 1.2f
                                         BrushStyle.HIGHLIGHTER -> stroke.width * pageScaleX * 1.5f
                                         BrushStyle.PEN -> stroke.width * pageScaleX
+                                        BrushStyle.ERASER -> stroke.width * pageScaleX
                                     },
                                     cap = StrokeCap.Round
                                 )
@@ -899,6 +1004,7 @@ fun RenderTextBlock(
     )
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun EditorBottomToolbar(
     state: EditorState,
@@ -913,6 +1019,27 @@ fun EditorBottomToolbar(
     onDelete:()-> Unit,
     onListSelection :(ListMarker)-> Unit
 ){
+    var showColorPicker by remember { mutableStateOf(false) }
+    val isImeVisible = WindowInsets.isImeVisible
+    val currentColor = when (state.activeTool) {
+        ActiveTool.DRAW -> state.drawColor
+        else -> state.textStyle.color
+    }
+
+    if (showColorPicker) {
+        ColorPickerBottomSheet(
+            initialColor = currentColor,
+            onColorSelected = { color ->
+                when (state.activeTool) {
+                    ActiveTool.DRAW -> onDrawColorChange(color)
+                    ActiveTool.LINEAR_TEXT, ActiveTool.TEXT, ActiveTool.LIST -> onTextColorChange(color)
+                    else -> onTextColorChange(color)
+                }
+            },
+            onDismissRequest = { showColorPicker = false }
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -920,12 +1047,13 @@ fun EditorBottomToolbar(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         when (state.activeTool) {
-            ActiveTool.TEXT -> {
-                TextToolSubToolbar(
-                    style = state.textStyle,
-                    onStyleChange = onTextStyleChange,
-                    onColorChange =onTextColorChange
-                )
+            ActiveTool.TEXT, ActiveTool.LINEAR_TEXT -> {
+                if (!isImeVisible) {
+                    HoveringTextToolbar(
+                        style = state.textStyle,
+                        onStyleChange = onTextStyleChange
+                    )
+                }
             }
 
             ActiveTool.DRAW -> {
@@ -950,24 +1078,8 @@ fun EditorBottomToolbar(
             else -> Unit
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        // Removed UniversalColorToolbar
 
-        UniversalColorToolbar(
-            activeTool = state.activeTool,
-            selectedColor = when (state.activeTool) {
-                ActiveTool.DRAW -> Color(state.drawColor)
-                else -> Color(state.textStyle.color)
-            },
-            onColorSelected = { color ->
-                when (state.activeTool) {
-                    ActiveTool.DRAW -> onDrawColorChange(color.toArgb())
-                    ActiveTool.LINEAR_TEXT, ActiveTool.TEXT, ActiveTool.LIST -> onTextColorChange(color.toArgb())
-                    else -> onTextColorChange(color.toArgb())
-                }
-            }
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
 
         EditorGlassContainer(
             modifier = Modifier
@@ -981,6 +1093,14 @@ fun EditorBottomToolbar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
+                ColorCircle(
+                    color = Color(currentColor),
+                    selected = false,
+                    onClick = { showColorPicker = true }
+                )
+                
+                Spacer(modifier = Modifier.width(8.dp))
+                
                 ToolbarIcon(Icons.Default.EditNote, state.activeTool == ActiveTool.LINEAR_TEXT) {
                     onToolSelect(ActiveTool.LINEAR_TEXT)
                 }
@@ -1014,52 +1134,7 @@ fun EditorBottomToolbar(
     }
 }
 
-@Composable
-fun UniversalColorToolbar(
-    activeTool: ActiveTool,
-    selectedColor: Color,
-    onColorSelected: (Color) -> Unit
-) {
-    val palette = listOf(
-        Color(0xFF111827),
-        Color(0xFFB91C1C),
-        Color(0xFF1D4ED8),
-        Color(0xFF047857),
-        Color(0xFF7C3AED),
-        Color(0xFFF59E0B)
-    )
-
-    EditorGlassContainer(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 14.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Text(
-                text = when (activeTool) {
-                    ActiveTool.DRAW -> "Brush"
-                    ActiveTool.LIST -> "List"
-                    else -> "Text"
-                },
-                color = Color.White,
-                fontSize = 12.sp
-            )
-            palette.forEach { color ->
-                ColorCircle(
-                    color = color,
-                    selected = color == selectedColor,
-                    onClick = { onColorSelected(color) }
-                )
-            }
-        }
-    }
-}
+// Removed UniversalColorToolbar
 
 @Composable
 fun ToolbarIcon(
@@ -1081,86 +1156,7 @@ fun ToolbarIcon(
     }
 }
 
-@Composable
-fun TextToolSubToolbar(
-    style: TextStyleData,
-    onStyleChange: (TextStyleData) -> Unit,
-    onColorChange: (Int) -> Unit
-) {
-    EditorGlassContainer(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 14.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-
-            // STYLE
-            ToolbarIcon(Icons.Default.FormatBold, style.isBold) {
-                onStyleChange(style.copy(isBold = !style.isBold))
-            }
-
-            ToolbarIcon(Icons.Default.FormatItalic, style.isItalic) {
-                onStyleChange(style.copy(isItalic = !style.isItalic))
-            }
-
-            ToolbarIcon(Icons.Default.FormatUnderlined, style.isUnderline) {
-                onStyleChange(style.copy(isUnderline = !style.isUnderline))
-            }
-
-            ToolbarIcon(Icons.Default.FormatAlignLeft, style.alignment == "LEFT") {
-                onStyleChange(style.copy(alignment = "LEFT"))
-            }
-
-            ToolbarIcon(Icons.Default.FormatAlignCenter, style.alignment == "CENTER") {
-                onStyleChange(style.copy(alignment = "CENTER"))
-            }
-
-            ToolbarIcon(Icons.Default.FormatAlignRight, style.alignment == "RIGHT") {
-                onStyleChange(style.copy(alignment = "RIGHT"))
-            }
-
-            Spacer(modifier = Modifier.width(10.dp))
-
-            // 🎨 COLOR PICKER
-            ColorCircle(Color.Black, false) {
-                onColorChange(Color.Black.toArgb())
-            }
-
-            ColorCircle(Color.Red, false) {
-                onColorChange(Color.Red.toArgb())
-            }
-
-            ColorCircle(Color.Blue, false) {
-                onColorChange(Color.Blue.toArgb())
-            }
-
-            ColorCircle(Color.Green, false) {
-                onColorChange(Color.Green.toArgb())
-            }
-
-            Spacer(modifier = Modifier.width(10.dp))
-
-            // SIZE
-            Text(
-                text = "Size: ${style.fontSize.toInt()}",
-                color = Color.White,
-                fontSize = 12.sp
-            )
-
-            Slider(
-                value = style.fontSize,
-                onValueChange = { onStyleChange(style.copy(fontSize = it)) },
-                valueRange = 10f..40f,
-                modifier = Modifier.width(140.dp)
-            )
-        }
-    }
-}
+// Removed TextToolSubToolbar
 
 @Composable
 fun DrawToolSubToolbar(
@@ -1182,21 +1178,6 @@ fun DrawToolSubToolbar(
                 .padding(horizontal = 10.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            ColorCircle(Color.Black, color == Color.Black.toArgb()) {
-                onColorChange(Color.Black.toArgb())
-            }
-            ColorCircle(Color.Red, color == Color.Red.toArgb()) {
-                onColorChange(Color.Red.toArgb())
-            }
-            ColorCircle(Color.Blue, color == Color.Blue.toArgb()) {
-                onColorChange(Color.Blue.toArgb())
-            }
-            ColorCircle(Color.Green, color == Color.Green.toArgb()) {
-                onColorChange(Color.Green.toArgb())
-            }
-
-            Spacer(modifier = Modifier.width(10.dp))
-
             ToolbarIcon(Icons.Default.Edit, brushStyle == BrushStyle.PEN) {
                 onBrushStyleChange(BrushStyle.PEN)
             }
@@ -1208,6 +1189,9 @@ fun DrawToolSubToolbar(
             }
             ToolbarIcon(Icons.Default.FormatPaint, brushStyle == BrushStyle.HIGHLIGHTER) {
                 onBrushStyleChange(BrushStyle.HIGHLIGHTER)
+            }
+            ToolbarIcon(Icons.Default.Clear, brushStyle == BrushStyle.ERASER) {
+                onBrushStyleChange(BrushStyle.ERASER)
             }
 
             Spacer(modifier = Modifier.width(10.dp))
@@ -1254,7 +1238,6 @@ fun EditorGlassContainer(
         GlassEffect(
             modifier = modifier,
             cornerRadius = 24.dp,
-            glassTintColor = Color(0x11000000).copy(alpha = 0.5f),
             content = content
         )
     } else {

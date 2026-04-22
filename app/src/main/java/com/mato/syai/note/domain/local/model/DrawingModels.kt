@@ -10,4 +10,10 @@ data class SerializablePath(
 
 data class PointData(val x: Float, val y: Float)
 
-enum class BrushStyle { PEN, PENCIL, MARKER, HIGHLIGHTER }
+enum class BrushStyle {
+    PEN,
+    PENCIL,
+    MARKER,
+    HIGHLIGHTER,
+    ERASER
+}
