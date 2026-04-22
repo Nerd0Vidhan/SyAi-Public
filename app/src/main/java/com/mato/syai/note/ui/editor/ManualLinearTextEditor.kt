@@ -66,6 +66,8 @@ import androidx.compose.ui.platform.LocalDensity
 import com.mato.syai.note.domain.local.model.PageSize
 import com.mato.syai.note.domain.local.model.PageUnitConverter
 import com.mato.syai.note.domain.local.model.TextPayload
+import com.mato.syai.note.domain.local.model.TextSpan
+import com.mato.syai.note.domain.local.model.TextStyleData
 import com.mato.syai.note.utils.RichTextParser
 import kotlin.math.max
 import kotlin.math.min
@@ -77,8 +79,9 @@ fun ManualLinearTextEditor(
     widthPoints: Float,
     uiScale: Float = 1f,
     isSelected: Boolean,
-    onTextChange: (String) -> Unit,
-    onSelectionChange: (Int) -> Unit,
+    activeStyle: TextStyleData,
+    onTextChange: (String, List<TextSpan>) -> Unit,
+    onSelectionChange: (TextRange) -> Unit,
     onCopy: (String, Int, Int) -> Unit = { _, _, _ -> },
     onPaste: (Int) -> Unit = { _ -> }
 ) {
@@ -195,7 +198,7 @@ fun ManualLinearTextEditor(
 
     fun updateSelection(selection: TextRange) {
         hiddenInput = hiddenInput.copy(selection = selection)
-        onSelectionChange(selection.end)
+        onSelectionChange(selection)
         if (!selection.collapsed && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val contentRect = calculateSelectionRect(
                 layout = latestLayout,
@@ -227,7 +230,7 @@ fun ManualLinearTextEditor(
 
     Box(
         modifier = Modifier
-            .width(PageUnitConverter.pointsToDp(widthPoints * uiScale, PageSize.A4).dp)
+            .width(with(density) { (widthPoints * uiScale).toDp() })
             .heightIn(min = contentHeightDp)
             .onSizeChanged { canvasSize = it }
             .onGloballyPositioned { coordinates ->
@@ -240,6 +243,8 @@ fun ManualLinearTextEditor(
                         val layout = latestLayout ?: return@detectTapGestures
                         val position = layout.getOffsetForPosition(offset)
                         updateSelection(TextRange(position))
+                        focusRequester.requestFocus()
+                        keyboardController?.show()
                     },
                     onLongPress = { offset ->
                         val layout = latestLayout ?: return@detectTapGestures
@@ -325,14 +330,56 @@ fun ManualLinearTextEditor(
 
         BasicTextField(
             value = hiddenInput,
-            onValueChange = {
+            onValueChange = { newValue ->
                 val previousSelection = hiddenInput.selection
-                hiddenInput = it
-                onTextChange(it.text)
-                onSelectionChange(it.selection.end)
-                if (it.selection != previousSelection) {
-                    updateSelection(it.selection)
-                } else if (it.selection.collapsed) {
+                val oldText = hiddenInput.text
+                val newText = newValue.text
+                
+                var newSpans = payload.spans.toList()
+                
+                val commonPrefixLen = oldText.commonPrefixWith(newText).length
+                val commonSuffixLen = oldText.reversed().commonPrefixWith(newText.reversed()).length
+                
+                val overlap = (commonPrefixLen + commonSuffixLen) - min(oldText.length, newText.length)
+                val safeSuffixLen = if (overlap > 0) commonSuffixLen - overlap else commonSuffixLen
+                
+                val replaceStart = commonPrefixLen
+                val oldReplaceEnd = oldText.length - safeSuffixLen
+                val newReplaceEnd = newText.length - safeSuffixLen
+                
+                val deletedLen = oldReplaceEnd - replaceStart
+                val insertedLen = newReplaceEnd - replaceStart
+                val delta = insertedLen - deletedLen
+                
+                if (delta != 0 || insertedLen > 0) {
+                    newSpans = newSpans.mapNotNull { span ->
+                        var start = span.start
+                        var end = span.end
+                        
+                        if (end > replaceStart) {
+                            if (end <= oldReplaceEnd) end = replaceStart
+                            else end += delta
+                        }
+                        
+                        if (start >= replaceStart) {
+                            if (start < oldReplaceEnd) start = replaceStart + insertedLen
+                            else start += delta
+                        }
+                        
+                        if (start < end) span.copy(start = start, end = end) else null
+                    }
+                }
+                
+                if (insertedLen > 0) {
+                    newSpans = newSpans + TextSpan(replaceStart, replaceStart + insertedLen, activeStyle)
+                }
+                
+                hiddenInput = newValue
+                onTextChange(newText, newSpans)
+                onSelectionChange(newValue.selection)
+                if (newValue.selection != previousSelection) {
+                    updateSelection(newValue.selection)
+                } else if (newValue.selection.collapsed) {
                     selectionActionMode?.finish()
                     selectionActionMode = null
                     selectionActionModeCallback = null

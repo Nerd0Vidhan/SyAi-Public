@@ -377,7 +377,7 @@ data class LinearContentEntry(
     val value: String = "",
     val transform: Transform = Transform(),
     val bounds: Bounds = Bounds(),
-    val style: TextStyleData = TextStyleData(),
+    var style: TextStyleData = TextStyleData(),
     var spans: MutableList<TextSpan> = mutableListOf()
 )
 
