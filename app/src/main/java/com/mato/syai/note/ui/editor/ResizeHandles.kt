@@ -22,15 +22,15 @@ import kotlin.math.roundToInt
 fun ResizeHandles(
     onResize: (Float, Float) -> Unit,
     handleSize: Dp = 14.dp,
-    inset: Dp = 10.dp,
+    inset: Dp = 2.dp,
     handleColor: Color = Color.White,
     strokeColor: Color = Color(0xFF3F2A7A)
 ) {
     Box(Modifier.fillMaxSize()) {
         ResizeHandle(
             alignment = Alignment.TopStart,
-            xOffset = -inset,
-            yOffset = -inset,
+            xOffset = inset,
+            yOffset = inset,
             modifier = Modifier.align(Alignment.TopStart),
             handleSize = handleSize,
             handleColor = handleColor,
@@ -39,8 +39,8 @@ fun ResizeHandles(
         )
         ResizeHandle(
             alignment = Alignment.TopEnd,
-            xOffset = inset,
-            yOffset = -inset,
+            xOffset = -inset,
+            yOffset = inset,
             modifier = Modifier.align(Alignment.TopEnd),
             handleSize = handleSize,
             handleColor = handleColor,
@@ -49,8 +49,8 @@ fun ResizeHandles(
         )
         ResizeHandle(
             alignment = Alignment.BottomStart,
-            xOffset = -inset,
-            yOffset = inset,
+            xOffset = inset,
+            yOffset = -inset,
             modifier = Modifier.align(Alignment.BottomStart),
             handleSize = handleSize,
             handleColor = handleColor,
@@ -59,8 +59,8 @@ fun ResizeHandles(
         )
         ResizeHandle(
             alignment = Alignment.BottomEnd,
-            xOffset = inset,
-            yOffset = inset,
+            xOffset = -inset,
+            yOffset = -inset,
             modifier = Modifier.align(Alignment.BottomEnd),
             handleSize = handleSize,
             handleColor = handleColor,

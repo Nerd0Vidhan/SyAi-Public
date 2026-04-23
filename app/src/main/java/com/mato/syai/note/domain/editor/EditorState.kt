@@ -2,6 +2,19 @@ package com.mato.syai.note.domain.editor
 
 import com.mato.syai.note.domain.local.model.*
 
+data class PageViewportState(
+    val scale: Float = 1f,
+    val offsetX: Float = 0f,
+    val offsetY: Float = 0f
+)
+
+enum class OfflineModelDownloadState {
+    NOT_DOWNLOADED,
+    DOWNLOADING,
+    DOWNLOADED,
+    FAILED
+}
+
 data class EditorState(
     val noteId: Long = -1L,
     val title: String = "",
@@ -22,5 +35,8 @@ data class EditorState(
 
     val isViewOnly: Boolean = false,
     val isLoading: Boolean = false,
-    val selectedObjectIds: Set<String> = emptySet()
+    val selectedObjectIds: Set<String> = emptySet(),
+    val pageViewports: Map<String, PageViewportState> = emptyMap(),
+    val offlineModelDownloadState: OfflineModelDownloadState = OfflineModelDownloadState.NOT_DOWNLOADED,
+    val offlineModelStatusMessage: String? = null
 )

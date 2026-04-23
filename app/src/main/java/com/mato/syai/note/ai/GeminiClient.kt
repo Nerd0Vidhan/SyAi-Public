@@ -23,10 +23,20 @@ class GeminiClient {
      * MAIN FUNCTION
      * Returns structured JSON for editor (TEXT + DRAWING)
      */
-    suspend fun generateObjects(prompt: String): JSONObject? {
+    suspend fun generateObjects(
+        prompt: String,
+        pageContext: String,
+        currentPageWidthPoints: Float,
+        currentPageHeightPoints: Float
+    ): JSONObject? {
         return withContext(Dispatchers.IO) {
             try {
-                val fullPrompt = buildPrompt(prompt)
+                val fullPrompt = buildPrompt(
+                    userPrompt = prompt,
+                    pageContext = pageContext,
+                    currentPageWidthPoints = currentPageWidthPoints,
+                    currentPageHeightPoints = currentPageHeightPoints
+                )
 
                 val response = model.generateContent(
                     content {
@@ -66,22 +76,67 @@ class GeminiClient {
         }
     }
 
-    private fun buildPrompt(userPrompt: String): String {
+    private fun buildPrompt(
+        userPrompt: String,
+        pageContext: String,
+        currentPageWidthPoints: Float,
+        currentPageHeightPoints: Float
+    ): String {
         return """
-            You are an AI note editor. Return a JSON object containing an array of 'objects'.
-            
-            Schema:
+            You are an AI note editor for a premium document canvas.
+            Return ONLY valid JSON.
+
+            Current page size is ${currentPageWidthPoints}pt x ${currentPageHeightPoints}pt.
+            All coordinates and drawing points must use points (1/72 inch).
+            Respect the current page margins and avoid placing content outside the page.
+            You may use context from the previous, current, and next page to continue the document naturally.
+
+            Context:
+            $pageContext
+
+            JSON schema:
             {
               "objects": [
-                { "type": "TEXT", "text": "string", "x": 100, "y": 200 },
-                { "type": "DRAWING", "points": [{ "x": 10, "y": 10 }."color": FF000000] }
+                {
+                  "type": "LINEAR_TEXT",
+                  "text": "string"
+                },
+                {
+                  "type": "TEXT",
+                  "text": "floating textbox text",
+                  "x": 100.0,
+                  "y": 200.0,
+                  "width": 220.0
+                },
+                {
+                  "type": "LIST",
+                  "listStyle": "BULLET|NUMBER|ROMAN|CHECKBOX",
+                  "orderedStyle": "DIGITS|LOWER_ALPHA|UPPER_ALPHA|LOWER_ROMAN|UPPER_ROMAN",
+                  "bulletStyle": "DISC|CIRCLE|SQUARE|DASH",
+                  "items": [
+                    { "text": "item 1", "isChecked": false }
+                  ]
+                },
+                {
+                  "type": "DRAWING",
+                  "color": -16777216,
+                  "width": 3.0,
+                  "points": [
+                    { "x": 10.0, "y": 10.0 },
+                    { "x": 14.0, "y": 12.0 }
+                  ]
+                }
               ]
             }
 
             Rules:
-            - Coordinates: 0-800.
-            - TEXT for writing, DRAWING for shapes.
-            
+            - Prefer LINEAR_TEXT for normal document writing.
+            - Use LIST for document-flow lists, not floating lists.
+            - Use TEXT only for intentional floating text boxes.
+            - For curves or circles, include many points so the drawing is smooth. Use at least 24 points for rounded shapes.
+            - Do not invent unsupported fields.
+            - Keep coordinates within the current page dimensions.
+
             User Request: $userPrompt
         """.trimIndent()
     }
