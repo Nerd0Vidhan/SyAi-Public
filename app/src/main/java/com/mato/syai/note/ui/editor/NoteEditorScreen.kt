@@ -5,11 +5,19 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.util.Log
+import android.widget.Toast
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
@@ -30,6 +38,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.*
@@ -40,6 +49,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
@@ -53,20 +63,25 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.mato.syai.note.domain.editor.EditorState
+import com.mato.syai.note.domain.editor.OfflineModelDownloadState
+import com.mato.syai.note.domain.editor.PageViewportState
 import com.mato.syai.note.domain.local.model.*
 import com.mato.syai.utils.GlassEffect
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.zIndex
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
 private val PrimaryDark = Color(0xFF0D0127)
 private val SecondaryCream = Color(0xFFF8E0C3)
 val AuraPurple = Color(0xFF3F2A7A)
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun NoteEditorScreen(
     noteId: Long,
@@ -78,7 +93,6 @@ fun NoteEditorScreen(
     val noteTitle by viewModel.noteTitle.collectAsState()
     var isDragging by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
-    val coroutineScope = rememberCoroutineScope()
     val imagePicker = rememberImagePicker { uri ->
         val pageIndex = state.currentPageIndex
         context.contentResolver.takePersistableUriPermission(
@@ -89,6 +103,8 @@ fun NoteEditorScreen(
     }
     var showAI by remember { mutableStateOf(false) }
     var showPageSettings by remember { mutableStateOf(false) }
+    var showCustomPageDialog by remember { mutableStateOf(false) }
+    var expandedInsertIndex by remember { mutableStateOf<Int?>(null) }
 
     LaunchedEffect(state.activeTool) {
         if (state.activeTool == ActiveTool.AI_TOOL) {
@@ -100,7 +116,6 @@ fun NoteEditorScreen(
     val pages = state.content.pages
     val current = state.currentPageIndex
 
-    var selectionRect by remember { mutableStateOf<Rect?>(null) }
     val isImeVisible = WindowInsets.isImeVisible
 
     var titleField by remember { mutableStateOf(TextFieldValue("")) }
@@ -115,6 +130,22 @@ fun NoteEditorScreen(
             text = noteTitle,
             selection = TextRange(noteTitle.length)
         )
+    }
+
+    LaunchedEffect(state.offlineModelStatusMessage) {
+        val message = state.offlineModelStatusMessage ?: return@LaunchedEffect
+        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+    }
+
+    LaunchedEffect(listState.layoutInfo.visibleItemsInfo, pages.size) {
+        val centeredItem = listState.layoutInfo.visibleItemsInfo
+            .filter { it.index in pages.indices }
+            .minByOrNull { item ->
+                val itemCenter = item.offset + (item.size / 2)
+                val viewportCenter = (listState.layoutInfo.viewportStartOffset + listState.layoutInfo.viewportEndOffset) / 2
+                kotlin.math.abs(itemCenter - viewportCenter)
+            }
+        centeredItem?.index?.let(viewModel::setVisiblePage)
     }
 
     LaunchedEffect(state.pendingViewportPageIndex, state.content.pages.size) {
@@ -153,25 +184,6 @@ fun NoteEditorScreen(
                 onPageSettings = { showPageSettings = true }
             )
         },
-        bottomBar = {
-            EditorBottomToolbar(
-                state = state,
-                onToolSelect = viewModel::setTool,
-                onTextStyleChange = viewModel::updateTextStyle,
-                onDrawColorChange = viewModel::updateDrawColor,
-                onDrawWidthChange = viewModel::updateDrawWidth,
-                onBrushStyleChange = viewModel::updateBrushStyle,
-                onImagePicker = { imagePicker() },
-                onTextColorChange = { int ->
-                    viewModel.updateTextColor(int)
-                },
-                onCheckListSelect = { viewModel.addChecklist(state.currentPageIndex, 200f, 200f) },
-                onDelete = { viewModel.deleteSelectedObjects() },
-                onListSelection = {marker->
-                    viewModel.handleListInsertion(marker)
-                }
-            )
-        },
         containerColor = PrimaryDark
     ) { padding ->
 
@@ -193,36 +205,38 @@ fun NoteEditorScreen(
                         .background(PrimaryDark),
                     state = listState,
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    contentPadding = PaddingValues(vertical = 24.dp)
+                    contentPadding = PaddingValues(top = 24.dp, bottom = 220.dp)
                 ) {
                     itemsIndexed(pages) { pageIndex, page ->
                         NotePage(
                             pageIndex = pageIndex,
                             page = page,
                             state = state,
-                            viewModel = viewModel
+                            viewModel = viewModel,
+                            onAnyInteraction = { expandedInsertIndex = null }
                         )
-                        Spacer(modifier = Modifier.height(28.dp))
-                        LaunchedEffect(pageIndex) {
-                            viewModel.ensureNextPageIfNeeded(
-                                pageIndex,
-                                currentY = 0f,
-                                pageHeight = 1000f
-                            )
-                        }
-                    }
 
-                    item {
-                        TextButton(onClick = { viewModel.addPage() }) {
-                            Icon(Icons.Default.NoteAdd, contentDescription = null, tint = SecondaryCream)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Add page", color = SecondaryCream)
-                        }
-                        Spacer(modifier = Modifier.height(120.dp))
+                        val isExpanded = expandedInsertIndex == pageIndex + 1
+                        BetweenPagesInsertBar(
+                            expanded = isExpanded,
+                            onExpand = { expandedInsertIndex = pageIndex + 1 },
+                            onDismiss = { expandedInsertIndex = null },
+                            onAddA4 = {
+                                viewModel.addPageAt(pageIndex + 1, PageSize.A4)
+                                expandedInsertIndex = null
+                            },
+                            onAddA3 = {
+                                viewModel.addPageAt(pageIndex + 1, PageSize.A3)
+                                expandedInsertIndex = null
+                            },
+                            onAddCustom = {
+                                showCustomPageDialog = true
+                                expandedInsertIndex = pageIndex + 1
+                            }
+                        )
                     }
                 }
 
-                // Custom Scrollbar Overlay
                 val isScrollInProgress = listState.isScrollInProgress
                 var showScrollbar by remember { mutableStateOf(false) }
 
@@ -254,22 +268,73 @@ fun NoteEditorScreen(
                     }
                 }
                 
-                // Hovering Text Toolbar
                 if (isImeVisible && (state.activeTool == ActiveTool.LINEAR_TEXT || state.activeTool == ActiveTool.TEXT)) {
                     HoveringTextToolbar(
                         style = state.textStyle,
                         onStyleChange = viewModel::updateTextStyle,
-                        modifier = Modifier.align(Alignment.BottomCenter).imePadding()
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .imePadding()
+                            .padding(horizontal = 14.dp, vertical = 12.dp)
                     )
                 }
+
+                EditorBottomToolbar(
+                    state = state,
+                    onToolSelect = viewModel::setTool,
+                    onTextStyleChange = viewModel::updateTextStyle,
+                    onDrawColorChange = viewModel::updateDrawColor,
+                    onDrawWidthChange = viewModel::updateDrawWidth,
+                    onBrushStyleChange = viewModel::updateBrushStyle,
+                    onImagePicker = { imagePicker() },
+                    onTextColorChange = { int -> viewModel.updateTextColor(int) },
+                    onCheckListSelect = { viewModel.addChecklist(state.currentPageIndex, 200f, 200f) },
+                    onDelete = { viewModel.deleteSelectedObjects() },
+                    onListSelection = { marker -> viewModel.handleListInsertion(marker) },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .navigationBarsPadding()
+                        .padding(horizontal = 12.dp, vertical = 12.dp)
+                )
+
             }
         }
     }
+
+    if (showPageSettings) {
+        PageSettingsDialog(
+            page = pages.getOrNull(current),
+            offlineModelDownloadState = state.offlineModelDownloadState,
+            offlineModelStatusMessage = state.offlineModelStatusMessage,
+            onOfflineModelDownload = viewModel::startOfflineModelDownload,
+            onDismiss = { showPageSettings = false },
+            onApply = { textSize, background, padding, border ->
+                viewModel.updateGlobalPageStyle(textSize, background, padding, border)
+                showPageSettings = false
+            }
+        )
+    }
+
+    if (showCustomPageDialog) {
+        CustomPageSizeDialog(
+            onDismiss = { showCustomPageDialog = false },
+            onCreate = { width, height ->
+                viewModel.addPageAt(
+                    insertIndex = expandedInsertIndex ?: state.currentPageIndex + 1,
+                    pageSize = PageSize.CUSTOM,
+                    customDimensions = PageDimensions(widthPoints = width, heightPoints = height)
+                )
+                showCustomPageDialog = false
+                expandedInsertIndex = null
+            }
+        )
+    }
+
     if (showAI) {
         ModalBottomSheet(
             onDismissRequest = {
                 showAI = false
-                viewModel.setTool(ActiveTool.SELECT) // reset tool
+                viewModel.setTool(ActiveTool.SELECT)
             }
         ) {
             AIToolSheet(
@@ -278,6 +343,10 @@ fun NoteEditorScreen(
                         state.currentPageIndex,
                         prompt
                     )
+                    showAI = false
+                },
+                onGenerateImage = { prompt ->
+                    viewModel.requestAiImageGeneration(prompt)
                     showAI = false
                 }
             )
@@ -374,6 +443,9 @@ fun EditorTopBar(
 @Composable
 fun PageSettingsDialog(
     page: PageData?,
+    offlineModelDownloadState: OfflineModelDownloadState,
+    offlineModelStatusMessage: String?,
+    onOfflineModelDownload: () -> Unit,
     onDismiss: () -> Unit,
     onApply: (Float, Int, PagePadding, PageBorderStyle) -> Unit
 ) {
@@ -428,6 +500,185 @@ fun PageSettingsDialog(
                     Checkbox(checked = borderVisible, onCheckedChange = { borderVisible = it })
                     Text("Show page border")
                 }
+
+                HorizontalDivider()
+
+                Text("Offline Image Model")
+                Text(
+                    text = when (offlineModelDownloadState) {
+                        OfflineModelDownloadState.NOT_DOWNLOADED -> "Not downloaded"
+                        OfflineModelDownloadState.DOWNLOADING -> "Downloading"
+                        OfflineModelDownloadState.DOWNLOADED -> "Downloaded"
+                        OfflineModelDownloadState.FAILED -> "Unavailable"
+                    },
+                    color = Color.Gray
+                )
+                offlineModelStatusMessage?.let {
+                    Text(
+                        text = it,
+                        color = Color.Gray,
+                        fontSize = 12.sp
+                    )
+                }
+                Button(
+                    onClick = onOfflineModelDownload,
+                    enabled = offlineModelDownloadState != OfflineModelDownloadState.DOWNLOADING
+                ) {
+                    Text(
+                        when (offlineModelDownloadState) {
+                            OfflineModelDownloadState.NOT_DOWNLOADED -> "Download Model"
+                            OfflineModelDownloadState.DOWNLOADING -> "Downloading..."
+                            OfflineModelDownloadState.DOWNLOADED -> "Redownload Model"
+                            OfflineModelDownloadState.FAILED -> "Retry Download"
+                        }
+                    )
+                }
+            }
+        }
+    )
+}
+
+@Composable
+private fun BetweenPagesInsertBar(
+    expanded: Boolean,
+    onExpand: () -> Unit,
+    onDismiss: () -> Unit,
+    onAddA4: () -> Unit,
+    onAddA3: () -> Unit,
+    onAddCustom: () -> Unit
+) {
+    val animationProgress by animateFloatAsState(
+        targetValue = if (expanded) 1f else 0f,
+        animationSpec = tween(durationMillis = 500, easing = FastOutSlowInEasing),
+        label = "between_page_insert"
+    )
+
+    LaunchedEffect(expanded) {
+        if (!expanded) return@LaunchedEffect
+        delay(5000)
+        onDismiss()
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(if (expanded) 112.dp else 21.dp)
+            .padding(vertical = 3.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.82f)
+                .height(15.dp)
+                .clip(RoundedCornerShape(999.dp))
+                .background(Color(0xFFCAE2FF).copy(alpha = 0.92f))
+                .pointerInput(expanded) {
+                    detectTapGestures { if (!expanded) onExpand() else onDismiss() }
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Add,
+                contentDescription = "Insert page",
+                tint = PrimaryDark,
+                modifier = Modifier.size(14.dp)
+            )
+        }
+
+        OrbitPageFab(
+            label = "A4",
+            offsetX = (-108).dp,
+            offsetY = (-10).dp,
+            progress = animationProgress,
+            onClick = onAddA4
+        )
+        OrbitPageFab(
+            label = "A3",
+            offsetX = 0.dp,
+            offsetY = (-38).dp,
+            progress = animationProgress,
+            onClick = onAddA3
+        )
+        OrbitPageFab(
+            label = "+",
+            offsetX = 108.dp,
+            offsetY = (-10).dp,
+            progress = animationProgress,
+            onClick = onAddCustom
+        )
+    }
+}
+
+@Composable
+private fun OrbitPageFab(
+    label: String,
+    offsetX: Dp,
+    offsetY: Dp,
+    progress: Float,
+    onClick: () -> Unit
+) {
+    FloatingActionButton(
+        onClick = onClick,
+        containerColor = Color(0xFFE6D8FF),
+        contentColor = PrimaryDark,
+        shape = CircleShape,
+        modifier = Modifier
+            .offset(
+                x = offsetX * progress,
+                y = offsetY * progress
+            )
+            .size(56.dp)
+            .graphicsLayer {
+                alpha = progress
+                scaleX = progress.coerceAtLeast(0.01f)
+                scaleY = progress.coerceAtLeast(0.01f)
+            }
+    ) {
+        if (label == "+") {
+            Icon(Icons.Default.Add, contentDescription = "Custom page")
+        } else {
+            Text(label, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+fun CustomPageSizeDialog(
+    onDismiss: () -> Unit,
+    onCreate: (Float, Float) -> Unit
+) {
+    var widthText by remember { mutableStateOf("595") }
+    var heightText by remember { mutableStateOf("842") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val width = widthText.toFloatOrNull()?.coerceAtLeast(200f) ?: 595f
+                    val height = heightText.toFloatOrNull()?.coerceAtLeast(200f) ?: 842f
+                    onCreate(width, height)
+                }
+            ) { Text("Create") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+        title = { Text("Custom Page") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = widthText,
+                    onValueChange = { widthText = it.filter { ch -> ch.isDigit() || ch == '.' } },
+                    label = { Text("Width (pt)") },
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = heightText,
+                    onValueChange = { heightText = it.filter { ch -> ch.isDigit() || ch == '.' } },
+                    label = { Text("Height (pt)") },
+                    singleLine = true
+                )
             }
         }
     )
@@ -438,15 +689,20 @@ fun NotePage(
     pageIndex: Int,
     page: PageData,
     state: EditorState,
-    viewModel: NoteEditorViewModel
+    viewModel: NoteEditorViewModel,
+    onAnyInteraction: () -> Unit = {}
 ) {
     var pageHeightPx by remember { mutableStateOf(1) }
     var pageWidthPx by remember { mutableStateOf(1) }
     var selectionRect by remember { mutableStateOf<Rect?>(null) }
     val context = LocalContext.current
     val keyboardController = LocalSoftwareKeyboardController.current
+    val density = LocalDensity.current
+    val viewport = state.pageViewports[page.pageId] ?: PageViewportState()
     val pageScaleX = pageWidthPx / page.widthPoints.coerceAtLeast(1f)
     val pageScaleY = pageHeightPx / page.heightPoints.coerceAtLeast(1f)
+    val effectivePageScaleX = pageScaleX * viewport.scale
+    val effectivePageScaleY = pageScaleY * viewport.scale
 
     Box(
         modifier = Modifier
@@ -454,7 +710,7 @@ fun NotePage(
             .aspectRatio(1 / page.ratio)
             .background(Color(page.backgroundColor), RoundedCornerShape(6.dp))
             .border(
-                width = if (page.borderStyle.isVisible) PageUnitConverter.pointsToDp(page.borderStyle.widthPoints, PageSize.A4).dp else 0.dp,
+                width = if (page.borderStyle.isVisible) PageUnitConverter.pointsToDp(page.borderStyle.widthPoints, page.pageSize).dp else 0.dp,
                 color = if (page.borderStyle.isVisible) Color(page.borderStyle.color) else Color.Transparent,
                 shape = RoundedCornerShape(6.dp)
             )
@@ -462,43 +718,71 @@ fun NotePage(
                 pageWidthPx = it.width
                 pageHeightPx = it.height
             }
-            .pointerInput(state.activeTool, state.isViewOnly) {
-                detectTapGestures { offset ->
-                    if (state.isViewOnly) return@detectTapGestures
-                    viewModel.selectPage(pageIndex)
-
-                    when (state.activeTool) {
-                        ActiveTool.TEXT -> {
-                            viewModel.addText(pageIndex, offset.x / pageScaleX, offset.y / pageScaleY)
-                            viewModel.ensureNextPageIfNeeded(
-                                pageIndex,
-                                offset.y,
-                                pageHeightPx.toFloat()
-                            )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = viewport.scale
+                    scaleY = viewport.scale
+                    translationX = viewport.offsetX
+                    translationY = viewport.offsetY
+                }
+                .pointerInput(page.pageId, viewport.scale, viewport.offsetX, viewport.offsetY) {
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false)
+                        var keepTracking = true
+                        while (keepTracking) {
+                            val event = awaitPointerEvent(PointerEventPass.Main)
+                            val pressed = event.changes.count { it.pressed }
+                            if (pressed >= 2) {
+                                val zoom = event.calculateZoom()
+                                if (zoom != 1f) {
+                                    val newScale = (viewport.scale * zoom).coerceIn(0.85f, 3f)
+                                    viewModel.updatePageViewport(
+                                        pageId = page.pageId,
+                                        scale = newScale,
+                                        offsetX = 0f,
+                                        offsetY = 0f
+                                    )
+                                    onAnyInteraction()
+                                }
+                            }
+                            keepTracking = event.changes.any { it.pressed && !it.changedToUpIgnoreConsumed() }
                         }
-
-                        ActiveTool.SELECT -> {
-                            viewModel.clearEditorFocus()
-                        }
-
-                        ActiveTool.LINEAR_TEXT -> {
-                            viewModel.handlePageTapForLinearText(pageIndex, offset.x / pageScaleX, offset.y / pageScaleY)
-                            viewModel.selectLinearPage(page.pageId)
-                            keyboardController?.show()
-                        }
-
-                        else -> Unit
                     }
                 }
-                if (state.activeTool == ActiveTool.SELECT) {
+                .pointerInput(state.activeTool, state.isViewOnly, viewport.scale, viewport.offsetX, viewport.offsetY) {
+                    detectTapGestures { offset ->
+                        if (state.isViewOnly) return@detectTapGestures
+                        onAnyInteraction()
+                        viewModel.selectPage(pageIndex)
+                        val docX = ((offset.x - viewport.offsetX) / effectivePageScaleX).coerceAtLeast(0f)
+                        val docY = ((offset.y - viewport.offsetY) / effectivePageScaleY).coerceAtLeast(0f)
+
+                        when (state.activeTool) {
+                            ActiveTool.TEXT -> viewModel.addText(pageIndex, docX, docY)
+                            ActiveTool.SELECT -> viewModel.clearEditorFocus()
+                            ActiveTool.LINEAR_TEXT -> {
+                                viewModel.handlePageTapForLinearText(pageIndex, docX, docY)
+                                keyboardController?.show()
+                            }
+                            else -> Unit
+                        }
+                    }
+                }
+                .pointerInput(state.activeTool, state.isViewOnly, viewport.scale, viewport.offsetX, viewport.offsetY) {
+                    if (state.activeTool != ActiveTool.SELECT || state.isViewOnly) return@pointerInput
                     detectDragGestures(
                         onDragStart = { start ->
+                            onAnyInteraction()
                             selectionRect = Rect(start, start)
                         },
-                        onDrag = { change, drag ->
+                        onDrag = { change, _ ->
                             val end = change.position
                             val start = selectionRect?.topLeft ?: end
                             selectionRect = normalizedRect(start, end)
+                            change.consume()
                         },
                         onDragEnd = {
                             val rect = selectionRect
@@ -506,10 +790,10 @@ fun NotePage(
                                 pageIndex,
                                 rect?.let {
                                     Rect(
-                                        left = it.left / pageScaleX,
-                                        top = it.top / pageScaleY,
-                                        right = it.right / pageScaleX,
-                                        bottom = it.bottom / pageScaleY
+                                        left = (it.left - viewport.offsetX) / effectivePageScaleX,
+                                        top = (it.top - viewport.offsetY) / effectivePageScaleY,
+                                        right = (it.right - viewport.offsetX) / effectivePageScaleX,
+                                        bottom = (it.bottom - viewport.offsetY) / effectivePageScaleY
                                     )
                                 }
                             )
@@ -517,9 +801,7 @@ fun NotePage(
                         }
                     )
                 }
-            }
-    ) {
-        // Layer 1 - Drawings
+        ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             page.renderableItems
                 .filter { it.type == ObjectType.DRAWING }
@@ -554,73 +836,137 @@ fun NotePage(
                 }
         }
 
-        val allTextBlocks = page.linearContent.filter { it.type == ObjectType.LINEAR_TEXT }
-        allTextBlocks.forEach { entry ->
-            Box(
-                modifier = Modifier
-                    .offset {
-                        IntOffset(
-                            (entry.transform.x * pageScaleX).roundToInt(),
-                            (entry.transform.y * pageScaleY).roundToInt()
-                        )
-                    }
-                    .zIndex(entry.layer.toFloat())
-                    .padding(2.dp)
-            ) {
-                ManualLinearTextEditor(
-                    payload = TextPayload(
-                        text = entry.value,
-                        style = entry.style,
-                        spans = entry.spans
-                    ),
-                    widthPoints = entry.bounds.width,
-                    uiScale = pageScaleY,
-                    isSelected = state.selectedLinearPageId == page.pageId && state.activeTool == ActiveTool.LINEAR_TEXT && !state.isViewOnly && state.activeLinearTextId == entry.id,
-                    activeStyle = state.textStyle,
-                    onTextChange = { newText, newSpans ->
-                        viewModel.updateLinearTextValueById(pageIndex, entry.id, newText, newSpans)
-                    },
-                    onSelectionChange = { selection ->
-                        viewModel.selectPage(pageIndex)
-                        viewModel.selectLinearPage(page.pageId)
-                        viewModel.setActiveLinearTextId(entry.id)
-                        viewModel.updateGlobalSelection(selection)
-                        viewModel.setCursorPosition(selection.end)
-                    },
-                    onCopy = { copiedText, start, end ->
-                        val copiedSpans = entry.spans.mapNotNull {
-                            val overlapStart = kotlin.math.max(it.start, start)
-                            val overlapEnd = kotlin.math.min(it.end, end)
-                            if (overlapStart < overlapEnd) {
-                                it.copy(start = overlapStart - start, end = overlapEnd - start)
-                            } else null
-                        }
-                        viewModel.copyToInternalClipboard(copiedText, copiedSpans)
-                    },
-                    onPaste = { pasteIndex ->
-                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        val clip = clipboard.primaryClip
-                        if (clip != null && clip.itemCount > 0) {
-                            val textToPaste = clip.getItemAt(0).text?.toString() ?: ""
-                            val internalData = viewModel.getInternalClipboard(textToPaste)
-                            val newText = entry.value.take(pasteIndex) + textToPaste + entry.value.substring(pasteIndex)
-                            
-                            val shiftedSpans = entry.spans.map {
-                                if (it.start >= pasteIndex) it.copy(start = it.start + textToPaste.length, end = it.end + textToPaste.length)
-                                else if (it.end > pasteIndex) it.copy(end = it.end + textToPaste.length)
-                                else it
-                            }
-                            
-                            val combinedSpans = if (internalData != null) {
-                                shiftedSpans + internalData.second.map { it.copy(start = it.start + pasteIndex, end = it.end + pasteIndex) }
-                            } else {
-                                shiftedSpans
-                            }
-                            
-                            viewModel.updateLinearTextValueById(pageIndex, entry.id, newText, combinedSpans)
-                        }
+        Column(
+            modifier = Modifier
+                .offset {
+                    IntOffset(
+                        (page.pagePadding.startPoints * pageScaleX).roundToInt(),
+                        (page.pagePadding.topPoints * pageScaleY).roundToInt()
+                    )
+                }
+                .width(
+                    with(density) {
+                        ((page.widthPoints - page.pagePadding.startPoints - page.pagePadding.endPoints) * pageScaleX).toDp()
                     }
                 )
+        ) {
+            page.linearContent.sortedBy { it.layer }.forEach { entry ->
+                when (entry.type) {
+                    ObjectType.LINEAR_TEXT -> {
+                        Box(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                            ManualLinearTextEditor(
+                                payload = TextPayload(
+                                    text = entry.value,
+                                    style = entry.style,
+                                    spans = entry.spans
+                                ),
+                                widthPoints = entry.bounds.width,
+                                uiScale = pageScaleY,
+                                maxHeightPoints = entry.bounds.height,
+                                isSelected = state.selectedLinearPageId == page.pageId && state.activeTool == ActiveTool.LINEAR_TEXT && !state.isViewOnly && state.activeLinearTextId == entry.id,
+                                activeStyle = state.textStyle,
+                                selection = state.globalSelection,
+                                onTextChange = { newText, newSpans ->
+                                    viewModel.updateLinearTextValueById(pageIndex, entry.id, newText, newSpans)
+                                },
+                                onSelectionChange = { selection ->
+                                    viewModel.selectPage(pageIndex)
+                                    viewModel.selectLinearPage(page.pageId)
+                                    viewModel.setActiveLinearTextId(entry.id)
+                                    viewModel.updateGlobalSelection(selection)
+                                    viewModel.setCursorPosition(selection.end)
+                                },
+                                onBackspaceAtStart = {
+                                    viewModel.mergeWithPreviousBlock(pageIndex, entry.id)
+                                },
+                                onOverflow = { visibleText, overflowText, visibleSpans, overflowSpans ->
+                                    viewModel.handleLinearTextOverflow(
+                                        pageIndex = pageIndex,
+                                        entryId = entry.id,
+                                        visibleText = visibleText,
+                                        overflowText = overflowText,
+                                        visibleSpans = visibleSpans,
+                                        overflowSpans = overflowSpans
+                                    )
+                                },
+                                onCopy = { copiedText, start, end ->
+                                    val copiedSpans = entry.spans.mapNotNull {
+                                        val overlapStart = kotlin.math.max(it.start, start)
+                                        val overlapEnd = kotlin.math.min(it.end, end)
+                                        if (overlapStart < overlapEnd) {
+                                            it.copy(start = overlapStart - start, end = overlapEnd - start)
+                                        } else null
+                                    }
+                                    viewModel.copyToInternalClipboard(copiedText, copiedSpans)
+                                },
+                                onPaste = { pasteIndex ->
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    val clip = clipboard.primaryClip
+                                    if (clip != null && clip.itemCount > 0) {
+                                        val textToPaste = clip.getItemAt(0).text?.toString() ?: ""
+                                        val internalData = viewModel.getInternalClipboard(textToPaste)
+                                        val newText = entry.value.take(pasteIndex) + textToPaste + entry.value.substring(pasteIndex)
+
+                                        val shiftedSpans = entry.spans.map {
+                                            if (it.start >= pasteIndex) it.copy(start = it.start + textToPaste.length, end = it.end + textToPaste.length)
+                                            else if (it.end > pasteIndex) it.copy(end = it.end + textToPaste.length)
+                                            else it
+                                        }
+
+                                        val combinedSpans = if (internalData != null) {
+                                            shiftedSpans + internalData.second.map { it.copy(start = it.start + pasteIndex, end = it.end + pasteIndex) }
+                                        } else {
+                                            shiftedSpans
+                                        }
+
+                                        viewModel.updateLinearTextValueById(pageIndex, entry.id, newText, combinedSpans)
+                                    }
+                                }
+                            )
+                        }
+                    }
+                    ObjectType.LIST -> {
+                        val obj = page.items.find { it.id == entry.objectId }
+                        if (obj != null) {
+                            Box(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                                val payload = obj.payload as? ListPayload ?: return@Box
+                                RenderListRecursive(
+                                    payload = payload,
+                                    uiScale = pageScaleY,
+                                    widthPoints = entry.bounds.width,
+                                    isSelected = state.selectedObjectId == obj.id,
+                                    activeStyle = state.textStyle,
+                                    selection = state.globalSelection,
+                                    onSelectionChange = { selection ->
+                                        viewModel.selectObject(obj.id)
+                                        viewModel.updateGlobalSelection(selection)
+                                        viewModel.setCursorPosition(selection.end)
+                                    },
+                                    onUpdate = { newPayload ->
+                                        viewModel.updateObjectPayload(pageIndex, obj.id, newPayload)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    ObjectType.IMAGE -> {
+                        val obj = page.items.find { it.id == entry.objectId }
+                        if (obj != null) {
+                            Box(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                                val payload = obj.payload as? ImagePayload ?: return@Box
+                                AsyncImage(
+                                    model = payload.uri,
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .aspectRatio(payload.ratio.coerceAtLeast(0.1f)),
+                                    contentScale = ContentScale.Fit
+                                )
+                            }
+                        }
+                    }
+                    else -> {}
+                }
             }
         }
 
@@ -634,9 +980,11 @@ fun NotePage(
                 pageScaleX = pageScaleX,
                 pageScaleY = pageScaleY,
                 onStrokeFinished = { stroke ->
+                    onAnyInteraction()
                     viewModel.addStroke(pageIndex, stroke)
                 },
                 onErase = { point ->
+                    onAnyInteraction()
                     viewModel.eraseStrokesAt(pageIndex, point)
                 },
                 modifier = Modifier.fillMaxSize()
@@ -645,15 +993,19 @@ fun NotePage(
 
         selectionRect?.let { rect ->
             Canvas(modifier = Modifier.fillMaxSize()) {
+                val safeLeft = rect.left.coerceIn(0f, pageWidthPx.toFloat())
+                val safeTop = rect.top.coerceIn(0f, pageHeightPx.toFloat())
+                val safeRight = rect.right.coerceIn(0f, pageWidthPx.toFloat())
+                val safeBottom = rect.bottom.coerceIn(0f, pageHeightPx.toFloat())
                 drawRect(
                     color = AuraPurple.copy(alpha = 0.10f),
-                    topLeft = rect.topLeft,
-                    size = rect.size
+                    topLeft = Offset(safeLeft, safeTop),
+                    size = androidx.compose.ui.geometry.Size(safeRight - safeLeft, safeBottom - safeTop)
                 )
                 drawRect(
                     color = SecondaryCream,
-                    topLeft = rect.topLeft,
-                    size = rect.size,
+                    topLeft = Offset(safeLeft, safeTop),
+                    size = androidx.compose.ui.geometry.Size(safeRight - safeLeft, safeBottom - safeTop),
                     style = CanvasStroke(
                         width = 1.5.dp.toPx(),
                         pathEffect = PathEffect.dashPathEffect(
@@ -664,15 +1016,13 @@ fun NotePage(
                 )
             }
         }
-        // Layer 3 - Objects
         page.renderableItems
-            .filter { it.type != ObjectType.DRAWING }
             .sortedBy { it.layer }
             .forEach { obj ->
                 RenderObject(
                     pageIndex = pageIndex,
                     obj = obj,
-                    isSelected = state.selectedObjectId == obj.id || state.selectedObjectIds.contains(obj.id),
+                    isSelected = state.selectedObjectId == obj.id,
                     activeTool = state.activeTool,
                     isViewOnly = state.isViewOnly,
                     viewModel = viewModel,
@@ -682,6 +1032,7 @@ fun NotePage(
                     pageScaleY = pageScaleY
                 )
             }
+        }
     }
 }
 
@@ -763,6 +1114,8 @@ fun RenderObject(
     pageScaleY: Float
 ) {
     var isDragging by remember { mutableStateOf(false) }
+    val frameWidthDp = with(LocalDensity.current) { (obj.bounds.width * pageScaleX).toDp() }
+    val frameHeightDp = with(LocalDensity.current) { (obj.bounds.height * pageScaleY).toDp() }
 
 
     val isDraggable = !obj.isLocked && !isViewOnly && activeTool == ActiveTool.SELECT
@@ -775,6 +1128,8 @@ fun RenderObject(
                     (obj.transform.y * pageScaleY).roundToInt()
                 )
             }
+            .width(frameWidthDp)
+            .defaultMinSize(minHeight = frameHeightDp)
             .zIndex(obj.layer.toFloat())
 
             // 🔥 DRAG SYSTEM
@@ -857,6 +1212,16 @@ fun RenderObject(
 
                 RenderListRecursive(
                     payload = payload,
+                    widthPoints = obj.bounds.width - 30f,
+                    uiScale = pageScaleX,
+                    isSelected = isSelected && !isViewOnly,
+                    activeStyle = viewModel.uiState.value.textStyle,
+                    selection = viewModel.uiState.value.globalSelection,
+                    onSelectionChange = { selection ->
+                        viewModel.selectObject(obj.id)
+                        viewModel.updateGlobalSelection(selection)
+                        viewModel.setCursorPosition(selection.end)
+                    },
                     onUpdate = { updatedPayload ->
                         // Use the ViewModel function we just created
                         viewModel.updateObjectPayload(pageIndex, obj.id, updatedPayload)
@@ -865,45 +1230,7 @@ fun RenderObject(
             }
 
             ObjectType.DRAWING -> {
-                val payload = obj.payload as? DrawingPayload ?: return@Box
-                Canvas(
-                    modifier = Modifier.size(
-                        (obj.bounds.width * pageScaleX).dp,
-                        (obj.bounds.height * pageScaleY).dp
-                    )
-                ) {
-                    payload.strokes.forEach { stroke ->
-                        if (stroke.points.size >= 2) {
-                            for (i in 0 until stroke.points.lastIndex) {
-                                drawLine(
-                                    color = when (stroke.brushStyle) {
-                                        BrushStyle.PENCIL -> Color(stroke.color).copy(alpha = 0.65f)
-                                        BrushStyle.MARKER -> Color(stroke.color).copy(alpha = 0.9f)
-                                        BrushStyle.HIGHLIGHTER -> Color(stroke.color).copy(alpha = 0.35f)
-                                        BrushStyle.PEN -> Color(stroke.color)
-                                        BrushStyle.ERASER -> Color(stroke.color)
-                                    },
-                                    start = Offset(
-                                        (stroke.points[i].x - obj.transform.x) * pageScaleX,
-                                        (stroke.points[i].y - obj.transform.y) * pageScaleY
-                                    ),
-                                    end = Offset(
-                                        (stroke.points[i + 1].x - obj.transform.x) * pageScaleX,
-                                        (stroke.points[i + 1].y - obj.transform.y) * pageScaleY
-                                    ),
-                                    strokeWidth = when (stroke.brushStyle) {
-                                        BrushStyle.PENCIL -> stroke.width * pageScaleX * 0.8f
-                                        BrushStyle.MARKER -> stroke.width * pageScaleX * 1.2f
-                                        BrushStyle.HIGHLIGHTER -> stroke.width * pageScaleX * 1.5f
-                                        BrushStyle.PEN -> stroke.width * pageScaleX
-                                        BrushStyle.ERASER -> stroke.width * pageScaleX
-                                    },
-                                    cap = StrokeCap.Round
-                                )
-                            }
-                        }
-                    }
-                }
+                Spacer(modifier = Modifier.fillMaxSize())
             }
             ObjectType.TEXT -> RenderTextBlock(
                 pageIndex,
@@ -932,39 +1259,39 @@ fun RenderObject(
 
             ObjectType.CHECKLIST -> {
                 val payload = obj.payload as? ChecklistPayload
-
-                Column {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     payload?.items?.forEach { item ->
-
-                        var text by remember(item.id) {
-                            mutableStateOf(item.text)
-                        }
-
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-
+                        Row(verticalAlignment = Alignment.Top) {
                             Checkbox(
                                 checked = item.isChecked,
                                 onCheckedChange = {
                                     viewModel.toggleChecklistItem(obj.id, item.id)
                                 }
                             )
-
-                            OutlinedTextField(
-                                value = text,
-                                onValueChange = {
-                                    text = it
-                                    viewModel.updateChecklistItem(obj.id, item.id, it)
+                            ManualLinearTextEditor(
+                                payload = TextPayload(
+                                    text = item.text,
+                                    style = viewModel.uiState.value.textStyle
+                                ),
+                                widthPoints = obj.bounds.width - 36f,
+                                uiScale = pageScaleX,
+                                isSelected = isSelected && !isViewOnly,
+                                activeStyle = viewModel.uiState.value.textStyle,
+                                selection = viewModel.uiState.value.globalSelection,
+                                onTextChange = { newText, _ ->
+                                    viewModel.updateChecklistItem(obj.id, item.id, newText)
                                 },
-                                textStyle = TextStyle(color = Color.White),
-                                modifier = Modifier.weight(1f)
+                                onSelectionChange = { selection ->
+                                    viewModel.selectObject(obj.id)
+                                    viewModel.updateGlobalSelection(selection)
+                                    viewModel.setCursorPosition(selection.end)
+                                }
                             )
                         }
                     }
 
-                    Button(onClick = {
-                        viewModel.addChecklistItem(obj.id)
-                    }) {
-                        Text("+ Add Item")
+                    TextButton(onClick = { viewModel.addChecklistItem(obj.id) }) {
+                        Text("+ Add Item", color = AuraPurple)
                     }
                 }
             }
@@ -997,6 +1324,7 @@ fun RenderTextBlock(
         uiScale = pageScale,
         isSelected = isSelected && !isViewOnly,
         activeStyle = viewModel.uiState.value.textStyle,
+        selection = viewModel.uiState.value.globalSelection,
         onTextChange = { newText, newSpans ->
             val updatedPayload = payload.copy(text = newText, spans = newSpans.toMutableList())
             viewModel.updateObjectPayload(pageIndex, obj.id, updatedPayload)
@@ -1022,9 +1350,11 @@ fun EditorBottomToolbar(
     onTextColorChange: (Int) -> Unit,
     onCheckListSelect:()->Unit,
     onDelete:()-> Unit,
-    onListSelection :(ListMarker)-> Unit
+    onListSelection :(ListMarker)-> Unit,
+    modifier: Modifier = Modifier
 ){
     var showColorPicker by remember { mutableStateOf(false) }
+    var showListOptions by remember { mutableStateOf(false) }
     val isImeVisible = WindowInsets.isImeVisible
     val currentColor = when (state.activeTool) {
         ActiveTool.DRAW -> state.drawColor
@@ -1046,7 +1376,7 @@ fun EditorBottomToolbar(
     }
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .background(Color.Transparent),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -1076,11 +1406,22 @@ fun EditorBottomToolbar(
                 ListToolSubToolbar(
                     onMarkerSelect = { marker ->
                         onListSelection(marker)
+                        showListOptions = false
+                        onToolSelect(ActiveTool.LINEAR_TEXT)
                     }
                 )
             }
 
             else -> Unit
+        }
+
+        if (state.activeTool == ActiveTool.LINEAR_TEXT && showListOptions) {
+            ListToolSubToolbar(
+                onMarkerSelect = { marker ->
+                    onListSelection(marker)
+                    showListOptions = false
+                }
+            )
         }
 
         // Removed UniversalColorToolbar
@@ -1123,12 +1464,12 @@ fun EditorBottomToolbar(
                     onImagePicker()
                 }
                 ToolbarIcon(Icons.Default.Checklist, state.activeTool == ActiveTool.LIST) {
-                    onCheckListSelect()
+                    showListOptions = !showListOptions
                 }
                 ToolbarIcon(Icons.Default.AutoAwesome, state.activeTool == ActiveTool.AI_TOOL) {
                     onToolSelect(ActiveTool.AI_TOOL)
                 }
-                if (state.selectedObjectIds.isNotEmpty()) {
+                if (state.selectedObjectId != null) {
 
                     ToolbarIcon(Icons.Default.Delete, false) {
                         onDelete()
@@ -1155,7 +1496,7 @@ fun ToolbarIcon(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = if (isSelected) SecondaryCream else PrimaryDark
+                tint = if (isSelected) SecondaryCream else AuraPurple
             )
         }
     }
@@ -1231,6 +1572,7 @@ fun ColorCircle(
         modifier = Modifier
             .padding(horizontal = 4.dp)
             .size(28.dp)
+            .border(width = 2.dp, color = Color.White, shape = CircleShape)
     ) {}
 }
 

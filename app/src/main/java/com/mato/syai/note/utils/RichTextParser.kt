@@ -6,6 +6,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.sp
 import com.mato.syai.note.domain.local.model.PageSize
 import com.mato.syai.note.domain.local.model.PageUnitConverter
@@ -21,7 +22,7 @@ object RichTextParser {
         defaultStyle: TextStyleData,
         spans: List<TextSpan>,
         uiScale: Float = 1f,
-        fontScale: Float = 1f,
+        density: Density,
         pageSize: PageSize = PageSize.A4
     ): AnnotatedString {
         return buildAnnotatedString {
@@ -40,7 +41,7 @@ object RichTextParser {
                     addStyle(
                         style = SpanStyle(
                             color = Color(span.style.color),
-                            fontSize = (PageUnitConverter.pointsToSp(span.style.fontSize * uiScale, pageSize) / fontScale).sp,
+                            fontSize = with(density) { (span.style.fontSize * uiScale).toSp() },
                             fontWeight = if (span.style.isBold) FontWeight.Bold else FontWeight.Normal,
                             fontStyle = if (span.style.isItalic) FontStyle.Italic else FontStyle.Normal,
                         ),

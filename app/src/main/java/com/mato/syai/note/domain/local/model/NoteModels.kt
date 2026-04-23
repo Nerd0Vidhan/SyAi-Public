@@ -77,6 +77,21 @@ enum class ListMarker {
     CHECKBOX
 }
 
+enum class OrderedListStyle {
+    DIGITS,
+    LOWER_ALPHA,
+    UPPER_ALPHA,
+    LOWER_ROMAN,
+    UPPER_ROMAN
+}
+
+enum class BulletListStyle {
+    DISC,
+    CIRCLE,
+    SQUARE,
+    DASH
+}
+
 data class NoteContent(
     val schemaVersion: Int = NOTE_SCHEMA_VERSION,
     val globalPagePadding: PagePadding = PagePadding(),
@@ -339,7 +354,8 @@ data class TextSpan(
 
 data class ImagePayload(
     val uri: String,
-    val fileId: String? = null
+    val fileId: String? = null,
+    val ratio: Float = 1f
 ) : ObjectPayload
 
 data class DrawingPayload(
@@ -398,13 +414,17 @@ data class LinearTextPayload(
 ) : ObjectPayload
 
 data class ListPayload(
-    val style: ListMarker = ListMarker.BULLET,
+    var style: ListMarker = ListMarker.BULLET,
+    var orderedStyle: OrderedListStyle = OrderedListStyle.DIGITS,
+    var bulletStyle: BulletListStyle = BulletListStyle.DISC,
     val items: MutableList<ListItem> = mutableListOf()
 ) : ObjectPayload
 
 data class ListItem(
     val id: String = UUID.randomUUID().toString(),
     var text: String = "",
+    var style: TextStyleData = TextStyleData(),
+    var spans: MutableList<TextSpan> = mutableListOf(),
     var isChecked: Boolean = false,
     var nestedList: ListPayload? = null
 )

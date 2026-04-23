@@ -78,12 +78,16 @@ fun ManualLinearTextEditor(
     payload: TextPayload,
     widthPoints: Float,
     uiScale: Float = 1f,
+    maxHeightPoints: Float? = null,
     isSelected: Boolean,
     activeStyle: TextStyleData,
+    selection: TextRange? = null,
     onTextChange: (String, List<TextSpan>) -> Unit,
     onSelectionChange: (TextRange) -> Unit,
     onCopy: (String, Int, Int) -> Unit = { _, _, _ -> },
-    onPaste: (Int) -> Unit = { _ -> }
+    onPaste: (Int) -> Unit = { _ -> },
+    onBackspaceAtStart: () -> Unit = {},
+    onOverflow: (String, String, List<TextSpan>, List<TextSpan>) -> Unit = { _, _, _, _ -> }
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusRequester = remember { FocusRequester() }
@@ -94,13 +98,33 @@ fun ManualLinearTextEditor(
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val isImeVisible = WindowInsets.isImeVisible
 
-    var hiddenInput by remember(payload.text) {
+    var hiddenInput by remember {
         mutableStateOf(
             TextFieldValue(
                 text = payload.text,
                 selection = TextRange(payload.text.length)
             )
         )
+    }
+
+    LaunchedEffect(payload.text) {
+        if (hiddenInput.text != payload.text) {
+            hiddenInput = hiddenInput.copy(
+                text = payload.text,
+                selection = TextRange(hiddenInput.selection.end.coerceAtMost(payload.text.length))
+            )
+        }
+    }
+
+    LaunchedEffect(selection, payload.text, isSelected) {
+        if (!isSelected || selection == null) return@LaunchedEffect
+        val normalized = TextRange(
+            start = selection.start.coerceIn(0, payload.text.length),
+            end = selection.end.coerceIn(0, payload.text.length)
+        )
+        if (hiddenInput.selection != normalized) {
+            hiddenInput = hiddenInput.copy(selection = normalized)
+        }
     }
     var isFocused by remember { mutableStateOf(false) }
     var latestLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
@@ -118,15 +142,6 @@ fun ManualLinearTextEditor(
         ),
         label = "cursorAlpha"
     )
-
-    LaunchedEffect(payload.text) {
-        if (hiddenInput.text != payload.text) {
-            hiddenInput = hiddenInput.copy(
-                text = payload.text,
-                selection = TextRange(hiddenInput.selection.end.coerceAtMost(payload.text.length))
-            )
-        }
-    }
 
     LaunchedEffect(isSelected) {
         if (isSelected) {
@@ -154,7 +169,7 @@ fun ManualLinearTextEditor(
 
     val textStyle = TextStyle(
         color = androidx.compose.ui.graphics.Color(payload.style.color),
-        fontSize = (PageUnitConverter.pointsToSp(payload.style.fontSize * uiScale, PageSize.A4) / density.fontScale).sp,
+        fontSize = with(density) { (payload.style.fontSize * uiScale).toSp() },
         fontWeight = if (payload.style.isBold) FontWeight.Bold else FontWeight.Normal,
         fontStyle = if (payload.style.isItalic) FontStyle.Italic else FontStyle.Normal,
         textAlign = when (payload.style.alignment) {
@@ -171,7 +186,7 @@ fun ManualLinearTextEditor(
             defaultStyle = payload.style,
             spans = payload.spans,
             uiScale = uiScale,
-            fontScale = density.fontScale
+            density = density
         )
     }
 
@@ -334,7 +349,17 @@ fun ManualLinearTextEditor(
                 val previousSelection = hiddenInput.selection
                 val oldText = hiddenInput.text
                 val newText = newValue.text
-                
+
+                if (newText == oldText && newValue.selection.collapsed && newValue.selection.start == 0 && previousSelection.start == 0) {
+                     // Potential backspace at start (if keyboard sends it without text change or just cursor move)
+                     // But usually newText < oldText. 
+                }
+
+                if (oldText.isNotEmpty() && newText.length < oldText.length && previousSelection.collapsed && previousSelection.start == 0) {
+                    onBackspaceAtStart()
+                    return@BasicTextField
+                }
+
                 var newSpans = payload.spans.toList()
                 
                 val commonPrefixLen = oldText.commonPrefixWith(newText).length
@@ -351,7 +376,7 @@ fun ManualLinearTextEditor(
                 val insertedLen = newReplaceEnd - replaceStart
                 val delta = insertedLen - deletedLen
                 
-                if (delta != 0 || insertedLen > 0) {
+                if (delta != 0 || insertedLen > 0 || deletedLen > 0) {
                     newSpans = newSpans.mapNotNull { span ->
                         var start = span.start
                         var end = span.end
@@ -371,7 +396,66 @@ fun ManualLinearTextEditor(
                 }
                 
                 if (insertedLen > 0) {
-                    newSpans = newSpans + TextSpan(replaceStart, replaceStart + insertedLen, activeStyle)
+                    val lastSpan = newSpans.lastOrNull()
+                    if (lastSpan != null && lastSpan.style == activeStyle && lastSpan.end == replaceStart) {
+                        // Extend existing span
+                        newSpans = newSpans.dropLast(1) + lastSpan.copy(end = replaceStart + insertedLen)
+                    } else {
+                        newSpans = newSpans + TextSpan(replaceStart, replaceStart + insertedLen, activeStyle)
+                    }
+                }
+
+                newSpans = mergeAdjacentSpans(newSpans)
+
+                val maxHeightPx = maxHeightPoints?.let { with(density) { (it * uiScale).toDp().toPx() } }
+                if (maxHeightPx != null && canvasSize.width > 0) {
+                    val overflowLayout = textMeasurer.measure(
+                        text = RichTextParser.buildRichText(
+                            text = newText.ifEmpty { " " },
+                            defaultStyle = payload.style,
+                            spans = newSpans,
+                            uiScale = uiScale,
+                            density = density
+                        ),
+                        style = textStyle,
+                        maxLines = Int.MAX_VALUE,
+                        constraints = Constraints(maxWidth = canvasSize.width)
+                    )
+
+                    if (overflowLayout.size.height > maxHeightPx) {
+                        val fittingLine = (0 until overflowLayout.lineCount)
+                            .lastOrNull { overflowLayout.getLineBottom(it) <= maxHeightPx }
+                            ?: 0
+                        val cutIndex = overflowLayout.getLineEnd(fittingLine, visibleEnd = true)
+                            .coerceIn(0, newText.length)
+                        if (cutIndex in 1 until newText.length) {
+                            val visibleText = newText.substring(0, cutIndex).trimEnd()
+                            val overflowText = newText.substring(cutIndex).trimStart('\n')
+                            val visibleSpans = mutableListOf<TextSpan>()
+                            val overflowSpans = mutableListOf<TextSpan>()
+                            newSpans.forEach { span ->
+                                if (span.start < cutIndex) {
+                                    visibleSpans.add(
+                                        span.copy(end = min(span.end, cutIndex))
+                                    )
+                                }
+                                if (span.end > cutIndex) {
+                                    overflowSpans.add(
+                                        span.copy(
+                                            start = max(0, span.start - cutIndex),
+                                            end = span.end - cutIndex
+                                        )
+                                    )
+                                }
+                            }
+                            hiddenInput = TextFieldValue(
+                                text = visibleText,
+                                selection = TextRange(visibleText.length)
+                            )
+                            onOverflow(visibleText, overflowText, visibleSpans, overflowSpans)
+                            return@BasicTextField
+                        }
+                    }
                 }
                 
                 hiddenInput = newValue
@@ -393,6 +477,24 @@ fun ManualLinearTextEditor(
                 .onFocusChanged { isFocused = it.isFocused }
         )
     }
+}
+
+private fun mergeAdjacentSpans(spans: List<TextSpan>): List<TextSpan> {
+    if (spans.isEmpty()) return emptyList()
+    val merged = mutableListOf<TextSpan>()
+    spans
+        .sortedWith(compareBy<TextSpan> { it.start }.thenBy { it.end })
+        .forEach { span ->
+            val last = merged.lastOrNull()
+            if (last != null && last.end >= span.start && last.style == span.style) {
+                merged[merged.lastIndex] = last.copy(end = max(last.end, span.end))
+            } else if (last != null && last.end == span.start && last.style == span.style) {
+                merged[merged.lastIndex] = last.copy(end = span.end)
+            } else {
+                merged.add(span)
+            }
+        }
+    return merged
 }
 
 @RequiresApi(Build.VERSION_CODES.M)
