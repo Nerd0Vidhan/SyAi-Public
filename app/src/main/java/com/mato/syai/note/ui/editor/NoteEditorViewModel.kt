@@ -19,6 +19,8 @@ import com.mato.syai.note.data.local.parser.ObjectPayloadAdapter
 import com.mato.syai.note.data.local.parser.PdfExporter
 import com.mato.syai.note.data.local.repository.NoteRepository
 import com.mato.syai.note.domain.editor.EditorState
+import com.mato.syai.note.domain.editor.OfflineModelDownloadState
+import com.mato.syai.note.domain.editor.PageViewportState
 import com.mato.syai.note.domain.editor.UndoRedoManager
 import com.mato.syai.note.domain.local.model.*
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -109,7 +111,7 @@ class NoteEditorViewModel @Inject constructor(
         }
     }
 
-    fun addImage(pageIndex: Int, uri: String, x: Float, y: Float) {
+    fun addImage(pageIndex: Int, uri: String, x: Float, y: Float, ratio: Float = 1f) {
         mutateContent { content ->
             val page = content.pages[pageIndex]
 
@@ -119,8 +121,8 @@ class NoteEditorViewModel @Inject constructor(
                 layer = maxLayer + 1,
                 type = ObjectType.IMAGE,
                 transform = Transform(x = x, y = y),
-                bounds = Bounds(250f, 200f),
-                payload = ImagePayload(uri = uri)
+                bounds = Bounds(300f, 300f * ratio),
+                payload = ImagePayload(uri = uri, ratio = ratio)
             )
 
             page.upsertObject(obj)
@@ -181,7 +183,26 @@ class NoteEditorViewModel @Inject constructor(
         }
     }
 
+    fun updatePageViewport(pageId: String, scale: Float, offsetX: Float, offsetY: Float) {
+        _uiState.update {
+            it.copy(
+                pageViewports = it.pageViewports.toMutableMap().apply {
+                    this[pageId] = PageViewportState(
+                        scale = scale,
+                        offsetX = offsetX,
+                        offsetY = offsetY
+                    )
+                }
+            )
+        }
+    }
+
     fun selectPage(pageIndex: Int) {
+        _uiState.update { it.copy(currentPageIndex = pageIndex) }
+    }
+
+    fun setVisiblePage(pageIndex: Int) {
+        if (pageIndex == _uiState.value.currentPageIndex) return
         _uiState.update { it.copy(currentPageIndex = pageIndex) }
     }
 
@@ -233,14 +254,24 @@ class NoteEditorViewModel @Inject constructor(
                         if (selection != null && !selection.collapsed) {
                             val minSel = selection.min
                             val maxSel = selection.max
-                            entry.spans.add(TextSpan(minSel, maxSel, style))
+                            entry.spans = replaceStyledRange(
+                                spans = entry.spans,
+                                selectionStart = minSel,
+                                selectionEnd = maxSel,
+                                style = style
+                            )
                             entry.style = entry.style.copy(alignment = style.alignment)
                             
                             if (entry.objectId != null) {
                                 val obj = page.items.find { it.id == entry.objectId }
                                 val payload = obj?.payload as? TextPayload
                                 if (payload != null) {
-                                    payload.spans.add(TextSpan(minSel, maxSel, style))
+                                    payload.spans = replaceStyledRange(
+                                        spans = payload.spans,
+                                        selectionStart = minSel,
+                                        selectionEnd = maxSel,
+                                        style = style
+                                    )
                                     payload.style = payload.style.copy(alignment = style.alignment)
                                 }
                             }
@@ -263,8 +294,25 @@ class NoteEditorViewModel @Inject constructor(
                 content.pages.forEach { page ->
                     val obj = page.items.find { it.id == selectedId } ?: return@forEach
                     val payload = obj.payload as? TextPayload ?: return@forEach
-                    obj.payload = payload.copy(style = style)
-                    page.updateLinearEntry(objectId = selectedId, style = style)
+                    val updatedPayload = if (selection != null && !selection.collapsed) {
+                        payload.copy(
+                            spans = replaceStyledRange(
+                                spans = payload.spans,
+                                selectionStart = selection.min,
+                                selectionEnd = selection.max,
+                                style = style
+                            ),
+                            style = payload.style.copy(alignment = style.alignment)
+                        )
+                    } else {
+                        payload.copy(style = style)
+                    }
+                    obj.payload = updatedPayload
+                    page.updateLinearEntry(
+                        objectId = selectedId,
+                        style = updatedPayload.style,
+                        spans = updatedPayload.spans
+                    )
                 }
             }
         } else if (selectedLinearPageId != null) {
@@ -273,6 +321,15 @@ class NoteEditorViewModel @Inject constructor(
                 if (pageIndex == -1) return@mutateContent
                 val page = content.pages[pageIndex]
                 content.pages[pageIndex] = page.copy(linearTextStyle = style).also {
+                    if (selection != null && !selection.collapsed) {
+                        val entry = it.ensurePrimaryLinearEntry()
+                        entry.spans = replaceStyledRange(
+                            spans = entry.spans,
+                            selectionStart = selection.min,
+                            selectionEnd = selection.max,
+                            style = style
+                        )
+                    }
                     it.updatePrimaryLinearText(style = style)
                 }
             }
@@ -324,25 +381,25 @@ class NoteEditorViewModel @Inject constructor(
         selectObject(id)
     }
 
-    fun updateCurrentPageStyle(
+    fun updateGlobalPageStyle(
         textSize: Float? = null,
         backgroundColor: Int? = null,
         padding: PagePadding? = null,
         borderStyle: PageBorderStyle? = null
     ) {
         mutateContent { content ->
-            val page = content.pages.getOrNull(_uiState.value.currentPageIndex) ?: return@mutateContent
-            val pageIndex = _uiState.value.currentPageIndex
-            content.pages[pageIndex] = page.copy(
-                backgroundColor = backgroundColor ?: page.backgroundColor,
-                pagePadding = padding ?: page.pagePadding,
-                borderStyle = borderStyle ?: page.borderStyle,
-                linearTextStyle = if (textSize != null) page.linearTextStyle.copy(fontSize = textSize) else page.linearTextStyle
-            ).also {
-                it.updatePrimaryLinearText(
-                    style = it.linearTextStyle,
-                    padding = it.pagePadding
-                )
+            content.pages.forEachIndexed { index, page ->
+                content.pages[index] = page.copy(
+                    backgroundColor = backgroundColor ?: page.backgroundColor,
+                    pagePadding = padding ?: page.pagePadding,
+                    borderStyle = borderStyle ?: page.borderStyle,
+                    linearTextStyle = if (textSize != null) page.linearTextStyle.copy(fontSize = textSize) else page.linearTextStyle
+                ).also {
+                    it.updatePrimaryLinearText(
+                        style = it.linearTextStyle,
+                        padding = it.pagePadding
+                    )
+                }
             }
         }
         textSize?.let { size ->
@@ -381,15 +438,18 @@ class NoteEditorViewModel @Inject constructor(
         }
     }
 
-    fun updateTextObject(pageIndex: Int, objectId: String, newText: String) {
+    fun updateTextObject(pageIndex: Int, objectId: String, newText: String, newSpans: List<TextSpan>? = null) {
         mutateContent { content ->
             val obj = content.pages[pageIndex].items.find { it.id == objectId } ?: return@mutateContent
             val payload = obj.payload as? TextPayload ?: return@mutateContent
-            obj.payload = payload.copy(text = newText)
+            
+            val updatedSpans = newSpans?.toMutableList() ?: payload.spans
+            obj.payload = payload.copy(text = newText, spans = updatedSpans)
             content.pages[pageIndex].updateLinearEntry(
                 objectId = objectId,
                 textValue = newText,
-                style = (obj.payload as? TextPayload)?.style
+                style = (obj.payload as? TextPayload)?.style,
+                spans = updatedSpans
             )
         }
     }
@@ -405,13 +465,26 @@ class NoteEditorViewModel @Inject constructor(
                 content.pages.forEach { page ->
                     val obj = page.items.find { it.id == selectedId } ?: return@forEach
                     val payload = obj.payload as? TextPayload ?: return@forEach
+                    val selectionRange = _uiState.value.globalSelection
+                    val updatedPayload = if (selectionRange != null && !selectionRange.collapsed) {
+                        payload.copy(
+                            spans = replaceStyledRange(
+                                spans = payload.spans,
+                                selectionStart = selectionRange.min,
+                                selectionEnd = selectionRange.max,
+                                style = payload.style.copy(color = color)
+                            ),
+                            style = payload.style.copy(color = color)
+                        )
+                    } else {
+                        payload.copy(style = payload.style.copy(color = color))
+                    }
 
-                    obj.payload = payload.copy(
-                        style = payload.style.copy(color = color)
-                    )
+                    obj.payload = updatedPayload
                     page.updateLinearEntry(
                         objectId = selectedId,
-                        style = payload.style.copy(color = color)
+                        style = updatedPayload.style,
+                        spans = updatedPayload.spans
                     )
                 }
             }
@@ -422,6 +495,16 @@ class NoteEditorViewModel @Inject constructor(
                 val page = content.pages[pageIndex]
                 val updatedStyle = page.linearTextStyle.copy(color = color)
                 content.pages[pageIndex] = page.copy(linearTextStyle = updatedStyle).also {
+                    val selectionRange = _uiState.value.globalSelection
+                    if (selectionRange != null && !selectionRange.collapsed) {
+                        val entry = it.ensurePrimaryLinearEntry()
+                        entry.spans = replaceStyledRange(
+                            spans = entry.spans,
+                            selectionStart = selectionRange.min,
+                            selectionEnd = selectionRange.max,
+                            style = updatedStyle
+                        )
+                    }
                     it.updatePrimaryLinearText(style = updatedStyle)
                 }
             }
@@ -451,6 +534,19 @@ class NoteEditorViewModel @Inject constructor(
         }
     }
 
+/*
+    fun handlePageTapForLinearText(pageIndex: Int, x: Float, y: Float) {
+        mutateContent { content ->
+            val page = content.pages.getOrNull(pageIndex) ?: return@mutateContent
+            val lastEntry = page.linearContent.lastOrNull()
+            if (lastEntry != null) {
+                _uiState.update { it.copy(activeLinearTextId = lastEntry.id) }
+            } else {
+                page.ensurePrimaryLinearEntry()
+                _uiState.update { it.copy(activeLinearTextId = page.linearContent.first().id) }
+            }
+        }
+    }*/
     fun updatePageLinearText(pageIndex: Int, text: String) {
         mutateContent { content ->
             val page = content.pages.getOrNull(pageIndex) ?: return@mutateContent
@@ -462,6 +558,70 @@ class NoteEditorViewModel @Inject constructor(
         mutateContent { content ->
             val page = content.pages.getOrNull(pageIndex) ?: return@mutateContent
             page.updateLinearEntry(id = id, textValue = text, spans = spans) 
+        }
+    }
+
+    fun handleLinearTextOverflow(
+        pageIndex: Int,
+        entryId: String,
+        visibleText: String,
+        overflowText: String,
+        visibleSpans: List<TextSpan>,
+        overflowSpans: List<TextSpan>
+    ) {
+        if (overflowText.isBlank()) return
+
+        mutateContent { content ->
+            val currentPage = content.pages.getOrNull(pageIndex) ?: return@mutateContent
+            currentPage.updateLinearEntry(
+                id = entryId,
+                textValue = visibleText,
+                spans = visibleSpans
+            )
+
+            val nextPageIndex = if (pageIndex == content.pages.lastIndex) {
+                content.pages.add(
+                    PageData(
+                        pageNo = content.pages.size,
+                        pageSize = currentPage.pageSize,
+                        pageDimensions = currentPage.pageDimensions,
+                        backgroundColor = currentPage.backgroundColor,
+                        pagePadding = currentPage.pagePadding,
+                        borderStyle = currentPage.borderStyle,
+                        linearTextStyle = currentPage.linearTextStyle
+                    ).apply { ensurePrimaryLinearEntry() }
+                )
+                content.pages.lastIndex
+            } else {
+                pageIndex + 1
+            }
+
+            val nextPage = content.pages[nextPageIndex]
+            val nextEntry = nextPage.ensurePrimaryLinearEntry()
+            val existingText = nextEntry.value
+            val combinedText = if (existingText.isBlank()) overflowText else overflowText + "\n" + existingText
+            val shiftedExisting = nextEntry.spans.map {
+                it.copy(start = it.start + overflowText.length + 1, end = it.end + overflowText.length + 1)
+            }
+            nextPage.updateLinearEntry(
+                id = nextEntry.id,
+                textValue = combinedText,
+                spans = overflowSpans + shiftedExisting
+            )
+
+            content.pages.forEachIndexed { index, page ->
+                content.pages[index] = page.copy(pageNo = index)
+            }
+
+            _uiState.update {
+                it.copy(
+                    currentPageIndex = nextPageIndex,
+                    pendingViewportPageIndex = nextPageIndex,
+                    selectedLinearPageId = nextPage.pageId,
+                    activeLinearTextId = nextEntry.id,
+                    globalSelection = androidx.compose.ui.text.TextRange(overflowText.length)
+                )
+            }
         }
     }
 
@@ -483,6 +643,7 @@ class NoteEditorViewModel @Inject constructor(
     }
 
     fun setCursorPosition(pos: Int) {
+        if (_cursorPosition.value == pos) return
         _cursorPosition.value = pos
         
         val activeLinearTextId = _uiState.value.activeLinearTextId
@@ -637,6 +798,7 @@ class NoteEditorViewModel @Inject constructor(
         val content = _uiState.value.content
         val currentPage = content.pages.getOrNull(pageIndex) ?: return
         val obj = currentPage.items.find { it.id == objectId } ?: return
+        val page = currentPage
 
         val newX = obj.transform.x + deltaX
         val newY = obj.transform.y + deltaY
@@ -656,8 +818,13 @@ class NoteEditorViewModel @Inject constructor(
         }
 
         // --- INTERNAL CLAMPING (if not switching pages) ---
-        obj.transform.x = newX.coerceIn(0f, pageWidth - obj.bounds.width)
-        obj.transform.y = newY // Allow slight overflow during drag for handoff
+        val minX = page.pagePadding.startPoints
+        val maxX = (page.widthPoints - page.pagePadding.endPoints - obj.bounds.width).coerceAtLeast(minX)
+        val minY = page.pagePadding.topPoints
+        val maxY = (page.heightPoints - page.pagePadding.bottomPoints - obj.bounds.height).coerceAtLeast(minY)
+
+        obj.transform.x = newX.coerceIn(minX, maxX)
+        obj.transform.y = newY.coerceIn(minY, maxY)
         currentPage.updateLinearEntry(
             objectId = objectId,
             transform = obj.transform.copy()
@@ -738,14 +905,17 @@ class NoteEditorViewModel @Inject constructor(
         pageHeight: Float
     ) {
         val content = _uiState.value.content
-        val obj = content.pages[pageIndex].items.find { it.id == objectId } ?: return
+        val page = content.pages[pageIndex]
+        val obj = page.items.find { it.id == objectId } ?: return
 
-        val newWidth = (obj.bounds.width + dx).coerceIn(80f, pageWidth)
-        val newHeight = (obj.bounds.height + dy).coerceIn(40f, pageHeight)
+        val maxWidth = (page.widthPoints - page.pagePadding.endPoints - obj.transform.x).coerceAtLeast(80f)
+        val maxHeight = (page.heightPoints - page.pagePadding.bottomPoints - obj.transform.y).coerceAtLeast(40f)
+        val newWidth = (obj.bounds.width + dx).coerceIn(80f, maxWidth)
+        val newHeight = (obj.bounds.height + dy).coerceIn(40f, maxHeight)
 
         obj.bounds.width = newWidth
         obj.bounds.height = newHeight
-        content.pages[pageIndex].updateLinearEntry(
+        page.updateLinearEntry(
             objectId = objectId,
             bounds = obj.bounds.copy()
         )
@@ -763,12 +933,12 @@ class NoteEditorViewModel @Inject constructor(
                 it.x in obj.transform.x..(obj.transform.x + obj.bounds.width) &&
                         it.y in obj.transform.y..(obj.transform.y + obj.bounds.height)
             }
-        }.map { it.id }.toSet()
+        }.map { it.id }.firstOrNull()
 
         _uiState.update {
             it.copy(
-                selectedObjectIds = selected,
-                selectedObjectId = selected.firstOrNull(),
+                selectedObjectIds = selected?.let(::setOf) ?: emptySet(),
+                selectedObjectId = selected,
                 selectedLinearPageId = null
             )
         }
@@ -778,7 +948,7 @@ class NoteEditorViewModel @Inject constructor(
         if (selectionRect == null) return
 
         val page = uiState.value.content.pages.getOrNull(pageIndex) ?: return
-        val newlySelectedIds = mutableSetOf<String>()
+        var firstSelectedId: String? = null
 
         page.renderableItems.forEach { obj ->
             // Create a Rect representing the object's current bounds
@@ -812,30 +982,77 @@ class NoteEditorViewModel @Inject constructor(
             }
 
             // Check if the selection rectangle overlaps the object
-            if (selectionRect.overlaps(objRect)) {
-                newlySelectedIds.add(obj.id)
+            if (selectionRect.overlaps(objRect) && firstSelectedId == null) {
+                firstSelectedId = obj.id
             }
         }
 
         _uiState.update {
             it.copy(
-                selectedObjectIds = newlySelectedIds,
-                selectedObjectId = newlySelectedIds.firstOrNull(),
+                selectedObjectIds = firstSelectedId?.let(::setOf) ?: emptySet(),
+                selectedObjectId = firstSelectedId,
                 selectedLinearPageId = null
             )
         }
     }
 
-    fun addPage() {
-        mutateContent { content ->
-            content.pages.add(
-                PageData(pageNo = content.pages.size).apply {
-                    ensurePrimaryLinearEntry()
+    fun startOfflineModelDownload() {
+        val currentState = _uiState.value.offlineModelDownloadState
+        if (currentState == OfflineModelDownloadState.DOWNLOADING) return
+
+        _uiState.update {
+            it.copy(
+                offlineModelDownloadState = OfflineModelDownloadState.DOWNLOADING,
+                offlineModelStatusMessage = "Preparing offline image model download"
+            )
+        }
+
+        viewModelScope.launch {
+            delay(1800)
+            _uiState.update {
+                it.copy(
+                    offlineModelDownloadState = OfflineModelDownloadState.FAILED,
+                    offlineModelStatusMessage = "Offline model download is not wired to a concrete provider yet"
+                )
+            }
+        }
+    }
+
+    fun requestAiImageGeneration(prompt: String) {
+        _uiState.update {
+            it.copy(
+                offlineModelStatusMessage = if (prompt.isBlank()) {
+                    "Enter an image prompt first"
+                } else {
+                    "Image generation pipeline is queued for backend integration"
                 }
             )
         }
+    }
+
+    fun addPage(pageSize: PageSize = PageSize.A4, customDimensions: PageDimensions? = null) {
+        addPageAt(_uiState.value.content.pages.size, pageSize, customDimensions)
+    }
+
+    fun addPageAt(insertIndex: Int, pageSize: PageSize = PageSize.A4, customDimensions: PageDimensions? = null) {
+        mutateContent { content ->
+            val targetIndex = insertIndex.coerceIn(0, content.pages.size)
+            content.pages.add(
+                targetIndex,
+                PageData(
+                    pageNo = targetIndex,
+                    pageSize = pageSize,
+                    pageDimensions = customDimensions ?: pageSize.defaultDimensions()
+                ).apply {
+                    ensurePrimaryLinearEntry()
+                }
+            )
+            content.pages.forEachIndexed { index, page ->
+                content.pages[index] = page.copy(pageNo = index)
+            }
+        }
         _uiState.update {
-            val nextIndex = it.content.pages.lastIndex
+            val nextIndex = insertIndex.coerceIn(0, it.content.pages.lastIndex)
             it.copy(
                 currentPageIndex = nextIndex,
                 pendingViewportPageIndex = nextIndex
@@ -970,6 +1187,9 @@ class NoteEditorViewModel @Inject constructor(
                             )
                         }
 
+                        val strokeColor = obj.optInt("color", 0xFF000000.toInt())
+                        val strokeWidth = obj.optDouble("width", 5.0).toFloat()
+
                         page.upsertObject(
                             NoteObject(
                                 layer = page.items.size + 1,
@@ -977,8 +1197,8 @@ class NoteEditorViewModel @Inject constructor(
                                 payload = DrawingPayload(
                                     strokes = mutableListOf(
                                         Stroke(
-                                            color = 0xFF000000.toInt(),
-                                            width = 5f,
+                                            color = strokeColor,
+                                            width = strokeWidth,
                                             points = points
                                         )
                                     )
@@ -986,19 +1206,29 @@ class NoteEditorViewModel @Inject constructor(
                             )
                         )
                     }
-                    "LINEAR_TEXT" -> page.upsertObject(
-                        NoteObject(
-                            layer = (page.items.maxOfOrNull { it.layer } ?: 0) + 1,
-                            type = ObjectType.LINEAR_TEXT,
-                            transform = Transform(x = obj.optDouble("x", 50.0).toFloat(), y = obj.optDouble("y", 50.0).toFloat()),
-                            bounds = Bounds(width = 600f, height = 100f),
-                            payload = TextPayload(text = obj.optString("text"))
+                    "LINEAR_TEXT" -> {
+                        val currentText = page.primaryLinearEntry?.value.orEmpty()
+                        val aiText = obj.optString("text")
+                        page.updatePrimaryLinearText(
+                            text = listOf(currentText, aiText)
+                                .filter { it.isNotBlank() }
+                                .joinToString(separator = if (currentText.isBlank()) "" else "\n")
                         )
-                    )
+                    }
 
                     "LIST" -> {
                         val styleStr = obj.optString("listStyle", "BULLET")
                         val style = try { ListMarker.valueOf(styleStr) } catch (e: Exception) { ListMarker.BULLET }
+                        val orderedStyle = try {
+                            OrderedListStyle.valueOf(obj.optString("orderedStyle", "DIGITS"))
+                        } catch (e: Exception) {
+                            OrderedListStyle.DIGITS
+                        }
+                        val bulletStyle = try {
+                            BulletListStyle.valueOf(obj.optString("bulletStyle", "DISC"))
+                        } catch (e: Exception) {
+                            BulletListStyle.DISC
+                        }
 
                         val itemsJson = obj.optJSONArray("items")
                         val listItems = mutableListOf<ListItem>()
@@ -1019,7 +1249,12 @@ class NoteEditorViewModel @Inject constructor(
                                 type = ObjectType.LIST,
                                 transform = Transform(x = obj.optDouble("x", 80.0).toFloat(), y = obj.optDouble("y", 100.0).toFloat()),
                                 bounds = Bounds(width = 500f, height = 200f),
-                                payload = ListPayload(style = style, items = listItems)
+                                payload = ListPayload(
+                                    style = style,
+                                    orderedStyle = orderedStyle,
+                                    bulletStyle = bulletStyle,
+                                    items = listItems
+                                )
                             )
                         )
                     }
@@ -1034,7 +1269,15 @@ class NoteEditorViewModel @Inject constructor(
 
             _uiState.update { it.copy(isLoading = true) }
 
-            val json = gemini.generateObjects(prompt)
+            val content = _uiState.value.content
+            val page = content.pages.getOrNull(pageIndex)
+            val pageContext = buildAiPageContext(content, pageIndex)
+            val json = gemini.generateObjects(
+                prompt = prompt,
+                pageContext = pageContext,
+                currentPageWidthPoints = page?.widthPoints ?: PageSize.A4.widthPoints,
+                currentPageHeightPoints = page?.heightPoints ?: PageSize.A4.heightPoints
+            )
             Log.d("Aidata","Aidata: $json")
             if (json != null) {
                 applyAIObjects(pageIndex, json)
@@ -1084,60 +1327,85 @@ class NoteEditorViewModel @Inject constructor(
     // In NoteEditorViewModel.kt
 
     fun handleListInsertion(marker: ListMarker) {
-        val activeId = _uiState.value.selectedObjectId
-        val content = _uiState.value.content
         val pageIndex = _uiState.value.currentPageIndex
+        val content = _uiState.value.content
+        if (pageIndex !in content.pages.indices) return
+        val page = content.pages[pageIndex]
+        val activeLinearId = _uiState.value.activeLinearTextId ?: page.ensurePrimaryLinearEntry().id
 
-        // Check if the currently selected object is a LINEAR_TEXT block
-        val activeObj = content.pages[pageIndex].items.find { it.id == activeId }
-
-        if (activeObj?.type == ObjectType.LINEAR_TEXT) {
-            // OPTION A: Insert internally into the typing flow
-            insertMarkerIntoLinearText(activeObj, marker)
-        } else {
-            // OPTION B: Create a new movable LIST object
-            addNewMovableList(pageIndex, marker)
+        val entryIndex = page.linearContent.indexOfFirst { it.id == activeLinearId }
+        if (entryIndex != -1) {
+            val entry = page.linearContent[entryIndex]
+            if (entry.type == ObjectType.LINEAR_TEXT) {
+                splitTextAndInsertList(pageIndex, entryIndex, marker)
+                return
+            }
         }
     }
 
-    private fun insertMarkerIntoLinearText(obj: NoteObject, marker: ListMarker) {
-        val payload = obj.payload as? TextPayload ?: return
-        val prefix = when(marker) {
-            ListMarker.BULLET -> "\n• "
-            ListMarker.NUMBER -> "\n1. "
-            ListMarker.ROMAN -> "\nI. "
-            ListMarker.CHECKBOX -> "\n[ ] "
-        }
-        updateTextObject(_uiState.value.currentPageIndex, obj.id, payload.text + prefix)
-    }
-
-    private fun addNewMovableList(pageIndex: Int, marker: ListMarker) {
+    private fun splitTextAndInsertList(pageIndex: Int, entryIndex: Int, marker: ListMarker) {
         mutateContent { content ->
             val page = content.pages[pageIndex]
+            val entry = page.linearContent[entryIndex]
+            val pos = _cursorPosition.value.coerceIn(0, entry.value.length)
 
-            // Calculate standard position (center-ish)
-            val defaultX = 100f
-            val defaultY = 300f
+            val textBefore = entry.value.take(pos)
+            val textAfter = entry.value.substring(pos)
 
-            val newListObject = NoteObject(
-                id = UUID.randomUUID().toString(),
-                layer = (page.items.maxOfOrNull { it.layer } ?: 0) + 1,
-                type = ObjectType.LIST,
-                transform = Transform(x = defaultX, y = defaultY),
-                bounds = Bounds(width = 400f, height = 200f),
-                payload = ListPayload(
-                    style = marker,
-                    items = mutableListOf(
-                        ListItem(text = "New Item")
-                    )
-                )
+            val spansBefore = entry.spans.filter { it.start < pos }.map { it.copy(end = minOf(it.end, pos)) }.toMutableList()
+            val spansAfter = entry.spans.filter { it.end > pos }.map { it.copy(start = maxOf(0, it.start - pos), end = it.end - pos) }.toMutableList()
+
+            // Update current text block
+            page.linearContent[entryIndex] = entry.copy(
+                value = textBefore,
+                spans = spansBefore
             )
 
-            page.upsertObject(newListObject)
+            // Create List Object
+            val listId = UUID.randomUUID().toString()
+            val listPayload = ListPayload(
+                style = marker,
+                orderedStyle = when (marker) {
+                    ListMarker.ROMAN -> OrderedListStyle.UPPER_ROMAN
+                    else -> OrderedListStyle.DIGITS
+                },
+                items = mutableListOf(ListItem(text = ""))
+            )
+            val listObj = NoteObject(
+                id = listId,
+                type = ObjectType.LIST,
+                payload = listPayload,
+                layer = page.items.size + 1
+            )
+            page.items.add(listObj)
 
-            // Auto-select the new list so the sub-toolbar stays active
-            _uiState.update { it.copy(selectedObjectId = newListObject.id) }
+            // Insert List Entry
+            val listEntry = LinearContentEntry(
+                objectId = listId,
+                type = ObjectType.LIST,
+                layer = entry.layer + 1,
+                bounds = Bounds(width = entry.bounds.width)
+            )
+            page.linearContent.add(entryIndex + 1, listEntry)
+
+            // Insert Remaining Text Entry
+            val nextTextEntry = LinearContentEntry(
+                type = ObjectType.LINEAR_TEXT,
+                value = textAfter,
+                spans = spansAfter,
+                layer = entry.layer + 2,
+                bounds = entry.bounds,
+                style = entry.style
+            )
+            page.linearContent.add(entryIndex + 2, nextTextEntry)
+
+            // Shift layers for subsequent entries
+            for (i in entryIndex + 3 until page.linearContent.size) {
+                val old = page.linearContent[i]
+                page.linearContent[i] = old.copy(layer = old.layer + 2)
+            }
         }
+        _uiState.update { it.copy(selectedObjectId = null) }
     }
 
 
@@ -1147,29 +1415,78 @@ class NoteEditorViewModel @Inject constructor(
      * Scenario A: The user is already in "Type Mode".
      * We append the list prefix (e.g., "• ") to the existing text block.
      */
-    private fun insertMarkerIntoLinearText(pageIndex: Int, obj: NoteObject, marker: ListMarker) {
-        val payload = obj.payload as? TextPayload ?: return
+    fun mergeWithPreviousBlock(pageIndex: Int, entryId: String) {
+        mutateContent { content ->
+            val page = content.pages.getOrNull(pageIndex) ?: return@mutateContent
+            val entryIndex = page.linearContent.indexOfFirst { it.id == entryId }
+            if (entryIndex <= 0) return@mutateContent
 
-        // Define the prefix based on the marker type
-        val prefix = when (marker) {
-            ListMarker.BULLET -> "\n• "
-            ListMarker.NUMBER -> "\n1. "
-            ListMarker.ROMAN -> "\nI. "
-            ListMarker.CHECKBOX -> "\n" // Checkboxes in linear text use custom logic or a prefix like "[ ] "
+            val current = page.linearContent[entryIndex]
+            val previous = page.linearContent[entryIndex - 1]
+
+            if (current.type == ObjectType.LINEAR_TEXT && previous.type == ObjectType.LINEAR_TEXT) {
+                val oldLen = previous.value.length
+                val newText = previous.value + current.value
+                val newSpans = previous.spans.toMutableList()
+                newSpans.addAll(current.spans.map { it.copy(start = it.start + oldLen, end = it.end + oldLen) })
+
+                page.linearContent[entryIndex - 1] = previous.copy(
+                    value = newText,
+                    spans = newSpans
+                )
+                page.linearContent.removeAt(entryIndex)
+                
+                // Shift layers
+                for (i in entryIndex until page.linearContent.size) {
+                    val old = page.linearContent[i]
+                    page.linearContent[i] = old.copy(layer = old.layer - 1)
+                }
+            } else if (current.type == ObjectType.LIST && previous.type == ObjectType.LINEAR_TEXT) {
+                // If backspacing a list into a text block, maybe just delete the list if empty?
+                // For now, let's just delete the list if it's empty
+                val listObj = page.items.find { it.id == current.objectId }
+                val payload = listObj?.payload as? ListPayload
+                if (payload?.items?.isEmpty() == true) {
+                    page.linearContent.removeAt(entryIndex)
+                    page.removeObject(current.objectId!!)
+                }
+            }
         }
-
-        // Update the text value in the block
-        val newText = payload.text + prefix
-        updateLinearTextValue(pageIndex, obj.id, newText)
-
-        // Update cursor position to the end
-        _cursorPosition.value = newText.length
     }
+
 
     fun savePreview(context: Context, content: NoteContent,noteId: Long){
         viewModelScope.launch {
             Log.d("GeneratePreview","Preview Started viewModel:")
             repository.generateNotePreview(context = context, content = content, noteId = noteId)
+        }
+    }
+
+    private fun buildAiPageContext(content: NoteContent, currentPageIndex: Int): String {
+        val indices = (currentPageIndex - 1..currentPageIndex + 1)
+            .filter { it in content.pages.indices }
+
+        return indices.joinToString(separator = "\n\n") { index ->
+            val page = content.pages[index]
+            buildString {
+                append("Page ${index + 1}")
+                if (index == currentPageIndex) append(" (current)")
+                append(": size=")
+                append(page.widthPoints)
+                append("x")
+                append(page.heightPoints)
+                append(" pt, padding=")
+                append(page.pagePadding.startPoints)
+                append("/")
+                append(page.pagePadding.topPoints)
+                append("/")
+                append(page.pagePadding.endPoints)
+                append("/")
+                append(page.pagePadding.bottomPoints)
+                append(", content=\"")
+                append(page.linearTextPaste.take(1400))
+                append("\"")
+            }
         }
     }
 }
@@ -1183,4 +1500,39 @@ private fun ObjectPayload.asLinearTextValue(): String? = when (this) {
         "$prefix ${item.text}"
     }
     else -> null
+}
+
+private fun replaceStyledRange(
+    spans: MutableList<TextSpan>,
+    selectionStart: Int,
+    selectionEnd: Int,
+    style: TextStyleData
+): MutableList<TextSpan> {
+    if (selectionStart >= selectionEnd) return spans
+
+    val updated = mutableListOf<TextSpan>()
+    spans.forEach { span ->
+        if (span.end <= selectionStart || span.start >= selectionEnd) {
+            updated.add(span)
+        } else {
+            if (span.start < selectionStart) {
+                updated.add(span.copy(end = selectionStart))
+            }
+            if (span.end > selectionEnd) {
+                updated.add(span.copy(start = selectionEnd))
+            }
+        }
+    }
+    updated.add(TextSpan(selectionStart, selectionEnd, style))
+    return updated
+        .sortedWith(compareBy<TextSpan> { it.start }.thenBy { it.end })
+        .fold(mutableListOf()) { acc, span ->
+            val last = acc.lastOrNull()
+            if (last != null && last.end >= span.start && last.style == span.style) {
+                acc[acc.lastIndex] = last.copy(end = maxOf(last.end, span.end))
+            } else {
+                acc.add(span)
+            }
+            acc
+        }
 }
