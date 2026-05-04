@@ -1,12 +1,8 @@
 package com.mato.syai.note.ui.editor
 
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.util.Log
-import android.view.View
 import android.widget.Toast
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -54,6 +50,7 @@ class NoteEditorViewModel @Inject constructor(
 
     private var autoSaveJob: Job? = null
     private val gemini = GeminiClient()
+    private var lastUndoPushAtMs: Long = 0L
 
     private var internalClipboardText: String? = null
     private var internalClipboardSpans: List<TextSpan>? = null
@@ -116,14 +113,20 @@ class NoteEditorViewModel @Inject constructor(
             val page = content.pages[pageIndex]
 
             val maxLayer = page.linearContent.maxOfOrNull { it.layer } ?: page.items.maxOfOrNull { it.layer } ?: 0
+            val maxWidth = page.widthPoints * 0.4f
+            val maxHeight = page.heightPoints * 0.3f
+            val baseWidth = maxWidth.coerceAtLeast(120f)
+            val baseHeight = (baseWidth * ratio).coerceAtLeast(120f)
+            val scale = minOf(1f, maxWidth / baseWidth, maxHeight / baseHeight)
             
             val obj = NoteObject(
                 layer = maxLayer + 1,
                 type = ObjectType.IMAGE,
                 transform = Transform(x = x, y = y),
-                bounds = Bounds(300f, 300f * ratio),
+                bounds = Bounds(baseWidth * scale, baseHeight * scale),
                 payload = ImagePayload(uri = uri, ratio = ratio)
             )
+            clampObjectWithinPage(page, obj)
 
             page.upsertObject(obj)
 
@@ -137,11 +140,13 @@ class NoteEditorViewModel @Inject constructor(
                 value = "",
                 transform = Transform(
                     x = page.pagePadding.startPoints,
-                    y = y + 220f
+                    y = (obj.transform.y + obj.bounds.height + 24f)
+                        .coerceAtMost(page.heightPoints - page.pagePadding.bottomPoints - 60f)
                 ),
                 bounds = Bounds(
                     width = page.widthPoints - page.pagePadding.startPoints - page.pagePadding.endPoints,
-                    height = page.heightPoints - (y + 220f) - page.pagePadding.bottomPoints
+                    height = (page.heightPoints - (obj.transform.y + obj.bounds.height + 24f) - page.pagePadding.bottomPoints)
+                        .coerceAtLeast(80f)
                 ),
                 style = page.linearTextStyle
             )
@@ -152,9 +157,13 @@ class NoteEditorViewModel @Inject constructor(
         }
     }
 
-    private fun mutateContent(mutator: (NoteContent) -> Unit) {
+    private fun mutateContent(trackUndo: Boolean = true, mutator: (NoteContent) -> Unit) {
         val workingCopy = deepCopy(_uiState.value.content)
-        undoRedoManager.push(workingCopy)
+        val now = System.currentTimeMillis()
+        if (trackUndo && now - lastUndoPushAtMs > 650L) {
+            undoRedoManager.push(workingCopy)
+            lastUndoPushAtMs = now
+        }
 
         mutator(workingCopy)
 
@@ -229,7 +238,8 @@ class NoteEditorViewModel @Inject constructor(
             it.copy(
                 selectedObjectId = null,
                 selectedObjectIds = emptySet(),
-                selectedLinearPageId = null
+                selectedLinearPageId = null,
+                globalSelection = null
             )
         }
     }
@@ -427,6 +437,7 @@ class NoteEditorViewModel @Inject constructor(
                 transform = Transform(x = x, y = y),
                 payload = TextPayload("")
             )
+            clampObjectWithinPage(page, obj)
 
             page.upsertObject(obj)
 
@@ -439,7 +450,7 @@ class NoteEditorViewModel @Inject constructor(
     }
 
     fun updateTextObject(pageIndex: Int, objectId: String, newText: String, newSpans: List<TextSpan>? = null) {
-        mutateContent { content ->
+        mutateContent(trackUndo = false) { content ->
             val obj = content.pages[pageIndex].items.find { it.id == objectId } ?: return@mutateContent
             val payload = obj.payload as? TextPayload ?: return@mutateContent
             
@@ -519,15 +530,18 @@ class NoteEditorViewModel @Inject constructor(
     }
 
     fun handlePageTapForLinearText(pageIndex: Int, x: Float, y: Float) {
+        var activeEntryId: String? = null
         mutateContent { content ->
             val page = content.pages[pageIndex]
-            page.ensurePrimaryLinearEntry()
+            val entry = page.ensurePrimaryLinearEntry()
             page.updatePrimaryLinearText(style = page.linearTextStyle)
+            activeEntryId = entry.id
         }
         _uiState.update {
             it.copy(
                 currentPageIndex = pageIndex,
                 selectedLinearPageId = _uiState.value.content.pages.getOrNull(pageIndex)?.pageId,
+                activeLinearTextId = activeEntryId,
                 selectedObjectId = null,
                 selectedObjectIds = emptySet()
             )
@@ -548,14 +562,14 @@ class NoteEditorViewModel @Inject constructor(
         }
     }*/
     fun updatePageLinearText(pageIndex: Int, text: String) {
-        mutateContent { content ->
+        mutateContent(trackUndo = false) { content ->
             val page = content.pages.getOrNull(pageIndex) ?: return@mutateContent
             page.updatePrimaryLinearText(text = text, style = page.linearTextStyle)
         }
     }
 
     fun updateLinearTextValueById(pageIndex: Int, id: String, text: String, spans: List<TextSpan>? = null) {
-        mutateContent { content ->
+        mutateContent(trackUndo = false) { content ->
             val page = content.pages.getOrNull(pageIndex) ?: return@mutateContent
             page.updateLinearEntry(id = id, textValue = text, spans = spans) 
         }
@@ -626,7 +640,7 @@ class NoteEditorViewModel @Inject constructor(
     }
 
     fun updateLinearTextValue(pageIndex: Int, objectId: String, text: String) {
-        mutateContent { content ->
+        mutateContent(trackUndo = false) { content ->
             val obj = content.pages[pageIndex].items.find { it.id == objectId } ?: return@mutateContent
             val payload = obj.payload as? TextPayload ?: return@mutateContent
             obj.payload = payload.copy(text = text)
@@ -680,7 +694,7 @@ class NoteEditorViewModel @Inject constructor(
     }
 
     fun updateObjectPayload(pageIndex: Int, objectId: String, payload: ObjectPayload) {
-        mutateContent { content ->
+        mutateContent(trackUndo = false) { content ->
             val page = content.pages.getOrNull(pageIndex)
             val target = page?.items?.find { it.id == objectId }
             target?.payload = payload
@@ -705,7 +719,12 @@ class NoteEditorViewModel @Inject constructor(
             if (drawingObj != null) {
                 val payload = drawingObj.payload as DrawingPayload
                 payload.strokes.add(stroke.copy(brushStyle = _uiState.value.brushStyle))
-                page.updateLinearEntry(objectId = drawingObj.id)
+                updateDrawingObjectBounds(drawingObj)
+                page.updateLinearEntry(
+                    objectId = drawingObj.id,
+                    transform = drawingObj.transform.copy(),
+                    bounds = drawingObj.bounds.copy()
+                )
             } else {
                 val newDrawing = NoteObject(
                     layer = page.items.size + 1,
@@ -716,6 +735,7 @@ class NoteEditorViewModel @Inject constructor(
                         strokes = mutableListOf(stroke.copy(brushStyle = _uiState.value.brushStyle))
                     )
                 )
+                updateDrawingObjectBounds(newDrawing)
                 page.upsertObject(newDrawing)
             }
         }
@@ -757,6 +777,12 @@ class NoteEditorViewModel @Inject constructor(
                     if (strokesToKeep.size != payload.strokes.size) {
                         changed = true
                         obj.payload = payload.copy(strokes = strokesToKeep)
+                        updateDrawingObjectBounds(obj)
+                        page.updateLinearEntry(
+                            objectId = obj.id,
+                            transform = obj.transform.copy(),
+                            bounds = obj.bounds.copy()
+                        )
                     }
                 }
             }
@@ -783,6 +809,21 @@ class NoteEditorViewModel @Inject constructor(
         val dx = p.x - projX
         val dy = p.y - projY
         return dx * dx + dy * dy
+    }
+
+    private fun updateDrawingObjectBounds(obj: NoteObject) {
+        val drawing = obj.payload as? DrawingPayload ?: return
+        val points = drawing.strokes.flatMap { it.points }
+        if (points.isEmpty()) return
+
+        val minX = points.minOf { it.x }
+        val minY = points.minOf { it.y }
+        val maxX = points.maxOf { it.x }
+        val maxY = points.maxOf { it.y }
+        obj.transform.x = minX
+        obj.transform.y = minY
+        obj.bounds.width = (maxX - minX).coerceAtLeast(32f)
+        obj.bounds.height = (maxY - minY).coerceAtLeast(32f)
     }
 
     // ---------------- MOVE ----------------
@@ -893,6 +934,7 @@ class NoteEditorViewModel @Inject constructor(
 
             obj.layer = (page.items.maxOfOrNull { it.layer } ?: 0) + 1
             page.updateLinearEntry(objectId = objectId, layer = obj.layer)
+            normalizePageLayers(page)
         }
     }
 
@@ -1060,6 +1102,21 @@ class NoteEditorViewModel @Inject constructor(
         }
     }
 
+    fun deleteLayer(pageIndex: Int, objectId: String) {
+        mutateContent {
+            val page = it.pages.getOrNull(pageIndex) ?: return@mutateContent
+            page.removeObject(objectId)
+            normalizePageLayers(page)
+        }
+        _uiState.update {
+            it.copy(
+                selectedObjectId = null,
+                selectedObjectIds = emptySet(),
+                globalSelection = null
+            )
+        }
+    }
+
     private fun moveObjectToPage(fromPage: Int, toPage: Int, objectId: String, newY: Float) {
         mutateContent { content ->
             val obj = content.pages[fromPage].items.find { it.id == objectId } ?: return@mutateContent
@@ -1069,6 +1126,7 @@ class NoteEditorViewModel @Inject constructor(
             obj.transform.y = newY
 
             // Add to target page
+            clampObjectWithinPage(content.pages[toPage], obj)
             content.pages[toPage].upsertObject(obj)
 
             // Update selection to the new page context
@@ -1109,13 +1167,14 @@ class NoteEditorViewModel @Inject constructor(
                     )
                 )
             )
+            clampObjectWithinPage(page, obj)
 
             page.upsertObject(obj)
         }
     }
 
     fun addChecklistItem(objectId: String) {
-        mutateContent { content ->
+        mutateContent(trackUndo = false) { content ->
             content.pages.forEach { page ->
                 val obj = page.items.find { it.id == objectId } ?: return@forEach
                 val payload = obj.payload as? ChecklistPayload ?: return@forEach
@@ -1129,7 +1188,7 @@ class NoteEditorViewModel @Inject constructor(
     }
 
     fun updateChecklistItem(objectId: String, itemId: String, text: String) {
-        mutateContent { content ->
+        mutateContent(trackUndo = false) { content ->
             content.pages.forEach { page ->
                 val obj = page.items.find { it.id == objectId } ?: return@forEach
                 val payload = obj.payload as? ChecklistPayload ?: return@forEach
@@ -1156,19 +1215,19 @@ class NoteEditorViewModel @Inject constructor(
                 when (type) {
 
                     "TEXT" -> {
-                        page.upsertObject(
-                            NoteObject(
-                                layer = page.items.size + 1,
-                                type = ObjectType.TEXT,
-                                transform = Transform(
-                                    x = obj.optDouble("x", 100.0).toFloat(),
-                                    y = obj.optDouble("y", 200.0).toFloat()
-                                ),
-                                payload = TextPayload(
-                                    text = obj.optString("text")
-                                )
+                        val noteObject = NoteObject(
+                            layer = page.items.size + 1,
+                            type = ObjectType.TEXT,
+                            transform = Transform(
+                                x = obj.optDouble("x", 100.0).toFloat(),
+                                y = obj.optDouble("y", 200.0).toFloat()
+                            ),
+                            payload = TextPayload(
+                                text = obj.optString("text")
                             )
                         )
+                        clampObjectWithinPage(page, noteObject)
+                        page.upsertObject(noteObject)
                     }
 
                     "DRAWING" -> {
@@ -1190,21 +1249,28 @@ class NoteEditorViewModel @Inject constructor(
                         val strokeColor = obj.optInt("color", 0xFF000000.toInt())
                         val strokeWidth = obj.optDouble("width", 5.0).toFloat()
 
-                        page.upsertObject(
-                            NoteObject(
-                                layer = page.items.size + 1,
-                                type = ObjectType.DRAWING,
-                                payload = DrawingPayload(
-                                    strokes = mutableListOf(
-                                        Stroke(
-                                            color = strokeColor,
-                                            width = strokeWidth,
-                                            points = points
-                                        )
+                        val minX = points.minOfOrNull { it.x } ?: 0f
+                        val minY = points.minOfOrNull { it.y } ?: 0f
+                        val maxX = points.maxOfOrNull { it.x } ?: 0f
+                        val maxY = points.maxOfOrNull { it.y } ?: 0f
+
+                        val noteObject = NoteObject(
+                            layer = page.items.size + 1,
+                            type = ObjectType.DRAWING,
+                            transform = Transform(x = minX, y = minY),
+                            bounds = Bounds(width = (maxX - minX).coerceAtLeast(80f), height = (maxY - minY).coerceAtLeast(80f)),
+                            payload = DrawingPayload(
+                                strokes = mutableListOf(
+                                    Stroke(
+                                        color = strokeColor,
+                                        width = strokeWidth,
+                                        points = points
                                     )
                                 )
                             )
                         )
+                        clampObjectWithinPage(page, noteObject)
+                        page.upsertObject(noteObject)
                     }
                     "LINEAR_TEXT" -> {
                         val currentText = page.primaryLinearEntry?.value.orEmpty()
@@ -1243,20 +1309,20 @@ class NoteEditorViewModel @Inject constructor(
                             }
                         }
 
-                        page.upsertObject(
-                            NoteObject(
-                                layer = (page.items.maxOfOrNull { it.layer } ?: 0) + 1,
-                                type = ObjectType.LIST,
-                                transform = Transform(x = obj.optDouble("x", 80.0).toFloat(), y = obj.optDouble("y", 100.0).toFloat()),
-                                bounds = Bounds(width = 500f, height = 200f),
-                                payload = ListPayload(
-                                    style = style,
-                                    orderedStyle = orderedStyle,
-                                    bulletStyle = bulletStyle,
-                                    items = listItems
-                                )
+                        val noteObject = NoteObject(
+                            layer = (page.items.maxOfOrNull { it.layer } ?: 0) + 1,
+                            type = ObjectType.LIST,
+                            transform = Transform(x = obj.optDouble("x", 80.0).toFloat(), y = obj.optDouble("y", 100.0).toFloat()),
+                            bounds = Bounds(width = 500f, height = 200f),
+                            payload = ListPayload(
+                                style = style,
+                                orderedStyle = orderedStyle,
+                                bulletStyle = bulletStyle,
+                                items = listItems
                             )
                         )
+                        clampObjectWithinPage(page, noteObject)
+                        page.upsertObject(noteObject)
                     }
                 }
             }
@@ -1296,6 +1362,7 @@ class NoteEditorViewModel @Inject constructor(
         mutateContent { content ->
             content.pages.forEach { page ->
                 selectedIds.forEach(page::removeObject)
+                normalizePageLayers(page)
             }
         }
 
@@ -1326,7 +1393,11 @@ class NoteEditorViewModel @Inject constructor(
 
     // In NoteEditorViewModel.kt
 
-    fun handleListInsertion(marker: ListMarker) {
+    fun handleListInsertion(
+        marker: ListMarker,
+        orderedStyle: OrderedListStyle? = null,
+        bulletStyle: BulletListStyle? = null
+    ) {
         val pageIndex = _uiState.value.currentPageIndex
         val content = _uiState.value.content
         if (pageIndex !in content.pages.indices) return
@@ -1337,13 +1408,19 @@ class NoteEditorViewModel @Inject constructor(
         if (entryIndex != -1) {
             val entry = page.linearContent[entryIndex]
             if (entry.type == ObjectType.LINEAR_TEXT) {
-                splitTextAndInsertList(pageIndex, entryIndex, marker)
+                splitTextAndInsertList(pageIndex, entryIndex, marker, orderedStyle, bulletStyle)
                 return
             }
         }
     }
 
-    private fun splitTextAndInsertList(pageIndex: Int, entryIndex: Int, marker: ListMarker) {
+    private fun splitTextAndInsertList(
+        pageIndex: Int,
+        entryIndex: Int,
+        marker: ListMarker,
+        orderedStyle: OrderedListStyle?,
+        bulletStyle: BulletListStyle?
+    ) {
         mutateContent { content ->
             val page = content.pages[pageIndex]
             val entry = page.linearContent[entryIndex]
@@ -1365,17 +1442,23 @@ class NoteEditorViewModel @Inject constructor(
             val listId = UUID.randomUUID().toString()
             val listPayload = ListPayload(
                 style = marker,
-                orderedStyle = when (marker) {
+                orderedStyle = orderedStyle ?: when (marker) {
                     ListMarker.ROMAN -> OrderedListStyle.UPPER_ROMAN
                     else -> OrderedListStyle.DIGITS
                 },
+                bulletStyle = bulletStyle ?: BulletListStyle.DISC,
                 items = mutableListOf(ListItem(text = ""))
             )
             val listObj = NoteObject(
                 id = listId,
                 type = ObjectType.LIST,
                 payload = listPayload,
-                layer = page.items.size + 1
+                layer = page.items.size + 1,
+                transform = entry.transform.copy(),
+                bounds = Bounds(
+                    width = entry.bounds.width,
+                    height = 44f
+                )
             )
             page.items.add(listObj)
 
@@ -1404,8 +1487,10 @@ class NoteEditorViewModel @Inject constructor(
                 val old = page.linearContent[i]
                 page.linearContent[i] = old.copy(layer = old.layer + 2)
             }
+
+            normalizePageLayers(page)
         }
-        _uiState.update { it.copy(selectedObjectId = null) }
+        _uiState.update { it.copy(selectedObjectId = null, selectedObjectIds = emptySet()) }
     }
 
 
@@ -1488,6 +1573,56 @@ class NoteEditorViewModel @Inject constructor(
                 append("\"")
             }
         }
+    }
+
+    private fun clampObjectWithinPage(page: PageData, obj: NoteObject) {
+        val minX = page.pagePadding.startPoints
+        val minY = page.pagePadding.topPoints
+        val maxWidth = (page.widthPoints - page.pagePadding.startPoints - page.pagePadding.endPoints).coerceAtLeast(80f)
+        val maxHeight = (page.heightPoints - page.pagePadding.topPoints - page.pagePadding.bottomPoints).coerceAtLeast(40f)
+
+        obj.bounds.width = obj.bounds.width.coerceIn(80f, maxWidth)
+        obj.bounds.height = obj.bounds.height.coerceIn(40f, maxHeight)
+
+        val maxX = (page.widthPoints - page.pagePadding.endPoints - obj.bounds.width).coerceAtLeast(minX)
+        val maxY = (page.heightPoints - page.pagePadding.bottomPoints - obj.bounds.height).coerceAtLeast(minY)
+
+        obj.transform.x = obj.transform.x.coerceIn(minX, maxX)
+        obj.transform.y = obj.transform.y.coerceIn(minY, maxY)
+    }
+
+    private fun normalizePageLayers(page: PageData) {
+        val sortedEntries = page.linearContent.sortedBy { it.layer }
+        val normalizedEntries = mutableListOf<LinearContentEntry>()
+
+        sortedEntries.forEachIndexed { index, entry ->
+            val normalizedLayer =
+                if (entry.type == ObjectType.LINEAR_TEXT &&
+                    entry.objectId == null &&
+                    normalizedEntries.none { it.type == ObjectType.LINEAR_TEXT && it.objectId == null }
+                ) 0 else maxOf(1, index)
+
+            normalizedEntries.add(entry.copy(layer = normalizedLayer))
+        }
+
+        page.linearContent = normalizedEntries.toMutableList()
+
+        val referencedIds = page.linearContent.mapNotNull { it.objectId }.toSet()
+        page.linearContent.forEach { entry ->
+            entry.objectId?.let { objectId ->
+                page.items.find { it.id == objectId }?.layer = entry.layer
+            }
+        }
+
+        var nextLayer = (page.linearContent.maxOfOrNull { it.layer } ?: 0) + 1
+        page.items
+            .filter { it.id !in referencedIds }
+            .sortedBy { it.layer }
+            .forEach { item ->
+                item.layer = nextLayer++
+            }
+
+        page.refreshLinearTextPaste()
     }
 }
 

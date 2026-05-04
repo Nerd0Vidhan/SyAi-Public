@@ -17,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.mato.syai.note.domain.local.model.TextStyleData
@@ -25,9 +26,19 @@ import com.mato.syai.note.domain.local.model.TextStyleData
 @Composable
 fun HoveringTextToolbar(
     style: TextStyleData,
+    onColorChange: (Int) -> Unit,
     onStyleChange: (TextStyleData) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val quickColors = listOf(
+        Color(0xFF111111),
+        Color(0xFF3F2A7A),
+        Color(0xFF0057B8),
+        Color(0xFF0F766E),
+        Color(0xFFB45309),
+        Color(0xFFB91C1C)
+    )
+
     EditorGlassContainer(
         modifier = modifier.fillMaxWidth()
     ) {
@@ -103,6 +114,16 @@ fun HoveringTextToolbar(
 
             ToolbarIcon(Icons.Default.FormatAlignRight, style.alignment == "RIGHT") {
                 onStyleChange(style.copy(alignment = "RIGHT"))
+            }
+
+            HorizontalDivider(modifier = Modifier.height(24.dp).width(1.dp), color = Color.Gray)
+
+            quickColors.forEach { quickColor ->
+                ColorCircle(
+                    color = quickColor,
+                    selected = style.color == quickColor.toArgb(),
+                    onClick = { onColorChange(quickColor.toArgb()) }
+                )
             }
         }
     }

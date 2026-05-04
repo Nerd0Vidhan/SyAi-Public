@@ -29,12 +29,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.material3.Slider
 import androidx.compose.runtime.*
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -60,7 +60,6 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.mato.syai.note.domain.editor.EditorState
 import com.mato.syai.note.domain.editor.OfflineModelDownloadState
@@ -75,6 +74,8 @@ import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.zIndex
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
 import kotlin.math.roundToInt
 
 private val PrimaryDark = Color(0xFF0D0127)
@@ -91,7 +92,6 @@ fun NoteEditorScreen(
     val context = LocalContext.current
     val state by viewModel.uiState.collectAsState()
     val noteTitle by viewModel.noteTitle.collectAsState()
-    var isDragging by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val imagePicker = rememberImagePicker { uri ->
         val pageIndex = state.currentPageIndex
@@ -137,15 +137,20 @@ fun NoteEditorScreen(
         Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
     }
 
-    LaunchedEffect(listState.layoutInfo.visibleItemsInfo, pages.size) {
-        val centeredItem = listState.layoutInfo.visibleItemsInfo
-            .filter { it.index in pages.indices }
-            .minByOrNull { item ->
-                val itemCenter = item.offset + (item.size / 2)
-                val viewportCenter = (listState.layoutInfo.viewportStartOffset + listState.layoutInfo.viewportEndOffset) / 2
-                kotlin.math.abs(itemCenter - viewportCenter)
-            }
-        centeredItem?.index?.let(viewModel::setVisiblePage)
+    LaunchedEffect(listState, pages.size) {
+        snapshotFlow {
+            listState.layoutInfo.visibleItemsInfo
+                .filter { it.index in pages.indices }
+                .minByOrNull { item ->
+                    val itemCenter = item.offset + (item.size / 2)
+                    val viewportCenter =
+                        (listState.layoutInfo.viewportStartOffset + listState.layoutInfo.viewportEndOffset) / 2
+                    kotlin.math.abs(itemCenter - viewportCenter)
+                }?.index
+        }
+            .filterNotNull()
+            .distinctUntilChanged()
+            .collect(viewModel::setVisiblePage)
     }
 
     LaunchedEffect(state.pendingViewportPageIndex, state.content.pages.size) {
@@ -175,10 +180,12 @@ fun NoteEditorScreen(
                     titleField = it
                     viewModel.updateTitle(it.text)
                 },
+                currentPage = state.content.pages.getOrNull(state.currentPageIndex),
+                selectedObjectId = state.selectedObjectId,
                 isViewOnly = state.isViewOnly,
                 onBack = onBack,
-                onUndo = { viewModel.undo() },
-                onRedo = { viewModel.redo() },
+                onSelectLayer = viewModel::selectObject,
+                onDeleteLayer = { objectId -> viewModel.deleteLayer(state.currentPageIndex, objectId) },
                 onToggleViewOnly = { viewModel.toggleViewOnly() },
                 onExportPdf = {viewModel.exportToPdf(context)},
                 onPageSettings = { showPageSettings = true }
@@ -207,7 +214,11 @@ fun NoteEditorScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     contentPadding = PaddingValues(top = 24.dp, bottom = 220.dp)
                 ) {
-                    itemsIndexed(pages) { pageIndex, page ->
+                    itemsIndexed(
+                        items = pages,
+                        key = { _, page -> page.pageId },
+                        contentType = { _, _ -> "note_page" }
+                    ) { pageIndex, page ->
                         NotePage(
                             pageIndex = pageIndex,
                             page = page,
@@ -271,6 +282,7 @@ fun NoteEditorScreen(
                 if (isImeVisible && (state.activeTool == ActiveTool.LINEAR_TEXT || state.activeTool == ActiveTool.TEXT)) {
                     HoveringTextToolbar(
                         style = state.textStyle,
+                        onColorChange = viewModel::updateTextColor,
                         onStyleChange = viewModel::updateTextStyle,
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
@@ -278,6 +290,17 @@ fun NoteEditorScreen(
                             .padding(horizontal = 14.dp, vertical = 12.dp)
                     )
                 }
+
+                FloatingEditorActionColumn(
+                    onUndo = viewModel::undo,
+                    onRedo = viewModel::redo,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .navigationBarsPadding()
+                        .imePadding()
+                        .padding(end = 16.dp, bottom = 132.dp)
+                        .zIndex(12f)
+                )
 
                 EditorBottomToolbar(
                     state = state,
@@ -290,7 +313,9 @@ fun NoteEditorScreen(
                     onTextColorChange = { int -> viewModel.updateTextColor(int) },
                     onCheckListSelect = { viewModel.addChecklist(state.currentPageIndex, 200f, 200f) },
                     onDelete = { viewModel.deleteSelectedObjects() },
-                    onListSelection = { marker -> viewModel.handleListInsertion(marker) },
+                    onListSelection = { marker, orderedStyle, bulletStyle ->
+                        viewModel.handleListInsertion(marker, orderedStyle, bulletStyle)
+                    },
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .navigationBarsPadding()
@@ -359,10 +384,12 @@ fun NoteEditorScreen(
 fun EditorTopBar(
     titleField: TextFieldValue,
     onTitleChange: (TextFieldValue) -> Unit,
+    currentPage: PageData?,
+    selectedObjectId: String?,
     isViewOnly: Boolean,
     onBack: () -> Unit,
-    onUndo: () -> Unit,
-    onRedo: () -> Unit,
+    onSelectLayer: (String) -> Unit,
+    onDeleteLayer: (String) -> Unit,
     onToggleViewOnly: () -> Unit,
     onExportPdf: () -> Unit,
     onPageSettings: () -> Unit
@@ -395,11 +422,9 @@ fun EditorTopBar(
         },
         actions = {
             var menuExpanded by remember { mutableStateOf(false) }
-            IconButton(onClick = onUndo) {
-                Icon(Icons.Default.Undo, contentDescription = "Undo", tint = Color.White)
-            }
-            IconButton(onClick = onRedo) {
-                Icon(Icons.Default.Redo, contentDescription = "Redo", tint = Color.White)
+            var layerMenuExpanded by remember { mutableStateOf(false) }
+            IconButton(onClick = { layerMenuExpanded = true }) {
+                Icon(Icons.Default.Layers, contentDescription = "Layers", tint = Color.White)
             }
             IconButton(onClick = onToggleViewOnly) {
                 Icon(
@@ -410,6 +435,38 @@ fun EditorTopBar(
             }
             IconButton(onClick = { menuExpanded = true }) {
                 Icon(Icons.Default.MoreVert, contentDescription = "Options", tint = Color.White)
+            }
+            DropdownMenu(
+                expanded = layerMenuExpanded,
+                onDismissRequest = { layerMenuExpanded = false },
+                modifier = Modifier.background(PrimaryDark).border(1.dp, Color.White.copy(0.1f))
+            ) {
+                val layerItems = currentPage?.renderableItems?.sortedByDescending { it.layer }.orEmpty()
+                if (layerItems.isEmpty()) {
+                    DropdownMenuItem(
+                        text = { Text("No layers", color = Color.White) },
+                        onClick = { layerMenuExpanded = false }
+                    )
+                } else {
+                    layerItems.forEach { item ->
+                        DropdownMenuItem(
+                            text = {
+                                LayerMenuRow(
+                                    obj = item,
+                                    isSelected = selectedObjectId == item.id,
+                                    onDelete = {
+                                        onDeleteLayer(item.id)
+                                        layerMenuExpanded = false
+                                    }
+                                )
+                            },
+                            onClick = {
+                                onSelectLayer(item.id)
+                                layerMenuExpanded = false
+                            }
+                        )
+                    }
+                }
             }
             DropdownMenu(
                 expanded = menuExpanded,
@@ -547,8 +604,18 @@ private fun BetweenPagesInsertBar(
     onAddA3: () -> Unit,
     onAddCustom: () -> Unit
 ) {
-    val animationProgress by animateFloatAsState(
+    var showOptions by remember(expanded) { mutableStateOf(false) }
+    LaunchedEffect(expanded) {
+        if (!expanded) showOptions = false
+    }
+
+    val centerFabProgress by animateFloatAsState(
         targetValue = if (expanded) 1f else 0f,
+        animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
+        label = "between_page_center"
+    )
+    val animationProgress by animateFloatAsState(
+        targetValue = if (expanded && showOptions) 1f else 0f,
         animationSpec = tween(durationMillis = 500, easing = FastOutSlowInEasing),
         label = "between_page_insert"
     )
@@ -562,7 +629,7 @@ private fun BetweenPagesInsertBar(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(if (expanded) 112.dp else 21.dp)
+            .height(if (expanded) 120.dp else 21.dp)
             .padding(vertical = 3.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -573,7 +640,9 @@ private fun BetweenPagesInsertBar(
                 .clip(RoundedCornerShape(999.dp))
                 .background(Color(0xFFCAE2FF).copy(alpha = 0.92f))
                 .pointerInput(expanded) {
-                    detectTapGestures { if (!expanded) onExpand() else onDismiss() }
+                    detectTapGestures {
+                        if (!expanded) onExpand() else onDismiss()
+                    }
                 },
             contentAlignment = Alignment.Center
         ) {
@@ -582,6 +651,31 @@ private fun BetweenPagesInsertBar(
                 contentDescription = "Insert page",
                 tint = PrimaryDark,
                 modifier = Modifier.size(14.dp)
+            )
+        }
+
+        FloatingActionButton(
+            onClick = {
+                if (!expanded) {
+                    onExpand()
+                } else {
+                    showOptions = !showOptions
+                }
+            },
+            containerColor = PrimaryDark,
+            contentColor = Color.White,
+            shape = CircleShape,
+            modifier = Modifier
+                .size(56.dp)
+                .graphicsLayer {
+                    alpha = centerFabProgress
+                    scaleX = centerFabProgress.coerceAtLeast(0.01f)
+                    scaleY = centerFabProgress.coerceAtLeast(0.01f)
+                }
+        ) {
+            Icon(
+                imageVector = if (showOptions) Icons.Default.Close else Icons.Default.Add,
+                contentDescription = "Add page"
             )
         }
 
@@ -638,6 +732,76 @@ private fun OrbitPageFab(
             Icon(Icons.Default.Add, contentDescription = "Custom page")
         } else {
             Text(label, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun LayerMenuRow(
+    obj: NoteObject,
+    isSelected: Boolean,
+    onDelete: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(if (isSelected) AuraPurple.copy(alpha = 0.45f) else Color.White.copy(alpha = 0.08f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = when (obj.type) {
+                    ObjectType.TEXT -> Icons.Default.TextFields
+                    ObjectType.IMAGE -> Icons.Default.Image
+                    ObjectType.DRAWING -> Icons.Default.Brush
+                    ObjectType.LIST -> Icons.Default.Checklist
+                    ObjectType.CHECKLIST -> Icons.Default.CheckBox
+                    ObjectType.LINEAR_TEXT -> Icons.Default.EditNote
+                },
+                contentDescription = null,
+                tint = Color.White
+            )
+        }
+        Text(
+            text = "Layer ${obj.layer}",
+            color = Color.White,
+            modifier = Modifier.weight(1f)
+        )
+        IconButton(onClick = onDelete) {
+            Icon(Icons.Default.DeleteOutline, contentDescription = "Delete layer", tint = Color(0xFFFFC9C9))
+        }
+    }
+}
+
+@Composable
+private fun FloatingEditorActionColumn(
+    onUndo: () -> Unit,
+    onRedo: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalAlignment = Alignment.End
+    ) {
+        SmallFloatingActionButton(
+            onClick = onUndo,
+            containerColor = Color(0xFF20103D),
+            contentColor = Color.White
+        ) {
+            Icon(Icons.Default.Undo, contentDescription = "Undo")
+        }
+        SmallFloatingActionButton(
+            onClick = onRedo,
+            containerColor = Color(0xFF20103D),
+            contentColor = Color.White
+        ) {
+            Icon(Icons.Default.Redo, contentDescription = "Redo")
         }
     }
 }
@@ -802,6 +966,9 @@ fun NotePage(
                     )
                 }
         ) {
+        if (viewport.scale > 1.01f) {
+            ZoomedPageOverlay()
+        }
         Canvas(modifier = Modifier.fillMaxSize()) {
             page.renderableItems
                 .filter { it.type == ObjectType.DRAWING }
@@ -1017,6 +1184,10 @@ fun NotePage(
             }
         }
         page.renderableItems
+            .filterNot { obj ->
+                obj.type == ObjectType.LIST &&
+                    page.linearContent.any { it.objectId == obj.id && it.type == ObjectType.LIST }
+            }
             .sortedBy { it.layer }
             .forEach { obj ->
                 RenderObject(
@@ -1026,6 +1197,7 @@ fun NotePage(
                     activeTool = state.activeTool,
                     isViewOnly = state.isViewOnly,
                     viewModel = viewModel,
+                    onAnyInteraction = onAnyInteraction,
                     pageWidth = pageWidthPx.toFloat(),
                     pageHeight = pageHeightPx.toFloat(),
                     pageScaleX = pageScaleX,
@@ -1108,6 +1280,7 @@ fun RenderObject(
     activeTool: ActiveTool,
     isViewOnly: Boolean,
     viewModel: NoteEditorViewModel,
+    onAnyInteraction: () -> Unit = {},
     pageWidth: Float,
     pageHeight: Float,
     pageScaleX: Float,
@@ -1116,6 +1289,7 @@ fun RenderObject(
     var isDragging by remember { mutableStateOf(false) }
     val frameWidthDp = with(LocalDensity.current) { (obj.bounds.width * pageScaleX).toDp() }
     val frameHeightDp = with(LocalDensity.current) { (obj.bounds.height * pageScaleY).toDp() }
+    val selectionInset = 8.dp
 
 
     val isDraggable = !obj.isLocked && !isViewOnly && activeTool == ActiveTool.SELECT
@@ -1129,7 +1303,8 @@ fun RenderObject(
                 )
             }
             .width(frameWidthDp)
-            .defaultMinSize(minHeight = frameHeightDp)
+            .height(frameHeightDp)
+            .clip(RoundedCornerShape(12.dp))
             .zIndex(obj.layer.toFloat())
 
             // 🔥 DRAG SYSTEM
@@ -1139,6 +1314,7 @@ fun RenderObject(
 
                         onDragStart = {
                             isDragging = true
+                            onAnyInteraction()
 
                             // ✅ select + bring front ONLY ONCE
 //                            viewModel.selectObject(obj.id)
@@ -1171,9 +1347,11 @@ fun RenderObject(
             .pointerInput(Unit) {
                 detectTapGestures(
                     onTap = {
+                        onAnyInteraction()
                         viewModel.selectObject(obj.id)
                     },
                     onLongPress = {
+                        onAnyInteraction()
                         viewModel.toggleSelection(obj.id)
                     }
                 )
@@ -1189,6 +1367,11 @@ fun RenderObject(
                 if (isSelected) {
                     drawRoundRect(
                         color = SecondaryCream,
+                        topLeft = Offset(selectionInset.toPx() / 2f, selectionInset.toPx() / 2f),
+                        size = androidx.compose.ui.geometry.Size(
+                            (size.width - selectionInset.toPx()).coerceAtLeast(0f),
+                            (size.height - selectionInset.toPx()).coerceAtLeast(0f)
+                        ),
                         style = Stroke(
                             width = 1.5.dp.toPx(),
                             pathEffect = PathEffect.dashPathEffect(
@@ -1200,8 +1383,6 @@ fun RenderObject(
                     )
                 }
             }
-
-            .padding(4.dp)
     ) {
         when (obj.type) {
 
@@ -1248,10 +1429,7 @@ fun RenderObject(
                     model = payload?.uri,
                     contentDescription = null,
                     modifier = Modifier
-                        .size(
-                            PageUnitConverter.pointsToDp(obj.bounds.width * pageScaleX, PageSize.A4).dp,
-                            PageUnitConverter.pointsToDp(obj.bounds.height * pageScaleY, PageSize.A4).dp
-                        )
+                        .fillMaxSize()
                         .clip(RoundedCornerShape(12.dp)),
                     contentScale = ContentScale.Crop
                 )
@@ -1350,7 +1528,7 @@ fun EditorBottomToolbar(
     onTextColorChange: (Int) -> Unit,
     onCheckListSelect:()->Unit,
     onDelete:()-> Unit,
-    onListSelection :(ListMarker)-> Unit,
+    onListSelection :(ListMarker, OrderedListStyle?, BulletListStyle?)-> Unit,
     modifier: Modifier = Modifier
 ){
     var showColorPicker by remember { mutableStateOf(false) }
@@ -1386,6 +1564,7 @@ fun EditorBottomToolbar(
                 if (!isImeVisible) {
                     HoveringTextToolbar(
                         style = state.textStyle,
+                        onColorChange = onTextColorChange,
                         onStyleChange = onTextStyleChange
                     )
                 }
@@ -1404,8 +1583,8 @@ fun EditorBottomToolbar(
 
             ActiveTool.LIST -> {
                 ListToolSubToolbar(
-                    onMarkerSelect = { marker ->
-                        onListSelection(marker)
+                    onMarkerSelect = { marker, orderedStyle, bulletStyle ->
+                        onListSelection(marker, orderedStyle, bulletStyle)
                         showListOptions = false
                         onToolSelect(ActiveTool.LINEAR_TEXT)
                     }
@@ -1417,8 +1596,8 @@ fun EditorBottomToolbar(
 
         if (state.activeTool == ActiveTool.LINEAR_TEXT && showListOptions) {
             ListToolSubToolbar(
-                onMarkerSelect = { marker ->
-                    onListSelection(marker)
+                onMarkerSelect = { marker, orderedStyle, bulletStyle ->
+                    onListSelection(marker, orderedStyle, bulletStyle)
                     showListOptions = false
                 }
             )
@@ -1513,6 +1692,14 @@ fun DrawToolSubToolbar(
     onWidthChange: (Float) -> Unit,
     onBrushStyleChange: (BrushStyle) -> Unit
 ) {
+    val quickColors = listOf(
+        Color(0xFF111111),
+        Color(0xFF3F2A7A),
+        Color(0xFF0057B8),
+        Color(0xFF0F766E),
+        Color(0xFFB45309),
+        Color(0xFFB91C1C)
+    )
     EditorGlassContainer(
         modifier = Modifier
             .fillMaxWidth()
@@ -1554,6 +1741,16 @@ fun DrawToolSubToolbar(
                 valueRange = 2f..20f,
                 modifier = Modifier.width(150.dp)
             )
+
+            Spacer(modifier = Modifier.width(10.dp))
+
+            quickColors.forEach { quickColor ->
+                ColorCircle(
+                    color = quickColor,
+                    selected = color == quickColor.toArgb(),
+                    onClick = { onColorChange(quickColor.toArgb()) }
+                )
+            }
         }
     }
 }
@@ -1574,6 +1771,39 @@ fun ColorCircle(
             .size(28.dp)
             .border(width = 2.dp, color = Color.White, shape = CircleShape)
     ) {}
+}
+
+@Composable
+private fun ZoomedPageOverlay() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .drawBehind {
+                val handleRadius = 7.dp.toPx()
+                drawRoundRect(
+                    color = Color(0xFFCAE2FF),
+                    style = Stroke(
+                        width = 1.5.dp.toPx(),
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(14f, 10f))
+                    ),
+                    cornerRadius = CornerRadius(12.dp.toPx(), 12.dp.toPx())
+                )
+                listOf(
+                    Offset(handleRadius, handleRadius),
+                    Offset(size.width - handleRadius, handleRadius),
+                    Offset(handleRadius, size.height - handleRadius),
+                    Offset(size.width - handleRadius, size.height - handleRadius)
+                ).forEach { center ->
+                    drawCircle(color = Color.White, radius = handleRadius, center = center)
+                    drawCircle(
+                        color = AuraPurple,
+                        radius = handleRadius,
+                        center = center,
+                        style = Stroke(width = 2.dp.toPx())
+                    )
+                }
+            }
+    )
 }
 
 @Composable
