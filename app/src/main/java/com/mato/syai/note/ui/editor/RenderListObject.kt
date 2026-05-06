@@ -44,7 +44,8 @@ fun RenderListRecursive(
     activeStyle: TextStyleData,
     selection: TextRange? = null,
     onSelectionChange: (TextRange) -> Unit = {},
-    onUpdate: (ListPayload) -> Unit
+    onUpdate: (ListPayload) -> Unit,
+    onBackspaceAtStart: (ListItem) -> Unit
 ) {
     Column(
         modifier = Modifier.padding(start = (depth * 16).dp),
@@ -101,6 +102,8 @@ fun RenderListRecursive(
                                     )
                                     payload.items.removeAt(index)
                                     onUpdate(payload)
+                                } else {
+                                    onBackspaceAtStart(item)
                                 }
                             }
                         )
@@ -115,7 +118,17 @@ fun RenderListRecursive(
                                 activeStyle = activeStyle,
                                 selection = selection,
                                 onSelectionChange = onSelectionChange,
-                                onUpdate = { onUpdate(payload) }
+                                onUpdate = { onUpdate(payload) },
+                                onBackspaceAtStart = { childItem ->
+                                    val previousLength = item.text.length
+                                    item.text += childItem.text
+                                    item.spans.addAll(childItem.spans.map { it.copy(start = it.start + previousLength, end = it.end + previousLength) })
+                                    nested.items.remove(childItem)
+                                    if (nested.items.isEmpty()) {
+                                        item.nestedList = null
+                                    }
+                                    onUpdate(payload)
+                                }
                             )
                         }
                     }

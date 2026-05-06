@@ -34,6 +34,9 @@ import org.json.JSONObject
 import java.util.UUID
 import javax.inject.Inject
 
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.receiveAsFlow
+
 @HiltViewModel
 class NoteEditorViewModel @Inject constructor(
     private val repository: NoteRepository,
@@ -42,6 +45,19 @@ class NoteEditorViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val undoRedoManager = UndoRedoManager(gson)
+
+    private val saveQueue = Channel<NoteContent>(Channel.UNLIMITED)
+    
+    init {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) {
+            saveQueue.receiveAsFlow().collect { contentToSave ->
+                // Wait, need to serialize using Gson or fast copy? We already did fast copy to send to queue
+                val clonedForUndo = deepCopy(contentToSave)
+                undoRedoManager.push(clonedForUndo)
+                repository.saveNoteContent(_uiState.value.noteId, clonedForUndo)
+            }
+        }
+    }
 
     private val _uiState = MutableStateFlow(EditorState())
     val uiState: StateFlow<EditorState> = _uiState.asStateFlow()
@@ -166,17 +182,20 @@ class NoteEditorViewModel @Inject constructor(
     }
 
     private fun mutateContent(trackUndo: Boolean = true, mutator: (NoteContent) -> Unit) {
-        val workingCopy = deepCopy(_uiState.value.content)
-        val now = System.currentTimeMillis()
-        if (trackUndo && now - lastUndoPushAtMs > 650L) {
-            undoRedoManager.push(workingCopy)
-            lastUndoPushAtMs = now
-        }
-
+        val workingCopy = _uiState.value.content.fastCopy()
         mutator(workingCopy)
 
         _uiState.update { it.copy(content = workingCopy) }
-        scheduleAutoSave()
+        
+        val now = System.currentTimeMillis()
+        if (trackUndo && now - lastUndoPushAtMs > 650L) {
+            lastUndoPushAtMs = now
+            saveQueue.trySend(workingCopy.fastCopy())
+        } else if (!trackUndo) {
+            // we still want to save, so we'll push to queue but maybe debounce it?
+            // for now just schedule the old auto-save for DB only without undo push
+            scheduleAutoSave()
+        }
     }
 
     private val gson = GsonBuilder()
@@ -720,32 +739,19 @@ class NoteEditorViewModel @Inject constructor(
         mutateContent { content ->
             val page = content.pages[pageIndex]
 
-            val drawingObj = page.items
-                .lastOrNull { it.type == ObjectType.DRAWING }
-                ?.takeIf { it.payload is DrawingPayload }
+            val maxLayer = page.linearContent.maxOfOrNull { it.layer } ?: page.items.maxOfOrNull { it.layer } ?: 0
 
-            if (drawingObj != null) {
-                val payload = drawingObj.payload as DrawingPayload
-                payload.strokes.add(stroke.copy(brushStyle = _uiState.value.brushStyle))
-                updateDrawingObjectBounds(drawingObj)
-                page.updateLinearEntry(
-                    objectId = drawingObj.id,
-                    transform = drawingObj.transform.copy(),
-                    bounds = drawingObj.bounds.copy()
+            val newDrawing = NoteObject(
+                layer = maxLayer + 1,
+                type = ObjectType.DRAWING,
+                transform = Transform(),
+                bounds = Bounds(),
+                payload = DrawingPayload(
+                    strokes = mutableListOf(stroke.copy(brushStyle = _uiState.value.brushStyle))
                 )
-            } else {
-                val newDrawing = NoteObject(
-                    layer = page.items.size + 1,
-                    type = ObjectType.DRAWING,
-                    transform = Transform(),
-                    bounds = Bounds(),
-                    payload = DrawingPayload(
-                        strokes = mutableListOf(stroke.copy(brushStyle = _uiState.value.brushStyle))
-                    )
-                )
-                updateDrawingObjectBounds(newDrawing)
-                page.upsertObject(newDrawing)
-            }
+            )
+            updateDrawingObjectBounds(newDrawing)
+            page.upsertObject(newDrawing)
         }
     }
 
@@ -1564,7 +1570,7 @@ class NoteEditorViewModel @Inject constructor(
                     else -> OrderedListStyle.DIGITS
                 },
                 bulletStyle = bulletStyle ?: BulletListStyle.DISC,
-                items = mutableListOf(ListItem(text = ""))
+                items = mutableListOf(ListItem(text = "", style = _uiState.value.textStyle.copy()))
             )
             val listObj = NoteObject(
                 id = listId,
@@ -1638,14 +1644,11 @@ class NoteEditorViewModel @Inject constructor(
                 )
                 page.linearContent.removeAt(entryIndex)
                 
-                // Shift layers
                 for (i in entryIndex until page.linearContent.size) {
                     val old = page.linearContent[i]
                     page.linearContent[i] = old.copy(layer = old.layer - 1)
                 }
             } else if (current.type == ObjectType.LIST && previous.type == ObjectType.LINEAR_TEXT) {
-                // If backspacing a list into a text block, maybe just delete the list if empty?
-                // For now, let's just delete the list if it's empty
                 val listObj = page.items.find { it.id == current.objectId }
                 val payload = listObj?.payload as? ListPayload
                 if (payload?.items?.isEmpty() == true) {
@@ -1655,6 +1658,44 @@ class NoteEditorViewModel @Inject constructor(
             }
         }
     }
+
+    fun mergeListWithPreviousBlock(pageIndex: Int, listObjectId: String, itemToMerge: ListItem) {
+        mutateContent { content ->
+            val page = content.pages.getOrNull(pageIndex) ?: return@mutateContent
+            val listEntryIndex = page.linearContent.indexOfFirst { it.objectId == listObjectId }
+            if (listEntryIndex <= 0) return@mutateContent
+            
+            val previous = page.linearContent[listEntryIndex - 1]
+            if (previous.type == ObjectType.LINEAR_TEXT) {
+                val oldLen = previous.value.length
+                val newText = previous.value + itemToMerge.text
+                val newSpans = previous.spans.toMutableList()
+                newSpans.addAll(itemToMerge.spans.map { it.copy(start = it.start + oldLen, end = it.end + oldLen) })
+
+                page.linearContent[listEntryIndex - 1] = previous.copy(
+                    value = newText,
+                    spans = newSpans
+                )
+
+                val listObj = page.items.find { it.id == listObjectId }
+                val payload = listObj?.payload as? ListPayload
+                if (payload != null) {
+                    payload.items.remove(itemToMerge)
+                    if (payload.items.isEmpty()) {
+                        page.linearContent.removeAt(listEntryIndex)
+                        page.removeObject(listObjectId)
+                    }
+                }
+                
+                // Focus shifting back to previous text block would be handled by selection updates if needed.
+                _uiState.update { it.copy(
+                    activeLinearTextId = previous.id,
+                    globalSelection = androidx.compose.ui.text.TextRange(oldLen)
+                ) }
+            }
+        }
+    }
+
 
 
     fun savePreview(context: Context, content: NoteContent,noteId: Long){

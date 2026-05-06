@@ -47,31 +47,14 @@ class GeminiClient {
                 val output = response.text ?: return@withContext null
 
                 return@withContext try {
-                    // Because of responseMimeType, output will be clean JSON
                     JSONObject(output)
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     null
                 }
 
             } catch (e: Exception) {
                 e.printStackTrace()
                 null
-            }
-        }
-    }
-
-    /**
-     * FALLBACK TEXT
-     */
-    suspend fun generateRawText(prompt: String): String {
-        return withContext(Dispatchers.IO) {
-            try {
-                // If you want raw text here, you might need a second GenerativeModel
-                // instance WITHOUT the JSON config, or just handle it here:
-                val response = model.generateContent(prompt)
-                response.text ?: "No response"
-            } catch (e: Exception) {
-                "AI Error: ${e.message}"
             }
         }
     }

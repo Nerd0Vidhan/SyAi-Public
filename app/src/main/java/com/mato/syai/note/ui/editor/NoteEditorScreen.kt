@@ -755,18 +755,33 @@ private fun LayerMenuRow(
                 .background(if (isSelected) AuraPurple.copy(alpha = 0.45f) else Color.White.copy(alpha = 0.08f)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                imageVector = when (obj.type) {
-                    ObjectType.TEXT -> Icons.Default.TextFields
-                    ObjectType.IMAGE -> Icons.Default.Image
-                    ObjectType.DRAWING -> Icons.Default.Brush
-                    ObjectType.LIST -> Icons.Default.Checklist
-                    ObjectType.CHECKLIST -> Icons.Default.CheckBox
-                    ObjectType.LINEAR_TEXT -> Icons.Default.EditNote
-                },
-                contentDescription = null,
-                tint = Color.White
-            )
+            when (val payload = obj.payload) {
+                is ImagePayload -> {
+                    AsyncImage(
+                        model = payload.uri,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                }
+                is DrawingPayload -> {
+                    MiniDrawingThumbnail(payload = payload, modifier = Modifier.fillMaxSize().padding(2.dp))
+                }
+                else -> {
+                    Icon(
+                        imageVector = when (obj.type) {
+                            ObjectType.TEXT -> Icons.Default.TextFields
+                            ObjectType.IMAGE -> Icons.Default.Image
+                            ObjectType.DRAWING -> Icons.Default.Brush
+                            ObjectType.LIST -> Icons.Default.Checklist
+                            ObjectType.CHECKLIST -> Icons.Default.CheckBox
+                            ObjectType.LINEAR_TEXT -> Icons.Default.EditNote
+                        },
+                        contentDescription = null,
+                        tint = Color.White
+                    )
+                }
+            }
         }
         Text(
             text = "Layer ${obj.layer}",
@@ -775,6 +790,57 @@ private fun LayerMenuRow(
         )
         IconButton(onClick = onDelete) {
             Icon(Icons.Default.DeleteOutline, contentDescription = "Delete layer", tint = Color(0xFFFFC9C9))
+        }
+    }
+}
+
+@Composable
+private fun MiniDrawingThumbnail(payload: DrawingPayload, modifier: Modifier = Modifier) {
+    if (payload.strokes.isEmpty()) return
+    
+    var minX = Float.MAX_VALUE
+    var minY = Float.MAX_VALUE
+    var maxX = Float.MIN_VALUE
+    var maxY = Float.MIN_VALUE
+    
+    payload.strokes.forEach { stroke ->
+        stroke.points.forEach { p ->
+            if (p.x < minX) minX = p.x
+            if (p.y < minY) minY = p.y
+            if (p.x > maxX) maxX = p.x
+            if (p.y > maxY) maxY = p.y
+        }
+    }
+    
+    val width = (maxX - minX).coerceAtLeast(1f)
+    val height = (maxY - minY).coerceAtLeast(1f)
+    
+    Canvas(modifier = modifier) {
+        val scale = minOf(size.width / width, size.height / height)
+        val dx = (size.width - width * scale) / 2f - minX * scale
+        val dy = (size.height - height * scale) / 2f - minY * scale
+        
+        payload.strokes.forEach { stroke ->
+            if (stroke.points.size >= 2) {
+                for (i in 0 until stroke.points.lastIndex) {
+                    val p1 = stroke.points[i]
+                    val p2 = stroke.points[i+1]
+                    drawLine(
+                        color = Color.White,
+                        start = Offset(p1.x * scale + dx, p1.y * scale + dy),
+                        end = Offset(p2.x * scale + dx, p2.y * scale + dy),
+                        strokeWidth = 2f,
+                        cap = StrokeCap.Round
+                    )
+                }
+            } else if (stroke.points.size == 1) {
+                val p = stroke.points[0]
+                drawCircle(
+                    color = Color.White,
+                    radius = 2f,
+                    center = Offset(p.x * scale + dx, p.y * scale + dy)
+                )
+            }
         }
     }
 }
@@ -1112,23 +1178,10 @@ fun NotePage(
                                     },
                                     onUpdate = { newPayload ->
                                         viewModel.updateObjectPayload(pageIndex, obj.id, newPayload)
+                                    },
+                                    onBackspaceAtStart = { itemToMerge ->
+                                        viewModel.mergeListWithPreviousBlock(pageIndex, obj.id, itemToMerge)
                                     }
-                                )
-                            }
-                        }
-                    }
-                    ObjectType.IMAGE -> {
-                        val obj = page.items.find { it.id == entry.objectId }
-                        if (obj != null) {
-                            Box(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                                val payload = obj.payload as? ImagePayload ?: return@Box
-                                AsyncImage(
-                                    model = payload.uri,
-                                    contentDescription = null,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .aspectRatio(payload.ratio.coerceAtLeast(0.1f)),
-                                    contentScale = ContentScale.Fit
                                 )
                             }
                         }
@@ -1435,7 +1488,8 @@ fun RenderObject(
                     onUpdate = { updatedPayload ->
                         // Use the ViewModel function we just created
                         viewModel.updateObjectPayload(pageIndex, obj.id, updatedPayload)
-                    }
+                    },
+                    onBackspaceAtStart = {}
                 )
             }
 
