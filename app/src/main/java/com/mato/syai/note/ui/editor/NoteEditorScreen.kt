@@ -7,6 +7,7 @@ import android.os.Build
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
@@ -1205,6 +1206,34 @@ fun NotePage(
                 )
             }
         }
+
+        if (state.generatingPageIds.contains(page.pageId)) {
+            val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition()
+            val alpha by infiniteTransition.animateFloat(
+                initialValue = 0.3f,
+                targetValue = 0.7f,
+                animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+                    animation = androidx.compose.animation.core.tween(1000),
+                    repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+                )
+            )
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(Color.White.copy(alpha = alpha))
+                    .pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                                    .changes.forEach { it.consume() }
+                            }
+                        }
+                    },
+                contentAlignment = androidx.compose.ui.Alignment.Center
+            ) {
+                androidx.compose.material3.CircularProgressIndicator(color = Color(0xFF6B4EE6))
+            }
+        }
     }
 }
 
@@ -1681,7 +1710,6 @@ fun ToolbarIcon(
     }
 }
 
-// Removed TextToolSubToolbar
 
 @Composable
 fun DrawToolSubToolbar(

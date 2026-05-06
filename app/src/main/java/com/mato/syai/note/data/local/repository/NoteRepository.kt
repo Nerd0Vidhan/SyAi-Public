@@ -2,6 +2,7 @@ package com.mato.syai.note.data.local.repository
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.net.Uri
 import android.os.Environment
 import android.util.Log
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -232,5 +233,48 @@ class NoteRepository @Inject constructor(
 
     suspend fun loadNotePreview(context: Context,noteId: Long): Bitmap?{
         return utils.loadThumbnail(context,dao.fetchPreviewId(noteId)?:"")
+    }
+
+    suspend fun insertGeneratedImage(
+        noteId: Long,
+        pageIndex: Int,
+        imageFile: File,
+        jobId: String,
+        ratio: Float = 1f
+    ) = withContext(Dispatchers.IO) {
+        val content = loadNoteContent(noteId)
+        val page = content.pages.getOrNull(pageIndex) ?: return@withContext
+        if (page.items.any { (it.payload as? ImagePayload)?.fileId == jobId }) {
+            return@withContext
+        }
+
+        val maxLayer = maxOf(
+            page.items.maxOfOrNull { it.layer } ?: 0,
+            page.linearContent.maxOfOrNull { it.layer } ?: 0
+        )
+        val maxWidth = page.widthPoints * 0.4f
+        val maxHeight = page.heightPoints * 0.3f
+        val imageWidth = maxWidth.coerceAtLeast(120f)
+        val imageHeight = minOf((imageWidth / ratio.coerceAtLeast(0.1f)), maxHeight).coerceAtLeast(120f)
+        val x = page.pagePadding.startPoints
+        val y = (page.primaryLinearEntry?.transform?.y ?: page.pagePadding.topPoints) + 72f
+
+        val noteObject = NoteObject(
+            layer = maxLayer + 1,
+            type = ObjectType.IMAGE,
+            transform = Transform(
+                x = x.coerceAtMost(page.widthPoints - page.pagePadding.endPoints - imageWidth),
+                y = y.coerceAtMost(page.heightPoints - page.pagePadding.bottomPoints - imageHeight)
+            ),
+            bounds = Bounds(imageWidth, imageHeight),
+            payload = ImagePayload(
+                uri = Uri.fromFile(imageFile).toString(),
+                fileId = jobId,
+                ratio = ratio
+            )
+        )
+        page.upsertObject(noteObject)
+        page.refreshLinearTextPaste()
+        saveNoteContent(noteId, content)
     }
 }

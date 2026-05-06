@@ -38,5 +38,6 @@ data class EditorState(
     val selectedObjectIds: Set<String> = emptySet(),
     val pageViewports: Map<String, PageViewportState> = emptyMap(),
     val offlineModelDownloadState: OfflineModelDownloadState = OfflineModelDownloadState.NOT_DOWNLOADED,
-    val offlineModelStatusMessage: String? = null
+    val offlineModelStatusMessage: String? = null,
+    val generatingPageIds: Set<String> = emptySet()
 )
