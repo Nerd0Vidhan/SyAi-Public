@@ -472,3 +472,57 @@ private fun ObjectPayload.asTextSpansOrNull(): List<TextSpan>? = when (this) {
     is LinearTextPayload -> spans
     else -> null
 }
+
+fun NoteContent.fastCopy(): NoteContent {
+    return this.copy(
+        globalPagePadding = this.globalPagePadding.copy(),
+        pages = this.pages.map { it.fastCopy() }.toMutableList()
+    )
+}
+
+fun PageData.fastCopy(): PageData {
+    return this.copy(
+        pageDimensions = this.pageDimensions.copy(),
+        pagePadding = this.pagePadding.copy(),
+        borderStyle = this.borderStyle.copy(),
+        items = this.items.map { it.fastCopy() }.toMutableList(),
+        linearContent = this.linearContent.map { it.fastCopy() }.toMutableList(),
+        linearTextStyle = this.linearTextStyle.copy()
+    )
+}
+
+fun NoteObject.fastCopy(): NoteObject {
+    return this.copy(
+        transform = this.transform.copy(),
+        bounds = this.bounds.copy(),
+        payload = this.payload.fastCopy()
+    )
+}
+
+fun LinearContentEntry.fastCopy(): LinearContentEntry {
+    return this.copy(
+        transform = this.transform.copy(),
+        bounds = this.bounds.copy(),
+        style = this.style.copy(),
+        spans = this.spans.map { it.copy(style = it.style.copy()) }.toMutableList()
+    )
+}
+
+fun ObjectPayload.fastCopy(): ObjectPayload {
+    return when (this) {
+        is TextPayload -> this.copy(style = this.style.copy(), spans = this.spans.map { it.copy(style = it.style.copy()) }.toMutableList())
+        is ImagePayload -> this.copy()
+        is DrawingPayload -> this.copy(strokes = this.strokes.map { stroke -> stroke.copy(points = stroke.points.toList()) }.toMutableList())
+        is ChecklistPayload -> this.copy(items = this.items.map { it.copy() }.toMutableList())
+        is LinearTextPayload -> this.copy(style = this.style.copy(), spans = this.spans.map { it.copy(style = it.style.copy()) }.toMutableList())
+        is ListPayload -> this.copy(items = this.items.map { it.fastCopy() }.toMutableList())
+    }
+}
+
+fun ListItem.fastCopy(): ListItem {
+    return this.copy(
+        style = this.style.copy(),
+        spans = this.spans.map { it.copy(style = it.style.copy()) }.toMutableList(),
+        nestedList = this.nestedList?.copy(items = this.nestedList!!.items.map { it.fastCopy() }.toMutableList())
+    )
+}
