@@ -1,0 +1,21 @@
+server:
+  port: 8088
+  address: 0.0.0.0
+
+spring:
+  application:
+    name: syai-image-generator
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 20MB
+
+image-generator:
+  output-dir: generated
+  python-executable: python
+  python-script: python/stable_diffusion_runner.py
+  model-id: runwayml/stable-diffusion-v1-5
+  device: cpu
+  auth-token: ""
+  allow-origins:
+    - "*"

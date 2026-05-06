@@ -133,7 +133,8 @@ class GeminiClient {
             - Prefer LINEAR_TEXT for normal document writing.
             - Use LIST for document-flow lists, not floating lists.
             - Use TEXT only for intentional floating text boxes.
-            - For curves or circles, include many points so the drawing is smooth. Use at least 24 points for rounded shapes.
+            - For curves, circles, or detailed diagrams, you MUST provide highly dense and precise coordinates for EACH point on the path to make the shapes extremely smooth and detailed. Generate at least 100 points for complex shapes, ensuring no jagged edges.
+            - Points Drawing should actually match the object drawn when plotted, So compare before answering and give correct result.
             - Do not invent unsupported fields.
             - Keep coordinates within the current page dimensions.
 
