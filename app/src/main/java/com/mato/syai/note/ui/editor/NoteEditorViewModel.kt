@@ -8,9 +8,15 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.Data
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.mato.syai.note.ai.GeminiClient
+import com.mato.syai.note.ai.image.LocalImageGenerationRequest
+import com.mato.syai.note.ai.image.LocalImageGenerationWorker
+import com.mato.syai.note.ai.image.LocalImageGeneratorRepository
 import com.mato.syai.note.data.local.parser.ObjectPayloadAdapter
 import com.mato.syai.note.data.local.parser.PdfExporter
 import com.mato.syai.note.data.local.repository.NoteRepository
@@ -31,6 +37,7 @@ import javax.inject.Inject
 @HiltViewModel
 class NoteEditorViewModel @Inject constructor(
     private val repository: NoteRepository,
+    private val localImageGeneratorRepository: LocalImageGeneratorRepository,
     gson: Gson
 ) : ViewModel() {
 
@@ -49,6 +56,7 @@ class NoteEditorViewModel @Inject constructor(
     private val _activeLinearTextId = MutableStateFlow<String?>(null)
 
     private var autoSaveJob: Job? = null
+    private var imagePollingJob: Job? = null
     private val gemini = GeminiClient()
     private var lastUndoPushAtMs: Long = 0L
 
@@ -1060,17 +1068,67 @@ class NoteEditorViewModel @Inject constructor(
         }
     }
 
-    fun requestAiImageGeneration(prompt: String) {
-        _uiState.update {
-            it.copy(
-                offlineModelStatusMessage = if (prompt.isBlank()) {
-                    "Enter an image prompt first"
-                } else {
-                    "Image generation pipeline is queued for backend integration"
-                }
-            )
+    /*fun requestAiImageGeneration(prompt: String) {
+        if (prompt.isBlank()) {
+            _uiState.update { it.copy(offlineModelStatusMessage = "Enter an image prompt first") }
+            return
         }
-    }
+
+        val noteId = _uiState.value.noteId
+        val pageIndex = _uiState.value.currentPageIndex
+        val pageContext = buildAiPageContext(_uiState.value.content, pageIndex)
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(offlineModelStatusMessage = "Checking local image host...") }
+
+            val health = localImageGeneratorRepository.healthCheck()
+            if (health.isFailure) {
+                _uiState.update {
+                    it.copy(
+                        offlineModelStatusMessage = "Could not reach local image host at ${localImageGeneratorRepository.fixedBaseUrl()}"
+                    )
+                }
+                return@launch
+            }
+
+            runCatching {
+                localImageGeneratorRepository.submit(
+                    LocalImageGenerationRequest(
+                        prompt = prompt,
+                        width = 384,
+                        height = 384,
+                        steps = 20,
+                        guidanceScale = 7,
+                        pageContext = pageContext
+                    )
+                )
+            }.onSuccess { accepted ->
+                _uiState.update {
+                    it.copy(
+                        offlineModelStatusMessage = "Image generation queued on local host"
+                    )
+                }
+                enqueueImageGenerationWorker(
+                    noteId = noteId,
+                    pageIndex = pageIndex,
+                    jobId = accepted.jobId,
+                    statusUrl = accepted.statusUrl
+                )
+                pollImageGenerationWhileOpen(
+                    noteId = noteId,
+                    pageIndex = pageIndex,
+                    jobId = accepted.jobId,
+                    statusUrl = accepted.statusUrl
+                )
+            }.onFailure { error ->
+                _uiState.update {
+                    it.copy(
+                        offlineModelStatusMessage = error.message ?: "Failed to submit image generation job"
+                    )
+                }
+            }
+        }
+    }*/
 
     fun addPage(pageSize: PageSize = PageSize.A4, customDimensions: PageDimensions? = null) {
         addPageAt(_uiState.value.content.pages.size, pageSize, customDimensions)
@@ -1332,24 +1390,83 @@ class NoteEditorViewModel @Inject constructor(
 
     fun generateAIContent(pageIndex: Int, prompt: String) {
         viewModelScope.launch {
+            val contentSnapshot = _uiState.value.content
+            val pageSnapshot = contentSnapshot.pages.getOrNull(pageIndex)
+            val pageId = pageSnapshot?.pageId
+            if (pageId != null) {
+                _uiState.update { it.copy(isLoading = true, generatingPageIds = it.generatingPageIds + pageId) }
+            } else {
+                _uiState.update { it.copy(isLoading = true) }
+            }
 
-            _uiState.update { it.copy(isLoading = true) }
-
-            val content = _uiState.value.content
-            val page = content.pages.getOrNull(pageIndex)
-            val pageContext = buildAiPageContext(content, pageIndex)
+            val pageContext = buildAiPageContext(contentSnapshot, pageIndex)
             val json = gemini.generateObjects(
                 prompt = prompt,
                 pageContext = pageContext,
-                currentPageWidthPoints = page?.widthPoints ?: PageSize.A4.widthPoints,
-                currentPageHeightPoints = page?.heightPoints ?: PageSize.A4.heightPoints
+                currentPageWidthPoints = pageSnapshot?.widthPoints ?: PageSize.A4.widthPoints,
+                currentPageHeightPoints = pageSnapshot?.heightPoints ?: PageSize.A4.heightPoints
             )
             Log.d("Aidata","Aidata: $json")
             if (json != null) {
                 applyAIObjects(pageIndex, json)
             }
 
-            _uiState.update { it.copy(isLoading = false) }
+            val pageIdAfter = _uiState.value.content.pages.getOrNull(pageIndex)?.pageId
+            if (pageIdAfter != null) {
+                _uiState.update { it.copy(isLoading = false, generatingPageIds = it.generatingPageIds - pageIdAfter) }
+            } else {
+                _uiState.update { it.copy(isLoading = false) }
+            }
+        }
+    }
+
+//    fun requestAiImageGeneration(prompt: String) {
+//        viewModelScope.launch {
+//            val pageIndex = _uiState.value.currentPageIndex
+//            val content = _uiState.value.content
+//            val page = content.pages.getOrNull(pageIndex) ?: return@launch
+//
+//            _uiState.update { it.copy(generatingPageIds = it.generatingPageIds + page.pageId) }
+//
+//            try {
+//                val req = LocalImageGenerationRequest(prompt = prompt, pageContext = buildAiPageContext(content, pageIndex))
+//                val jobResponse = localImageGeneratorRepository.submit(req)
+//
+//                val jobId = jobResponse.jobId
+//                val statusUrl = jobResponse.statusUrl
+//
+//                pollImageGenerationWhileOpen(_uiState.value.noteId, pageIndex, jobId, statusUrl)
+//            } catch (e: Exception) {
+//                e.printStackTrace()
+//                _uiState.update { it.copy(offlineModelStatusMessage = "Failed to start local generation: ${e.message}") }
+//            } finally {
+//                _uiState.update { it.copy(generatingPageIds = it.generatingPageIds - page.pageId) }
+//            }
+//        }
+//    }
+
+    fun requestAiImageGeneration(prompt: String) {
+        viewModelScope.launch {
+            val pageIndex = _uiState.value.currentPageIndex
+            val content = _uiState.value.content
+            val page = content.pages.getOrNull(pageIndex) ?: return@launch
+
+            _uiState.update { it.copy(generatingPageIds = it.generatingPageIds + page.pageId) }
+
+            try {
+                val req = LocalImageGenerationRequest(prompt = prompt, pageContext = buildAiPageContext(content, pageIndex))
+                val jobResponse = localImageGeneratorRepository.submit(req)
+                
+                val jobId = jobResponse.jobId
+                val statusUrl = jobResponse.statusUrl
+
+                pollImageGenerationWhileOpen(_uiState.value.noteId, pageIndex, jobId, statusUrl)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _uiState.update { it.copy(offlineModelStatusMessage = "Failed to start local generation: ${e.message}") }
+            } finally {
+                _uiState.update { it.copy(generatingPageIds = it.generatingPageIds - page.pageId) }
+            }
         }
     }
 
@@ -1544,6 +1661,82 @@ class NoteEditorViewModel @Inject constructor(
         viewModelScope.launch {
             Log.d("GeneratePreview","Preview Started viewModel:")
             repository.generateNotePreview(context = context, content = content, noteId = noteId)
+        }
+    }
+
+    private fun enqueueImageGenerationWorker(
+        noteId: Long,
+        pageIndex: Int,
+        jobId: String,
+        statusUrl: String
+    ) {
+        val request = OneTimeWorkRequestBuilder<LocalImageGenerationWorker>()
+            .setInputData(
+                Data.Builder()
+                    .putLong(LocalImageGenerationWorker.KEY_NOTE_ID, noteId)
+                    .putInt(LocalImageGenerationWorker.KEY_PAGE_INDEX, pageIndex)
+                    .putString(LocalImageGenerationWorker.KEY_JOB_ID, jobId)
+                    .putString(LocalImageGenerationWorker.KEY_STATUS_URL, statusUrl)
+                    .build()
+            )
+            .build()
+
+        WorkManager.getInstance().enqueue(request)
+    }
+
+    private fun pollImageGenerationWhileOpen(
+        noteId: Long,
+        pageIndex: Int,
+        jobId: String,
+        statusUrl: String
+    ) {
+        imagePollingJob?.cancel()
+        imagePollingJob = viewModelScope.launch {
+            repeat(45) {
+                val status = runCatching {
+                    localImageGeneratorRepository.status(statusUrl)
+                }.getOrElse {
+                    _uiState.update {
+                        it.copy(offlineModelStatusMessage = "Lost connection to local image host")
+                    }
+                    return@launch
+                }
+
+                when (status.status.uppercase()) {
+                    "COMPLETED" -> {
+                        val imageUrl = status.imageUrl ?: return@launch
+                        val file = localImageGeneratorRepository.downloadToAppStorage(jobId, imageUrl)
+                        repository.insertGeneratedImage(
+                            noteId = noteId,
+                            pageIndex = pageIndex,
+                            imageFile = file,
+                            jobId = jobId
+                        )
+                        val refreshed = repository.loadNoteContent(noteId)
+                        _uiState.update {
+                            it.copy(
+                                content = refreshed,
+                                offlineModelStatusMessage = "Image inserted into the note"
+                            )
+                        }
+                        return@launch
+                    }
+                    "FAILED" -> {
+                        _uiState.update {
+                            it.copy(
+                                offlineModelStatusMessage = status.error ?: "Image generation failed"
+                            )
+                        }
+                        return@launch
+                    }
+                }
+
+                delay(3_000)
+            }
+
+            _uiState.update {
+                it.copy(offlineModelStatusMessage = "Image generation is still running in background")
+            }
         }
     }
 
