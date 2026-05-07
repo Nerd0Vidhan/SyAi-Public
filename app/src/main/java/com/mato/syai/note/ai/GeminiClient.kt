@@ -19,39 +19,57 @@ class GeminiClient {
         }
     )
 
-    /**
-     * MAIN FUNCTION
-     * Returns structured JSON for editor (TEXT + DRAWING)
-     */
     suspend fun generateObjects(
         prompt: String,
-        pageContext: String,
-        currentPageWidthPoints: Float,
-        currentPageHeightPoints: Float
+        documentSummary: String,
+        fetchDetails: suspend (pageNo: Int, layer: Int) -> String
     ): JSONObject? {
         return withContext(Dispatchers.IO) {
             try {
-                val fullPrompt = buildPrompt(
-                    userPrompt = prompt,
-                    pageContext = pageContext,
-                    currentPageWidthPoints = currentPageWidthPoints,
-                    currentPageHeightPoints = currentPageHeightPoints
-                )
-
-                val response = model.generateContent(
-                    content {
-                        text(fullPrompt)
+                var currentContext = "Document Summary:\n$documentSummary"
+                
+                // We'll allow up to 2 iterations to prevent infinite loops
+                for (i in 0..1) {
+                    val fullPrompt = buildPrompt(prompt, currentContext)
+                    
+                    val response = model.generateContent(
+                        content { text(fullPrompt) }
+                    )
+                    
+                    val output = response.text ?: return@withContext null
+                    
+                    val json = try {
+                        JSONObject(output)
+                    } catch (_: Exception) {
+                        return@withContext null
                     }
-                )
-
-                val output = response.text ?: return@withContext null
-
-                return@withContext try {
-                    JSONObject(output)
-                } catch (_: Exception) {
-                    null
+                    
+                    val operations = json.optJSONArray("operations") ?: return@withContext json
+                    
+                    val fetchRequests = mutableListOf<Pair<Int, Int>>()
+                    for (j in 0 until operations.length()) {
+                        val op = operations.optJSONObject(j) ?: continue
+                        if (op.optString("action") == "FETCH_DETAILS") {
+                            val pageNo = op.optInt("pageNo", -1)
+                            val layer = op.optInt("layer", -1)
+                            if (pageNo >= 0 && layer >= 0) {
+                                fetchRequests.add(pageNo to layer)
+                            }
+                        }
+                    }
+                    
+                    if (fetchRequests.isEmpty()) {
+                        return@withContext json
+                    } else {
+                        // Fetch details and append to context for the next iteration
+                        val details = StringBuilder("\nFetched Details:\n")
+                        for ((pageNo, layer) in fetchRequests) {
+                            details.append(fetchDetails(pageNo, layer)).append("\n")
+                        }
+                        currentContext += details.toString()
+                    }
                 }
-
+                null
             } catch (e: Exception) {
                 e.printStackTrace()
                 null
@@ -61,66 +79,75 @@ class GeminiClient {
 
     private fun buildPrompt(
         userPrompt: String,
-        pageContext: String,
-        currentPageWidthPoints: Float,
-        currentPageHeightPoints: Float
+        context: String
     ): String {
         return """
             You are an AI note editor for a premium document canvas.
             Return ONLY valid JSON.
 
-            Current page size is ${currentPageWidthPoints}pt x ${currentPageHeightPoints}pt.
             All coordinates and drawing points must use points (1/72 inch).
-            Respect the current page margins and avoid placing content outside the page.
-            You may use context from the previous, current, and next page to continue the document naturally.
+            You have access to the Document Summary containing pages, their dimensions, text snippets, and object bounding boxes.
+            
+            If you need exact pixel points for a DRAWING or exact text for a large block to fulfill the user's request, output a FETCH_DETAILS action for that specific page and layer.
+            If you have enough information, output CREATE, UPDATE, or DELETE actions.
 
             Context:
-            $pageContext
+            $context
 
             JSON schema:
             {
-              "objects": [
+              "operations": [
                 {
-                  "type": "LINEAR_TEXT",
-                  "text": "string"
+                  "action": "FETCH_DETAILS",
+                  "pageNo": 0,
+                  "layer": 3
                 },
                 {
+                  "action": "CREATE",
+                  "pageNo": 1,
                   "type": "TEXT",
-                  "text": "floating textbox text",
                   "x": 100.0,
                   "y": 200.0,
-                  "width": 220.0
+                  "width": 220.0,
+                  "payload": {
+                    "text": "floating textbox text"
+                  }
                 },
                 {
-                  "type": "LIST",
-                  "listStyle": "BULLET|NUMBER|ROMAN|CHECKBOX",
-                  "orderedStyle": "DIGITS|LOWER_ALPHA|UPPER_ALPHA|LOWER_ROMAN|UPPER_ROMAN",
-                  "bulletStyle": "DISC|CIRCLE|SQUARE|DASH",
-                  "items": [
-                    { "text": "item 1", "isChecked": false }
-                  ]
-                },
-                {
+                  "action": "UPDATE",
+                  "pageNo": 0,
+                  "layer": 2,
                   "type": "DRAWING",
-                  "color": -16777216,
-                  "width": 3.0,
-                  "points": [
-                    { "x": 10.0, "y": 10.0 },
-                    { "x": 14.0, "y": 12.0 }
-                  ]
+                  "changes": {
+                    "color": -16777216,
+                    "width": 5.0,
+                    "alpha": 0.5
+                  }
+                },
+                {
+                  "action": "UPDATE",
+                  "pageNo": 0,
+                  "layer": 1,
+                  "type": "LINEAR_TEXT",
+                  "changes": {
+                    "text": "new text content completely replacing old text"
+                  }
+                },
+                {
+                  "action": "DELETE",
+                  "pageNo": 2,
+                  "layer": 5
                 }
               ]
             }
 
             Rules:
-            - Prefer LINEAR_TEXT for normal document writing.
-            - Use LIST for document-flow lists, not floating lists.
-            - Use TEXT only for intentional floating text boxes.
-            - For curves, circles, or detailed diagrams, you MUST provide highly dense and precise coordinates for EACH point on the path to make the shapes extremely smooth and detailed. Generate at least 100 points for complex shapes, ensuring no jagged edges.
-            - Points Drawing should actually match the object drawn when plotted, So compare before answering and give correct result.
+            - CREATE: Use payload for the initial state. For TEXT/LINEAR_TEXT use {"text": "..."}. For LIST use {"listStyle": "BULLET", "items": [{"text": "item 1", "isChecked": false}]}.
+            - UPDATE: Include ONLY the fields that should be altered in "changes". Do not include fields that should remain the same.
+            - DRAWING UPDATE: You can change 'color', 'width', 'alpha', or provide entirely new 'points' array to replace the drawing.
+            - To replace text in a LINEAR_TEXT block, use UPDATE with "changes": {"text": "new text"}.
             - Do not invent unsupported fields.
-            - Keep coordinates within the current page dimensions.
-
+            
             User Request: $userPrompt
         """.trimIndent()
     }

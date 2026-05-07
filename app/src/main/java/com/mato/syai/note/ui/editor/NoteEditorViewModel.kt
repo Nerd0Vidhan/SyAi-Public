@@ -1,6 +1,7 @@
 package com.mato.syai.note.ui.editor
 
 import android.content.Context
+import android.net.Uri
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.ui.geometry.Offset
@@ -26,6 +27,7 @@ import com.mato.syai.note.domain.editor.PageViewportState
 import com.mato.syai.note.domain.editor.UndoRedoManager
 import com.mato.syai.note.domain.local.model.*
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
@@ -36,6 +38,8 @@ import javax.inject.Inject
 
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.withContext
+import java.io.File
 
 @HiltViewModel
 class NoteEditorViewModel @Inject constructor(
@@ -129,6 +133,24 @@ class NoteEditorViewModel @Inject constructor(
         autoSaveJob = viewModelScope.launch {
             delay(300)
             persistToDisk()
+        }
+    }
+
+    fun addImageFromUri(context: Context, pageIndex: Int, uri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val file = File(context.filesDir, "img_${System.currentTimeMillis()}.jpg")
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    file.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                withContext(Dispatchers.Main) {
+                    addImage(pageIndex, Uri.fromFile(file).toString(), 100f, 100f, 1f)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
 
@@ -1264,135 +1286,191 @@ class NoteEditorViewModel @Inject constructor(
     }
 
     fun applyAIObjects(pageIndex: Int, aiJson: JSONObject) {
-
         mutateContent { content ->
+            val operations = aiJson.optJSONArray("operations") ?: return@mutateContent
 
-            val page = content.pages[pageIndex]
+            for (i in 0 until operations.length()) {
+                val op = operations.optJSONObject(i) ?: continue
+                val action = op.optString("action")
+                val targetPageNo = op.optInt("pageNo", pageIndex)
+                if (targetPageNo < 0 || targetPageNo > 100) continue // Prevent absurd memory allocation
 
-            val objects = aiJson.optJSONArray("objects") ?: return@mutateContent
+                while (targetPageNo >= content.pages.size) {
+                    val templatePage = content.pages.lastOrNull()
+                    val newPage = PageData(
+                        pageId = java.util.UUID.randomUUID().toString(),
+                        pageNo = content.pages.size,
+                        pageSize = templatePage?.pageSize ?: PageSize.A4,
+                        pageDimensions = templatePage?.pageDimensions?.copy() ?: PageSize.A4.defaultDimensions(),
+                        pagePadding = templatePage?.pagePadding?.copy() ?: PagePadding()
+                    )
+                    newPage.ensurePrimaryLinearEntry()
+                    content.pages.add(newPage)
+                }
 
-            for (i in 0 until objects.length()) {
+                val page = content.pages[targetPageNo]
 
-                val obj = objects.getJSONObject(i)
-                val type = obj.optString("type")
+                when (action) {
+                    "CREATE" -> {
+                        val typeStr = op.optString("type")
+                        val payloadJson = op.optJSONObject("payload") ?: continue
+                        val x = op.optDouble("x", page.pagePadding.startPoints.toDouble()).toFloat()
+                        val y = op.optDouble("y", page.pagePadding.topPoints.toDouble()).toFloat()
 
-                when (type) {
-
-                    "TEXT" -> {
-                        val noteObject = NoteObject(
-                            layer = page.items.size + 1,
-                            type = ObjectType.TEXT,
-                            transform = Transform(
-                                x = obj.optDouble("x", 100.0).toFloat(),
-                                y = obj.optDouble("y", 200.0).toFloat()
-                            ),
-                            payload = TextPayload(
-                                text = obj.optString("text")
-                            )
-                        )
-                        clampObjectWithinPage(page, noteObject)
-                        page.upsertObject(noteObject)
-                    }
-
-                    "DRAWING" -> {
-
-                        val pointsJson = obj.optJSONArray("points") ?: continue
-
-                        val points = mutableListOf<Point>()
-
-                        for (j in 0 until pointsJson.length()) {
-                            val p = pointsJson.getJSONObject(j)
-                            points.add(
-                                Point(
-                                    x=p.getDouble("x").toFloat(),
-                                    y=p.getDouble("y").toFloat()
+                        when (typeStr) {
+                            "TEXT" -> {
+                                val noteObject = NoteObject(
+                                    layer = (page.items.maxOfOrNull { it.layer } ?: 0) + 1,
+                                    type = ObjectType.TEXT,
+                                    transform = Transform(x = x, y = y),
+                                    bounds = Bounds(width = op.optDouble("width", 220.0).toFloat(), height = 100f),
+                                    payload = TextPayload(text = payloadJson.optString("text"))
                                 )
-                            )
-                        }
+                                clampObjectWithinPage(page, noteObject)
+                                page.upsertObject(noteObject)
+                            }
+                            "DRAWING" -> {
+                                val pointsJson = payloadJson.optJSONArray("points") ?: continue
+                                val points = mutableListOf<Point>()
+                                for (j in 0 until pointsJson.length()) {
+                                    val p = pointsJson.getJSONObject(j)
+                                    points.add(Point(x = p.getDouble("x").toFloat(), y = p.getDouble("y").toFloat()))
+                                }
+                                val minX = points.minOfOrNull { it.x } ?: 0f
+                                val minY = points.minOfOrNull { it.y } ?: 0f
+                                val maxX = points.maxOfOrNull { it.x } ?: 0f
+                                val maxY = points.maxOfOrNull { it.y } ?: 0f
 
-                        val strokeColor = obj.optInt("color", 0xFF000000.toInt())
-                        val strokeWidth = obj.optDouble("width", 5.0).toFloat()
-
-                        val minX = points.minOfOrNull { it.x } ?: 0f
-                        val minY = points.minOfOrNull { it.y } ?: 0f
-                        val maxX = points.maxOfOrNull { it.x } ?: 0f
-                        val maxY = points.maxOfOrNull { it.y } ?: 0f
-
-                        val noteObject = NoteObject(
-                            layer = page.items.size + 1,
-                            type = ObjectType.DRAWING,
-                            transform = Transform(x = minX, y = minY),
-                            bounds = Bounds(width = (maxX - minX).coerceAtLeast(80f), height = (maxY - minY).coerceAtLeast(80f)),
-                            payload = DrawingPayload(
-                                strokes = mutableListOf(
-                                    Stroke(
-                                        color = strokeColor,
-                                        width = strokeWidth,
-                                        points = points
+                                val noteObject = NoteObject(
+                                    layer = (page.items.maxOfOrNull { it.layer } ?: 0) + 1,
+                                    type = ObjectType.DRAWING,
+                                    transform = Transform(x = minX, y = minY),
+                                    bounds = Bounds(width = (maxX - minX).coerceAtLeast(80f), height = (maxY - minY).coerceAtLeast(80f)),
+                                    payload = DrawingPayload(
+                                        strokes = mutableListOf(
+                                            Stroke(
+                                                color = payloadJson.optInt("color", -16777216),
+                                                width = payloadJson.optDouble("width", 5.0).toFloat(),
+                                                points = points,
+                                            )
+                                        )
                                     )
                                 )
-                            )
-                        )
-                        clampObjectWithinPage(page, noteObject)
-                        page.upsertObject(noteObject)
-                    }
-                    "LINEAR_TEXT" -> {
-                        val currentText = page.primaryLinearEntry?.value.orEmpty()
-                        val aiText = obj.optString("text")
-                        page.updatePrimaryLinearText(
-                            text = listOf(currentText, aiText)
-                                .filter { it.isNotBlank() }
-                                .joinToString(separator = if (currentText.isBlank()) "" else "\n")
-                        )
-                    }
-
-                    "LIST" -> {
-                        val styleStr = obj.optString("listStyle", "BULLET")
-                        val style = try { ListMarker.valueOf(styleStr) } catch (e: Exception) { ListMarker.BULLET }
-                        val orderedStyle = try {
-                            OrderedListStyle.valueOf(obj.optString("orderedStyle", "DIGITS"))
-                        } catch (e: Exception) {
-                            OrderedListStyle.DIGITS
+                                clampObjectWithinPage(page, noteObject)
+                                page.upsertObject(noteObject)
+                            }
+                            "LINEAR_TEXT" -> {
+                                val aiText = payloadJson.optString("text")
+                                page.updatePrimaryLinearText(
+                                    text = listOf(page.primaryLinearEntry?.value.orEmpty(), aiText)
+                                        .filter { it.isNotBlank() }
+                                        .joinToString(separator = "\n")
+                                )
+                            }
+                            "LIST" -> {
+                                val listItems = mutableListOf<ListItem>()
+                                val itemsJson = payloadJson.optJSONArray("items")
+                                if (itemsJson != null) {
+                                    for (j in 0 until itemsJson.length()) {
+                                        val item = itemsJson.getJSONObject(j)
+                                        listItems.add(ListItem(text = item.optString("text"), isChecked = item.optBoolean("isChecked", false)))
+                                    }
+                                }
+                                val noteObject = NoteObject(
+                                    layer = (page.items.maxOfOrNull { it.layer } ?: 0) + 1,
+                                    type = ObjectType.LIST,
+                                    transform = Transform(x = x, y = y),
+                                    bounds = Bounds(width = 500f, height = 200f),
+                                    payload = ListPayload(
+                                        style = try { ListMarker.valueOf(payloadJson.optString("listStyle", "BULLET")) } catch (e: Exception) { ListMarker.BULLET },
+                                        orderedStyle = try { OrderedListStyle.valueOf(payloadJson.optString("orderedStyle", "DIGITS")) } catch (e: Exception) { OrderedListStyle.DIGITS },
+                                        bulletStyle = try { BulletListStyle.valueOf(payloadJson.optString("bulletStyle", "DISC")) } catch (e: Exception) { BulletListStyle.DISC },
+                                        items = listItems
+                                    )
+                                )
+                                clampObjectWithinPage(page, noteObject)
+                                page.upsertObject(noteObject)
+                                
+                                val entry = LinearContentEntry(
+                                    objectId = noteObject.id,
+                                    type = ObjectType.LIST,
+                                    layer = noteObject.layer,
+                                    bounds = noteObject.bounds.copy()
+                                )
+                                page.linearContent.add(entry)
+                                page.refreshLinearTextPaste()
+                            }
                         }
-                        val bulletStyle = try {
-                            BulletListStyle.valueOf(obj.optString("bulletStyle", "DISC"))
-                        } catch (e: Exception) {
-                            BulletListStyle.DISC
-                        }
+                    }
+                    "UPDATE" -> {
+                        val layer = op.optInt("layer", -1)
+                        val changes = op.optJSONObject("changes") ?: continue
+                        val obj = page.items.find { it.layer == layer }
+                        val linearEntry = page.linearContent.find { it.layer == layer }
 
-                        val itemsJson = obj.optJSONArray("items")
-                        val listItems = mutableListOf<ListItem>()
+                        if (obj != null) {
+                            if (changes.has("x")) obj.transform.x = changes.getDouble("x").toFloat()
+                            if (changes.has("y")) obj.transform.y = changes.getDouble("y").toFloat()
+                            if (changes.has("width")) obj.bounds.width = changes.getDouble("width").toFloat()
+                            if (changes.has("height")) obj.bounds.height = changes.getDouble("height").toFloat()
 
-                        if (itemsJson != null) {
-                            for (j in 0 until itemsJson.length()) {
-                                val item = itemsJson.getJSONObject(j)
-                                listItems.add(ListItem(
-                                    text = item.optString("text"),
-                                    isChecked = item.optBoolean("isChecked", false)
-                                ))
+                            when (val payload = obj.payload) {
+                                is DrawingPayload -> {
+                                    val stroke = payload.strokes.firstOrNull()
+                                    if (stroke != null) {
+                                        if (changes.has("color")) stroke.color = changes.getInt("color")
+                                        if (changes.has("width")) stroke.width = changes.getDouble("width").toFloat()
+                                        if (changes.has("alpha")) stroke.alpha = changes.getDouble("alpha").toFloat()
+                                        if (changes.has("points")) {
+                                            val pointsJson = changes.getJSONArray("points")
+                                            val points = mutableListOf<Point>()
+                                            for (j in 0 until pointsJson.length()) {
+                                                val p = pointsJson.getJSONObject(j)
+                                                points.add(Point(x = p.getDouble("x").toFloat(), y = p.getDouble("y").toFloat()))
+                                            }
+                                            stroke.points = points
+                                        }
+                                    }
+                                }
+                                is TextPayload -> {
+                                    if (changes.has("text")) payload.text = changes.getString("text")
+                                }
+                                is ListPayload -> {
+                                    if (changes.has("items")) {
+                                        val itemsJson = changes.getJSONArray("items")
+                                        val listItems = mutableListOf<ListItem>()
+                                        for (j in 0 until itemsJson.length()) {
+                                            val item = itemsJson.getJSONObject(j)
+                                            listItems.add(ListItem(text = item.optString("text"), isChecked = item.optBoolean("isChecked", false)))
+                                        }
+                                        payload.items = listItems
+                                    }
+                                }
+                                else -> {}
                             }
                         }
 
-                        val noteObject = NoteObject(
-                            layer = (page.items.maxOfOrNull { it.layer } ?: 0) + 1,
-                            type = ObjectType.LIST,
-                            transform = Transform(x = obj.optDouble("x", 80.0).toFloat(), y = obj.optDouble("y", 100.0).toFloat()),
-                            bounds = Bounds(width = 500f, height = 200f),
-                            payload = ListPayload(
-                                style = style,
-                                orderedStyle = orderedStyle,
-                                bulletStyle = bulletStyle,
-                                items = listItems
-                            )
-                        )
-                        clampObjectWithinPage(page, noteObject)
-                        page.upsertObject(noteObject)
+                        if (linearEntry != null) {
+                            if (changes.has("text")) {
+                                val newText = changes.getString("text")
+                                page.updateLinearEntry(id = linearEntry.id, textValue = newText)
+                            }
+                        }
+                    }
+                    "DELETE" -> {
+                        val layer = op.optInt("layer", -1)
+                        val obj = page.items.find { it.layer == layer }
+                        val linearEntry = page.linearContent.find { it.layer == layer }
+                        if (obj != null) page.removeObject(obj.id)
+                        if (linearEntry != null) {
+                            page.linearContent.removeAll { it.id == linearEntry.id }
+                            page.refreshLinearTextPaste()
+                        }
                     }
                 }
             }
         }
     }
-
 
     fun generateAIContent(pageIndex: Int, prompt: String) {
         viewModelScope.launch {
@@ -1405,12 +1483,13 @@ class NoteEditorViewModel @Inject constructor(
                 _uiState.update { it.copy(isLoading = true) }
             }
 
-            val pageContext = buildAiPageContext(contentSnapshot, pageIndex)
+            val documentSummary = buildDocumentSummary(contentSnapshot)
             val json = gemini.generateObjects(
                 prompt = prompt,
-                pageContext = pageContext,
-                currentPageWidthPoints = pageSnapshot?.widthPoints ?: PageSize.A4.widthPoints,
-                currentPageHeightPoints = pageSnapshot?.heightPoints ?: PageSize.A4.heightPoints
+                documentSummary = documentSummary,
+                fetchDetails = { pNo, layer ->
+                    fetchObjectDetails(contentSnapshot, pNo, layer)
+                }
             )
             Log.d("Aidata","Aidata: $json")
             if (json != null) {
@@ -1572,12 +1651,15 @@ class NoteEditorViewModel @Inject constructor(
                 bulletStyle = bulletStyle ?: BulletListStyle.DISC,
                 items = mutableListOf(ListItem(text = "", style = _uiState.value.textStyle.copy()))
             )
+            val estimatedHeightBefore = maxOf(1f, textBefore.split("\n").size.toFloat()) * (entry.style.fontSize * 1.5f)
+            val listY = entry.transform.y + estimatedHeightBefore
+
             val listObj = NoteObject(
                 id = listId,
                 type = ObjectType.LIST,
                 payload = listPayload,
                 layer = page.items.size + 1,
-                transform = entry.transform.copy(),
+                transform = Transform(x = entry.transform.x, y = listY),
                 bounds = Bounds(
                     width = entry.bounds.width,
                     height = 44f
@@ -1807,6 +1889,37 @@ class NoteEditorViewModel @Inject constructor(
                 append("\"")
             }
         }
+    }
+
+    private fun buildDocumentSummary(content: NoteContent): String {
+        return content.pages.joinToString("\n\n") { page ->
+            buildString {
+                append("Page ${content.pages.indexOf(page)}: ")
+                append("width=${page.widthPoints}, height=${page.heightPoints}\n")
+                append("Text Summary: ")
+                append(page.linearTextPaste.take(200).replace("\n", " ") + "...\n")
+                append("Objects: [")
+                val objSummaries = page.items.map { obj ->
+                    val payloadSnippet = when (val p = obj.payload) {
+                        is TextPayload -> ", text: \"${p.text.take(50)}\""
+                        is LinearTextPayload -> ", text: \"${p.text.take(50)}\""
+                        is ListPayload -> ", listItems: [${p.items.joinToString { "\"${it.text.take(30)}\"" }}]"
+                        is DrawingPayload -> ", strokes: ${p.strokes.size}"
+                        is ImagePayload -> ", image: \"${p.uri}\""
+                        else -> ""
+                    }
+                    "{layer: ${obj.layer}, type: ${obj.type}, bounds: [${obj.transform.x}, ${obj.transform.y}, ${obj.bounds.width}, ${obj.bounds.height}]$payloadSnippet}"
+                }
+                append(objSummaries.joinToString(", "))
+                append("]")
+            }
+        }
+    }
+
+    private fun fetchObjectDetails(content: NoteContent, pageNo: Int, layer: Int): String {
+        val page = content.pages.getOrNull(pageNo) ?: return "Page $pageNo not found."
+        val obj = page.items.find { it.layer == layer } ?: return "Layer $layer not found on page $pageNo."
+        return "Page $pageNo, Layer $layer details:\n" + gson.toJson(obj)
     }
 
     private fun clampObjectWithinPage(page: PageData, obj: NoteObject) {
