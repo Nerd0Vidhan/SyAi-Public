@@ -364,9 +364,10 @@ data class DrawingPayload(
 
 data class Stroke(
     val id: String = UUID.randomUUID().toString(),
-    val color: Int,
-    val width: Float,
-    val points: List<Point>,
+    var color: Int,
+    var width: Float,
+    var alpha:Float?=1f,
+    var points: List<Point>,
     val brushStyle: BrushStyle = BrushStyle.PEN
 )
 
@@ -417,7 +418,7 @@ data class ListPayload(
     var style: ListMarker = ListMarker.BULLET,
     var orderedStyle: OrderedListStyle = OrderedListStyle.DIGITS,
     var bulletStyle: BulletListStyle = BulletListStyle.DISC,
-    val items: MutableList<ListItem> = mutableListOf()
+    var items: MutableList<ListItem> = mutableListOf()
 ) : ObjectPayload
 
 data class ListItem(
