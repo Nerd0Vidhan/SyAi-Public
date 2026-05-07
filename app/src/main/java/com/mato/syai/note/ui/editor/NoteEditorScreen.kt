@@ -96,11 +96,7 @@ fun NoteEditorScreen(
     val listState = rememberLazyListState()
     val imagePicker = rememberImagePicker { uri ->
         val pageIndex = state.currentPageIndex
-        context.contentResolver.takePersistableUriPermission(
-            uri,
-            Intent.FLAG_GRANT_READ_URI_PERMISSION
-        )
-        viewModel.addImage(pageIndex, uri.toString(), 200f, 200f)
+        viewModel.addImageFromUri(context, pageIndex, uri)
     }
     var showAI by remember { mutableStateOf(false) }
     var showPageSettings by remember { mutableStateOf(false) }
