@@ -1333,8 +1333,15 @@ class NoteEditorViewModel @Inject constructor(
                                 val pointsJson = payloadJson.optJSONArray("points") ?: continue
                                 val points = mutableListOf<Point>()
                                 for (j in 0 until pointsJson.length()) {
-                                    val p = pointsJson.getJSONObject(j)
-                                    points.add(Point(x = p.getDouble("x").toFloat(), y = p.getDouble("y").toFloat()))
+                                    val pointArray = pointsJson.optJSONArray(j)
+                                    if (pointArray != null && pointArray.length() >= 2) {
+                                        points.add(Point(x = pointArray.getDouble(0).toFloat(), y = pointArray.getDouble(1).toFloat()))
+                                    } else {
+                                        val p = pointsJson.optJSONObject(j)
+                                        if (p != null) {
+                                            points.add(Point(x = p.optDouble("x").toFloat(), y = p.optDouble("y").toFloat()))
+                                        }
+                                    }
                                 }
                                 val minX = points.minOfOrNull { it.x } ?: 0f
                                 val minY = points.minOfOrNull { it.y } ?: 0f
@@ -1425,8 +1432,15 @@ class NoteEditorViewModel @Inject constructor(
                                             val pointsJson = changes.getJSONArray("points")
                                             val points = mutableListOf<Point>()
                                             for (j in 0 until pointsJson.length()) {
-                                                val p = pointsJson.getJSONObject(j)
-                                                points.add(Point(x = p.getDouble("x").toFloat(), y = p.getDouble("y").toFloat()))
+                                                val pointArray = pointsJson.optJSONArray(j)
+                                                if (pointArray != null && pointArray.length() >= 2) {
+                                                    points.add(Point(x = pointArray.getDouble(0).toFloat(), y = pointArray.getDouble(1).toFloat()))
+                                                } else {
+                                                    val p = pointsJson.optJSONObject(j)
+                                                    if (p != null) {
+                                                        points.add(Point(x = p.optDouble("x").toFloat(), y = p.optDouble("y").toFloat()))
+                                                    }
+                                                }
                                             }
                                             stroke.points = points
                                         }
@@ -1539,15 +1553,18 @@ class NoteEditorViewModel @Inject constructor(
             _uiState.update { it.copy(generatingPageIds = it.generatingPageIds + page.pageId) }
 
             try {
+                android.util.Log.d("ImageGen", "Sending request to: ${localImageGeneratorRepository.fixedBaseUrl()}")
                 val req = LocalImageGenerationRequest(prompt = prompt, pageContext = buildAiPageContext(content, pageIndex))
                 val jobResponse = localImageGeneratorRepository.submit(req)
                 
                 val jobId = jobResponse.jobId
                 val statusUrl = jobResponse.statusUrl
+                android.util.Log.d("ImageGen", "Started Job: $jobId")
 
                 pollImageGenerationWhileOpen(_uiState.value.noteId, pageIndex, jobId, statusUrl)
             } catch (e: Exception) {
                 e.printStackTrace()
+                android.util.Log.e("ImageGen", "Failed to start local generation: ${e.message}", e)
                 _uiState.update { it.copy(offlineModelStatusMessage = "Failed to start local generation: ${e.message}") }
             } finally {
                 _uiState.update { it.copy(generatingPageIds = it.generatingPageIds - page.pageId) }
