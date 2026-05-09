@@ -12,10 +12,11 @@ spring:
 
 image-generator:
   output-dir: generated
-  python-executable: python
-  python-script: python/stable_diffusion_runner.py
-  model-id: runwayml/stable-diffusion-v1-5
+  python-executable: C:/Users/Vidhan/AppData/Local/Programs/Python/Python311/python.exe
+  python-script: C:/Users/Vidhan/AndroidStudioProjects/SyAi-Public/image-generator/python/stable_diffusion_runner.py
+  model-id: segmind/tiny-sd
   device: cpu
-  auth-token: ""
   allow-origins:
     - "*"
+
+#runwayml/stable-diffusion-v1-5 --alternate model to try for gpu based loading

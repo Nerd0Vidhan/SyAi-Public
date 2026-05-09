@@ -68,34 +68,83 @@ class ImageGenerationService(
     }
 
     private fun runJob(jobId: String, request: ImageGenerationRequest) {
+
         jobs.computeIfPresent(jobId) { _, job ->
-            job.copy(status = ImageJobStatus.RUNNING, updatedAt = System.currentTimeMillis())
+            job.copy(
+                status = ImageJobStatus.RUNNING,
+                updatedAt = System.currentTimeMillis()
+            )
         }
 
         try {
+
             Files.createDirectories(outputDir())
 
-            val requestFile = outputDir().resolve("$jobId-request.json").toFile()
-            val outputFile = outputDir().resolve("$jobId.png").toFile()
+            val requestFile = outputDir()
+                .resolve("$jobId-request.json")
+                .toFile()
+
+            val outputFile = outputDir()
+                .resolve("$jobId.png")
+                .toFile()
+
             objectMapper.writeValue(requestFile, request)
 
-            val process = ProcessBuilder(
-                properties.pythonExecutable,
-                properties.pythonScript,
-                "--request", requestFile.absolutePath,
-                "--output", outputFile.absolutePath,
-                "--model-id", properties.modelId,
-                "--device", properties.device,
-                "--auth-token", properties.authToken
-            )
-                .directory(File("."))
-                .redirectErrorStream(true)
-                .start()
+            println("Starting Python image generation for job: $jobId")
 
-            val log = process.inputStream.bufferedReader().use { it.readText() }
+            val processBuilder = ProcessBuilder(
+                properties.pythonExecutable,
+                "-u",
+                properties.pythonScript,
+                "--request",
+                requestFile.absolutePath,
+                "--output",
+                outputFile.absolutePath,
+                "--model-id",
+                properties.modelId,
+                "--device",
+                properties.device
+            )
+
+            processBuilder.environment()["PYTHONUNBUFFERED"] = "1"
+
+            val process = processBuilder.start()
+
+            val stdout = process.inputStream
+                .bufferedReader()
+                .readText()
+
+            val stderr = process.errorStream
+                .bufferedReader()
+                .readText()
+
             val exitCode = process.waitFor()
-            if (exitCode != 0 || !outputFile.exists()) {
-                error("Generation failed with exit code $exitCode.\n$log")
+
+            println("===== PYTHON STDOUT =====")
+            println(stdout)
+
+            if (stderr.isNotBlank()) {
+                println("===== PYTHON STDERR =====")
+                println(stderr)
+            }
+
+            println("Python process finished with exit code: $exitCode")
+
+            if (exitCode != 0) {
+                error(
+                    """
+                Python generation failed.
+                
+                Exit Code: $exitCode
+                
+                STDERR:
+                $stderr
+                """.trimIndent()
+                )
+            }
+
+            if (!outputFile.exists()) {
+                error("Image generation completed but output image was not created.")
             }
 
             jobs.computeIfPresent(jobId) { _, job ->
@@ -105,7 +154,13 @@ class ImageGenerationService(
                     updatedAt = System.currentTimeMillis()
                 )
             }
+
         } catch (t: Throwable) {
+
+            System.err.println("\n=== PYTHON GENERATION FAILED ===")
+            t.printStackTrace()
+            System.err.println("================================\n")
+
             jobs.computeIfPresent(jobId) { _, job ->
                 job.copy(
                     status = ImageJobStatus.FAILED,
