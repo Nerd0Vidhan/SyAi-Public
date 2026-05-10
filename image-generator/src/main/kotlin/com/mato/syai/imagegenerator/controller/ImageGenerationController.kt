@@ -34,6 +34,11 @@ class ImageGenerationController(
         @PathVariable jobId: String
     ): ImageGenerationStatusResponse = imageGenerationService.status(jobId)
 
+    @GetMapping("/jobs/note/{noteId}")
+    fun jobsByNote(
+        @PathVariable noteId: Long
+    ): List<ImageGenerationStatusResponse> = imageGenerationService.getJobsByNoteId(noteId)
+
     @GetMapping("/files/{fileName}", produces = [MediaType.IMAGE_PNG_VALUE])
     fun file(
         @PathVariable fileName: String

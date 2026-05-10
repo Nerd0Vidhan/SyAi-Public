@@ -7,8 +7,7 @@ data class ImageGeneratorProperties(
     val outputDir: String = "generated",
     val pythonExecutable: String = "python",
     val pythonScript: String = "python/stable_diffusion_runner.py",
-    val modelId: String = "runwayml/stable-diffusion-v1-5",
-    val device: String = "cuda",
-    val authToken: String = "",
+    val modelId: String = "segmind/tiny-sd", //"runwayml/stable-diffusion-v1-5"
+    val device: String = "cpu",
     val allowOrigins: List<String> = listOf("*")
 )

@@ -21,7 +21,10 @@ data class ImageGenerationRequest(
     @field:Max(20)
     val guidanceScale: Int = 8,
     val seed: Long? = null,
-    val pageContext: String? = null
+    val pageContext: String? = null,
+    val noteId: Long? = null,
+    val pageNo: Int? = null,
+    val fcmToken: String? = null
 )
 
 data class ImageGenerationAcceptedResponse(
@@ -51,9 +54,12 @@ enum class ImageJobStatus {
 data class ImageJob(
     val jobId: String,
     val request: ImageGenerationRequest,
-    val createdAt: Long,
-    val updatedAt: Long,
     val status: ImageJobStatus,
     val imageFileName: String? = null,
-    val error: String? = null
+    val error: String? = null,
+    val noteId: Long? = null,
+    val pageNo: Int? = null,
+    val fcmToken: String? = null,
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis()
 )

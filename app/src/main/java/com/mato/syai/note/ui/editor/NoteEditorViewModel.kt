@@ -40,11 +40,16 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.withContext
 import java.io.File
+import com.google.firebase.messaging.FirebaseMessaging
+import com.mato.syai.note.ai.image.ImageGenerationEvent
+import com.mato.syai.note.ai.image.ImageGenerationEventBus
+import kotlinx.coroutines.tasks.await
 
 @HiltViewModel
 class NoteEditorViewModel @Inject constructor(
     private val repository: NoteRepository,
     private val localImageGeneratorRepository: LocalImageGeneratorRepository,
+    private val eventBus: ImageGenerationEventBus,
     gson: Gson
 ) : ViewModel() {
 
@@ -59,6 +64,23 @@ class NoteEditorViewModel @Inject constructor(
                 val clonedForUndo = deepCopy(contentToSave)
                 undoRedoManager.push(clonedForUndo)
                 repository.saveNoteContent(_uiState.value.noteId, clonedForUndo)
+            }
+        }
+
+        viewModelScope.launch {
+            eventBus.events.collect { event ->
+                when (event) {
+                    is ImageGenerationEvent.JobCompleted -> {
+                        if (event.noteId == _uiState.value.noteId) {
+                            handleImageJobCompleted(event)
+                        }
+                    }
+                    is ImageGenerationEvent.JobFailed -> {
+                        if (event.noteId == _uiState.value.noteId) {
+                            _uiState.update { it.copy(offlineModelStatusMessage = "Image generation failed: ${event.error}") }
+                        }
+                    }
+                }
             }
         }
     }
@@ -118,6 +140,58 @@ class NoteEditorViewModel @Inject constructor(
                     pendingViewportPageIndex = 0,
                     isLoading = false
                 )
+            }
+            
+            fetchPendingImages(noteId)
+        }
+    }
+
+    private fun fetchPendingImages(noteId: Long) {
+        viewModelScope.launch {
+            try {
+                val jobs = localImageGeneratorRepository.getJobsByNoteId(noteId)
+                jobs.filter { it.status.uppercase() == "COMPLETED" }.forEach { job ->
+                    // Check if already in note? For now let's just try to insert if not present
+                    // Usually the repository should handle deduplication if jobId is stored
+                    val imageUrl = job.imageUrl ?: return@forEach
+                    val file = localImageGeneratorRepository.downloadToAppStorage(job.jobId, imageUrl)
+                    repository.insertGeneratedImage(
+                        noteId = noteId,
+                        pageIndex = 0, // Need to store pageNo in Job and use it here
+                        imageFile = file,
+                        jobId = job.jobId
+                    )
+                }
+                if (jobs.any { it.status.uppercase() == "COMPLETED" }) {
+                    val refreshed = repository.loadNoteContent(noteId)
+                    _uiState.update { it.copy(content = refreshed) }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    private fun handleImageJobCompleted(event: ImageGenerationEvent.JobCompleted) {
+        viewModelScope.launch {
+            try {
+                val file = localImageGeneratorRepository.downloadToAppStorage(event.jobId, event.imageUrl)
+                repository.insertGeneratedImage(
+                    noteId = event.noteId,
+                    pageIndex = event.pageNo,
+                    imageFile = file,
+                    jobId = event.jobId
+                )
+                val refreshed = repository.loadNoteContent(event.noteId)
+                _uiState.update { 
+                    it.copy(
+                        content = refreshed,
+                        offlineModelStatusMessage = "Image generation complete and added to note"
+                    ) 
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _uiState.update { it.copy(offlineModelStatusMessage = "Failed to download generated image") }
             }
         }
     }
@@ -1547,21 +1621,32 @@ class NoteEditorViewModel @Inject constructor(
     fun requestAiImageGeneration(prompt: String) {
         viewModelScope.launch {
             val pageIndex = _uiState.value.currentPageIndex
+            val noteId = _uiState.value.noteId
             val content = _uiState.value.content
             val page = content.pages.getOrNull(pageIndex) ?: return@launch
 
             _uiState.update { it.copy(generatingPageIds = it.generatingPageIds + page.pageId) }
 
             try {
-                android.util.Log.d("ImageGen", "Sending request to: ${localImageGeneratorRepository.fixedBaseUrl()}")
-                val req = LocalImageGenerationRequest(prompt = prompt, pageContext = buildAiPageContext(content, pageIndex))
+                val fcmToken = runCatching { FirebaseMessaging.getInstance().token.await() }.getOrNull()
+                android.util.Log.d("ImageGen", "Sending request with token: $fcmToken")
+                
+                val req = LocalImageGenerationRequest(
+                    prompt = prompt, 
+                    pageContext = buildAiPageContext(content, pageIndex),
+                    noteId = noteId,
+                    pageNo = pageIndex,
+                    fcmToken = fcmToken
+                )
                 val jobResponse = localImageGeneratorRepository.submit(req)
                 
                 val jobId = jobResponse.jobId
                 val statusUrl = jobResponse.statusUrl
                 android.util.Log.d("ImageGen", "Started Job: $jobId")
 
-                pollImageGenerationWhileOpen(_uiState.value.noteId, pageIndex, jobId, statusUrl)
+                // We still poll if the note is open for immediate feedback, 
+                // but FCM will handle background/other note scenarios.
+                pollImageGenerationWhileOpen(noteId, pageIndex, jobId, statusUrl)
             } catch (e: Exception) {
                 e.printStackTrace()
                 android.util.Log.e("ImageGen", "Failed to start local generation: ${e.message}", e)
@@ -1585,7 +1670,6 @@ class NoteEditorViewModel @Inject constructor(
             }
         }
 
-        // Reset UI State
         _uiState.update {
             it.copy(
                 selectedObjectIds = emptySet(),
@@ -1609,8 +1693,6 @@ class NoteEditorViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = false) }
         }
     }
-
-    // In NoteEditorViewModel.kt
 
     fun handleListInsertion(
         marker: ListMarker,
