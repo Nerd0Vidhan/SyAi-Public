@@ -55,8 +55,19 @@ class MainActivity : ComponentActivity() {
                 darkTheme = darkTheme,
                 dynamicColor = themeState.dynamicColor
             ) {
-//                DebugNotesScreen()
                 val navController = rememberNavController()
+
+                // Handle notification intent
+                LaunchedEffect(intent) {
+                    val openNote = intent?.getBooleanExtra("OPEN_NOTE", false) ?: false
+                    val noteId = intent?.getLongExtra("NOTE_ID", -1L) ?: -1L
+                    if (openNote && noteId != -1L) {
+                        // Delay slightly to allow splash/home to load if needed
+                        // or just navigate directly
+                        navController.navigate("note_editor/$noteId")
+                    }
+                }
+
                 AppNavGraph(navController = navController)
             }
 

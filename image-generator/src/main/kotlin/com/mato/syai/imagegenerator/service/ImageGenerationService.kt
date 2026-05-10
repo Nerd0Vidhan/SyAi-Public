@@ -7,6 +7,9 @@ import com.mato.syai.imagegenerator.model.ImageGenerationRequest
 import com.mato.syai.imagegenerator.model.ImageGenerationStatusResponse
 import com.mato.syai.imagegenerator.model.ImageJob
 import com.mato.syai.imagegenerator.model.ImageJobStatus
+import com.google.firebase.messaging.FirebaseMessaging
+import com.google.firebase.messaging.Message
+import com.google.firebase.messaging.Notification
 import org.springframework.stereotype.Service
 import java.io.File
 import java.nio.file.Files
@@ -31,7 +34,10 @@ class ImageGenerationService(
             request = request,
             createdAt = now,
             updatedAt = now,
-            status = ImageJobStatus.QUEUED
+            status = ImageJobStatus.QUEUED,
+            noteId = request.noteId,
+            pageNo = request.pageNo,
+            fcmToken = request.fcmToken
         )
         jobs[jobId] = job
 
@@ -58,6 +64,22 @@ class ImageGenerationService(
             createdAt = job.createdAt,
             updatedAt = job.updatedAt
         )
+    }
+
+    fun getJobsByNoteId(noteId: Long): List<ImageGenerationStatusResponse> {
+        return jobs.values
+            .filter { it.noteId == noteId }
+            .map { job ->
+                ImageGenerationStatusResponse(
+                    jobId = job.jobId,
+                    status = job.status,
+                    prompt = job.request.prompt,
+                    error = job.error,
+                    imageUrl = job.imageFileName?.let { "/api/v1/images/files/$it" },
+                    createdAt = job.createdAt,
+                    updatedAt = job.updatedAt
+                )
+            }
     }
 
     fun resolveFile(fileName: String): Path {
@@ -147,12 +169,16 @@ class ImageGenerationService(
                 error("Image generation completed but output image was not created.")
             }
 
-            jobs.computeIfPresent(jobId) { _, job ->
+            val completedJob = jobs.computeIfPresent(jobId) { _, job ->
                 job.copy(
                     status = ImageJobStatus.COMPLETED,
                     imageFileName = outputFile.name,
                     updatedAt = System.currentTimeMillis()
                 )
+            }
+            
+            if (completedJob != null) {
+                sendNotification(completedJob)
             }
 
         } catch (t: Throwable) {
@@ -161,13 +187,53 @@ class ImageGenerationService(
             t.printStackTrace()
             System.err.println("================================\n")
 
-            jobs.computeIfPresent(jobId) { _, job ->
+            val failedJob = jobs.computeIfPresent(jobId) { _, job ->
                 job.copy(
                     status = ImageJobStatus.FAILED,
                     error = t.message ?: "Unknown error",
                     updatedAt = System.currentTimeMillis()
                 )
             }
+            
+            if (failedJob != null) {
+                sendNotification(failedJob)
+            }
+        }
+    }
+
+    private fun sendNotification(job: ImageJob) {
+        val token = job.fcmToken
+        if (token.isNullOrBlank()) {
+            println("No FCM token for job ${job.jobId}, skipping notification.")
+            return
+        }
+
+        try {
+            val status = job.status.name
+            val noteId = job.noteId?.toString() ?: ""
+            val pageNo = job.pageNo?.toString() ?: ""
+            val imageUrl = job.imageFileName?.let { "/api/v1/images/files/$it" } ?: ""
+
+            val message = Message.builder()
+                .setToken(token)
+                .setNotification(
+                    Notification.builder()
+                        .setTitle("Image Generation $status")
+                        .setBody(if (job.status == ImageJobStatus.COMPLETED) "Your image is ready!" else "Generation failed.")
+                        .build()
+                )
+                .putData("jobId", job.jobId)
+                .putData("status", status)
+                .putData("noteId", noteId)
+                .putData("pageNo", pageNo)
+                .putData("imageUrl", imageUrl)
+                .build()
+
+            val response = FirebaseMessaging.getInstance().send(message)
+            println("Successfully sent message: $response")
+        } catch (e: Exception) {
+            println("Error sending FCM notification: ${e.message}")
+            e.printStackTrace()
         }
     }
 

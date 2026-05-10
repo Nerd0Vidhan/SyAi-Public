@@ -21,4 +21,7 @@ interface LocalImageGeneratorApi {
     @Streaming
     @GET
     suspend fun download(@Url imageUrl: String): ResponseBody
+
+    @GET("api/v1/images/jobs/note/{noteId}")
+    suspend fun getJobsByNoteId(@Path("noteId") noteId: Long): List<LocalImageGenerationStatusResponse>
 }
