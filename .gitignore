@@ -14,3 +14,5 @@
 .cxx
 local.properties
 google-services.json
+/image-generator/src/main/resources/service-account.json
+/image-generator/build/
