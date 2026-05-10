@@ -43,6 +43,10 @@ class LocalImageGeneratorRepository @Inject constructor(
         return api.generate(request)
     }
 
+    suspend fun getJobsByNoteId(noteId: Long): List<LocalImageGenerationStatusResponse> {
+        return api.getJobsByNoteId(noteId)
+    }
+
     suspend fun status(relativeStatusUrl: String): LocalImageGenerationStatusResponse {
         return api.status(toAbsoluteUrl(relativeStatusUrl))
     }

@@ -103,6 +103,7 @@ dependencies {
     implementation(libs.androidx.credentials.play.services.auth)
     implementation(libs.googleid)
     implementation(libs.firebase.analytics)
+    implementation(libs.firebase.messaging)
     implementation(libs.androidx.compose.ui.text)
     implementation(libs.androidx.lifecycle.process)
     implementation(libs.firebase.config.ktx)

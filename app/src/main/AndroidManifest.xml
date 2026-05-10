@@ -61,6 +61,22 @@
         </provider>
 
         <service
+            android:name=".note.service.SyAiFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <meta-data
+                android:name="com.google.firebase.messaging.default_notification_icon"
+                android:resource="@drawable/syai_square_vector_logo" />
+        <!-- Set color used in notification templates. This is used when messages are received and no custom color is set. -->
+        <meta-data
+                android:name="com.google.firebase.messaging.default_notification_color"
+                android:resource="@color/lightbrown" />
+
+        <service
             android:name=".MainActivity"
             android:enabled="true"
             android:exported="false"

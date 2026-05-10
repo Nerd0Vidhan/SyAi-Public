@@ -8,7 +8,10 @@ data class LocalImageGenerationRequest(
     val steps: Int = 20,
     val guidanceScale: Int = 7,
     val seed: Long? = null,
-    val pageContext: String? = null
+    val pageContext: String? = null,
+    val noteId: Long? = null,
+    val pageNo: Int? = null,
+    val fcmToken: String? = null
 )
 
 data class LocalImageGenerationAcceptedResponse(
