@@ -73,6 +73,9 @@ enum class ActiveTool {
 enum class ListMarker {
     BULLET,
     NUMBER,
+    DASH,
+    CHECK,
+    STAR,
     ROMAN,
     CHECKBOX
 }

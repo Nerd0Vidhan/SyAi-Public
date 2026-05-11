@@ -79,7 +79,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlin.math.roundToInt
 
-private val PrimaryDark = Color(0xFF0D0127)
 private val SecondaryCream = Color(0xFFF8E0C3)
 val AuraPurple = Color(0xFF3F2A7A)
 
@@ -188,7 +187,7 @@ fun NoteEditorScreen(
                 onPageSettings = { showPageSettings = true }
             )
         },
-        containerColor = PrimaryDark
+        containerColor = MaterialTheme.colorScheme.primary
     ) { padding ->
 
         if (state.isLoading) {
@@ -198,7 +197,7 @@ fun NoteEditorScreen(
                     .padding(padding),
                 contentAlignment = Alignment.Center
             ) {
-                CircularProgressIndicator(color = SecondaryCream)
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.secondary)
             }
         } else {
             Box(modifier = Modifier.fillMaxSize()) {
@@ -206,7 +205,7 @@ fun NoteEditorScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(padding)
-                        .background(PrimaryDark),
+                        .background(MaterialTheme.colorScheme.primary),
                     state = listState,
                     horizontalAlignment = Alignment.CenterHorizontally,
                     contentPadding = PaddingValues(top = 24.dp, bottom = 220.dp)
@@ -366,10 +365,12 @@ fun NoteEditorScreen(
                         prompt
                     )
                     showAI = false
+                    viewModel.setTool(ActiveTool.SELECT)
                 },
                 onGenerateImage = { prompt ->
                     viewModel.requestAiImageGeneration(prompt)
                     showAI = false
+                    viewModel.setTool(ActiveTool.SELECT)
                 }
             )
         }
@@ -408,7 +409,7 @@ fun EditorTopBar(
                     unfocusedBorderColor = Color.Transparent,
                     focusedContainerColor = Color.Transparent,
                     unfocusedContainerColor = Color.Transparent,
-                    cursorColor = SecondaryCream
+                    cursorColor = MaterialTheme.colorScheme.secondary
                 )
             )
         },
@@ -436,7 +437,7 @@ fun EditorTopBar(
             DropdownMenu(
                 expanded = layerMenuExpanded,
                 onDismissRequest = { layerMenuExpanded = false },
-                modifier = Modifier.background(PrimaryDark).border(1.dp, Color.White.copy(0.1f))
+                modifier = Modifier.background(MaterialTheme.colorScheme.primary).border(1.dp, Color.White.copy(0.1f))
             ) {
                 val layerItems = currentPage?.renderableItems?.sortedByDescending { it.layer }.orEmpty()
                 if (layerItems.isEmpty()) {
@@ -468,7 +469,7 @@ fun EditorTopBar(
             DropdownMenu(
                 expanded = menuExpanded,
                 onDismissRequest = { menuExpanded = false },
-                modifier = Modifier.background(PrimaryDark).border(1.dp, Color.White.copy(0.1f))
+                modifier = Modifier.background(MaterialTheme.colorScheme.primary).border(1.dp, Color.White.copy(0.1f))
             ) {
                 DropdownMenuItem(
                     text = { Text("Page Settings", color = Color.White) },
@@ -488,7 +489,7 @@ fun EditorTopBar(
 
         },
         colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = PrimaryDark,
+            containerColor = MaterialTheme.colorScheme.primary,
             titleContentColor = Color.White
         )
     )
@@ -646,7 +647,7 @@ private fun BetweenPagesInsertBar(
             Icon(
                 imageVector = Icons.Default.Add,
                 contentDescription = "Insert page",
-                tint = PrimaryDark,
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(14.dp)
             )
         }
@@ -659,7 +660,7 @@ private fun BetweenPagesInsertBar(
                     showOptions = !showOptions
                 }
             },
-            containerColor = PrimaryDark,
+            containerColor = MaterialTheme.colorScheme.primary,
             contentColor = Color.White,
             shape = CircleShape,
             modifier = Modifier
@@ -711,7 +712,7 @@ private fun OrbitPageFab(
     FloatingActionButton(
         onClick = onClick,
         containerColor = Color(0xFFE6D8FF),
-        contentColor = PrimaryDark,
+        contentColor = MaterialTheme.colorScheme.primary,
         shape = CircleShape,
         modifier = Modifier
             .offset(
@@ -930,6 +931,10 @@ fun NotePage(
     val pageScaleY = pageHeightPx / page.heightPoints.coerceAtLeast(1f)
     val effectivePageScaleX = pageScaleX * viewport.scale
     val effectivePageScaleY = pageScaleY * viewport.scale
+    val contentWidthPoints = (page.widthPoints - page.pagePadding.startPoints - page.pagePadding.endPoints)
+        .coerceAtLeast(80f)
+    val contentHeightPoints = (page.heightPoints - page.pagePadding.topPoints - page.pagePadding.bottomPoints)
+        .coerceAtLeast(40f)
 
     Box(
         modifier = Modifier
@@ -1076,11 +1081,13 @@ fun NotePage(
                 }
                 .width(
                     with(density) {
-                        ((page.widthPoints - page.pagePadding.startPoints - page.pagePadding.endPoints) * pageScaleX).toDp()
+                        (contentWidthPoints * pageScaleX).toDp()
                     }
                 )
         ) {
+            var consumedHeightPoints = 0f
             page.linearContent.sortedBy { it.layer }.forEach { entry ->
+                val remainingHeightPoints = (contentHeightPoints - consumedHeightPoints).coerceAtLeast(42f)
                 when (entry.type) {
                     ObjectType.LINEAR_TEXT -> {
                         Box(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
@@ -1090,12 +1097,15 @@ fun NotePage(
                                     style = entry.style,
                                     spans = entry.spans
                                 ),
-                                widthPoints = entry.bounds.width,
-                                uiScale = pageScaleY,
-                                maxHeightPoints = entry.bounds.height,
+                                widthPoints = contentWidthPoints,
+                                uiScale = pageScaleX,
+                                maxHeightPoints = remainingHeightPoints,
                                 isSelected = state.selectedLinearPageId == page.pageId && state.activeTool == ActiveTool.LINEAR_TEXT && !state.isViewOnly && state.activeLinearTextId == entry.id,
                                 activeStyle = state.textStyle,
                                 selection = state.globalSelection,
+                                onHeightMeasured = { height ->
+                                    viewModel.updateLinearEntryMeasuredHeight(pageIndex, entry.id, height)
+                                },
                                 onTextChange = { newText, newSpans ->
                                     viewModel.updateLinearTextValueById(pageIndex, entry.id, newText, newSpans)
                                 },
@@ -1154,6 +1164,7 @@ fun NotePage(
                                 }
                             )
                         }
+                        consumedHeightPoints += estimateFlowEntryHeightPoints(entry, null, contentWidthPoints)
                     }
                     ObjectType.LIST -> {
                         val obj = page.items.find { it.id == entry.objectId }
@@ -1162,24 +1173,31 @@ fun NotePage(
                                 val payload = obj.payload as? ListPayload ?: return@Box
                                 RenderListRecursive(
                                     payload = payload,
-                                    uiScale = pageScaleY,
-                                    widthPoints = entry.bounds.width,
+                                    widthPoints = contentWidthPoints,
+                                    uiScale = pageScaleX,
+                                    maxHeightPoints = remainingHeightPoints,
                                     isSelected = state.selectedObjectId == obj.id,
+                                    activeItemId = state.activeListItemId,
                                     activeStyle = state.textStyle,
-                                    selection = state.globalSelection,
-                                    onSelectionChange = { selection ->
-                                        viewModel.selectObject(obj.id)
-                                        viewModel.updateGlobalSelection(selection)
-                                        viewModel.setCursorPosition(selection.end)
+                                    selection = if (state.selectedObjectId == obj.id) state.globalSelection else null,
+                                    onSelectionChange = { viewModel.updateSelection(it) },
+                                    onItemSelect = { viewModel.selectListItem(obj.id, it) },
+                                    onHeightMeasured = { height ->
+                                        viewModel.updateLinearEntryMeasuredHeight(pageIndex, entry.id, height)
                                     },
                                     onUpdate = { newPayload ->
                                         viewModel.updateObjectPayload(pageIndex, obj.id, newPayload)
                                     },
-                                    onBackspaceAtStart = { itemToMerge ->
-                                        viewModel.mergeListWithPreviousBlock(pageIndex, obj.id, itemToMerge)
+                                    onBackspaceAtStart = { listItem ->
+                                        viewModel.mergeListWithPreviousBlock(
+                                            pageIndex,
+                                            obj.id,
+                                            listItem
+                                        )
                                     }
                                 )
                             }
+                            consumedHeightPoints += estimateFlowEntryHeightPoints(entry, obj, contentWidthPoints)
                         }
                     }
                     else -> {}
@@ -1754,7 +1772,7 @@ fun ToolbarIcon(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = if (isSelected) SecondaryCream else AuraPurple
+                tint = if (isSelected) MaterialTheme.colorScheme.secondary else AuraPurple
             )
         }
     }
@@ -1931,4 +1949,41 @@ private fun normalizedRect(start: Offset, end: Offset): Rect {
         right = maxOf(start.x, end.x),
         bottom = maxOf(start.y, end.y)
     )
+}
+
+private fun estimateFlowEntryHeightPoints(
+    entry: LinearContentEntry,
+    obj: NoteObject?,
+    contentWidthPoints: Float
+): Float {
+    return when (entry.type) {
+        ObjectType.LINEAR_TEXT -> {
+            val fontSize = entry.style.fontSize.coerceAtLeast(8f)
+            val charsPerLine = (contentWidthPoints / (fontSize * 0.58f)).toInt().coerceAtLeast(8)
+            val wrappedLines = entry.value
+                .ifBlank { " " }
+                .split('\n')
+                .sumOf { line -> maxOf(1, (line.length + charsPerLine - 1) / charsPerLine) }
+            (wrappedLines * fontSize * 1.45f + 16f).coerceAtLeast(42f)
+        }
+        ObjectType.LIST -> {
+            val payload = obj?.payload as? ListPayload
+            val items = payload?.items.orEmpty()
+            if (items.isEmpty()) {
+                42f
+            } else {
+                items.sumOf { item ->
+                    val fontSize = item.style.fontSize.coerceAtLeast(8f)
+                    val textWidth = (contentWidthPoints - 42f).coerceAtLeast(80f)
+                    val charsPerLine = (textWidth / (fontSize * 0.58f)).toInt().coerceAtLeast(8)
+                    val lineCount = item.text
+                        .ifBlank { " " }
+                        .split('\n')
+                        .sumOf { line -> maxOf(1, (line.length + charsPerLine - 1) / charsPerLine) }
+                    (lineCount * fontSize * 1.45f + 12f).toDouble()
+                }.toFloat().coerceAtLeast(42f)
+            }
+        }
+        ObjectType.IMAGE, ObjectType.DRAWING, ObjectType.TEXT, ObjectType.CHECKLIST -> entry.bounds.height.coerceAtLeast(42f)
+    }
 }

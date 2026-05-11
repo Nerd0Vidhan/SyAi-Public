@@ -16,6 +16,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -40,18 +41,27 @@ fun RenderListRecursive(
     depth: Int = 0,
     widthPoints: Float,
     uiScale: Float = 1f,
+    maxHeightPoints: Float? = null,
     isSelected: Boolean = false,
+    activeItemId: String? = null,
     activeStyle: TextStyleData,
     selection: TextRange? = null,
     onSelectionChange: (TextRange) -> Unit = {},
+    onItemSelect: (String) -> Unit = {},
+    onHeightMeasured: (Float) -> Unit = {},
     onUpdate: (ListPayload) -> Unit,
     onBackspaceAtStart: (ListItem) -> Unit
 ) {
+    val markerWidthPoints = 38f
+    val measuredItemHeights = remember(payload.items.map { it.id }) { mutableStateMapOf<String, Float>() }
+
     Column(
         modifier = Modifier.padding(start = (depth * 16).dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         payload.items.forEachIndexed { index, item ->
+            val isItemFocused = isSelected && (activeItemId == item.id || (activeItemId == null && index == 0))
+            
             key(item.id) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -71,11 +81,16 @@ fun RenderListRecursive(
                                 style = item.style,
                                 spans = item.spans
                             ),
-                            widthPoints = widthPoints,
+                            widthPoints = (widthPoints - markerWidthPoints - (depth * 16f)).coerceAtLeast(80f),
                             uiScale = uiScale,
-                            isSelected = isSelected,
+                            maxHeightPoints = maxHeightPoints,
+                            isSelected = isItemFocused,
                             activeStyle = activeStyle,
-                            selection = selection,
+                            selection = if (isItemFocused) selection else null,
+                            onHeightMeasured = { height ->
+                                measuredItemHeights[item.id] = height + 4f
+                                onHeightMeasured(measuredItemHeights.values.sum().coerceAtLeast(42f))
+                            },
                             onTextChange = { newText, newSpans ->
                                 handleListItemInput(
                                     payload = payload,
@@ -86,7 +101,12 @@ fun RenderListRecursive(
                                     onUpdate = onUpdate
                                 )
                             },
-                            onSelectionChange = onSelectionChange,
+                            onSelectionChange = {
+                                if (!isItemFocused) {
+                                    onItemSelect(item.id)
+                                }
+                                onSelectionChange(it)
+                            },
                             onBackspaceAtStart = {
                                 if (index > 0) {
                                     val previous = payload.items[index - 1]
@@ -101,6 +121,7 @@ fun RenderListRecursive(
                                         }
                                     )
                                     payload.items.removeAt(index)
+                                    onItemSelect(previous.id)
                                     onUpdate(payload)
                                 } else {
                                     onBackspaceAtStart(item)
@@ -114,10 +135,14 @@ fun RenderListRecursive(
                                 depth = depth + 1,
                                 widthPoints = widthPoints - 18f,
                                 uiScale = uiScale,
+                                maxHeightPoints = maxHeightPoints,
                                 isSelected = isSelected,
+                                activeItemId = activeItemId,
                                 activeStyle = activeStyle,
                                 selection = selection,
                                 onSelectionChange = onSelectionChange,
+                                onItemSelect = onItemSelect,
+                                onHeightMeasured = onHeightMeasured,
                                 onUpdate = { onUpdate(payload) },
                                 onBackspaceAtStart = { childItem ->
                                     val previousLength = item.text.length
@@ -127,6 +152,7 @@ fun RenderListRecursive(
                                     if (nested.items.isEmpty()) {
                                         item.nestedList = null
                                     }
+                                    onItemSelect(item.id)
                                     onUpdate(payload)
                                 }
                             )
@@ -173,7 +199,7 @@ private fun ListMarkerMenu(
         } else {
             Text(
                 text = buildMarkerText(index, payload),
-                color = Color.White,
+                color = Color(item.style.color),
                 fontSize = 16.sp
             )
         }
@@ -316,6 +342,9 @@ private fun buildMarkerText(index: Int, payload: ListPayload): String {
         ListMarker.NUMBER -> orderedMarker(index + 1, payload.orderedStyle)
         ListMarker.ROMAN -> orderedMarker(index + 1, payload.orderedStyle)
         ListMarker.BULLET -> bulletMarker(payload.bulletStyle)
+        ListMarker.DASH -> bulletMarker(payload.bulletStyle)
+        ListMarker.CHECK -> bulletMarker(payload.bulletStyle)
+        ListMarker.STAR -> bulletMarker(payload.bulletStyle)
     }
 }
 
