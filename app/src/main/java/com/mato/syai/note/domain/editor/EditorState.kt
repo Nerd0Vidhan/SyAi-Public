@@ -39,5 +39,6 @@ data class EditorState(
     val pageViewports: Map<String, PageViewportState> = emptyMap(),
     val offlineModelDownloadState: OfflineModelDownloadState = OfflineModelDownloadState.NOT_DOWNLOADED,
     val offlineModelStatusMessage: String? = null,
-    val generatingPageIds: Set<String> = emptySet()
+    val generatingPageIds: Set<String> = emptySet(),
+    val activeListItemId: String? = null
 )
