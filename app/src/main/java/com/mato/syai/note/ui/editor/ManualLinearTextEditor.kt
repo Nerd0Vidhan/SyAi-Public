@@ -86,6 +86,7 @@ fun ManualLinearTextEditor(
     onSelectionChange: (TextRange) -> Unit,
     onCopy: (String, Int, Int) -> Unit = { _, _, _ -> },
     onPaste: (Int) -> Unit = { _ -> },
+    onHeightMeasured: (Float) -> Unit = {},
     onBackspaceAtStart: () -> Unit = {},
     onOverflow: (String, String, List<TextSpan>, List<TextSpan>) -> Unit = { _, _, _, _ -> }
 ) {
@@ -180,9 +181,13 @@ fun ManualLinearTextEditor(
         }
     )
 
-    val annotatedText = remember(hiddenInput.text, payload.spans, payload.style, uiScale, density.fontScale) {
+    val displayText = remember(hiddenInput.text) {
+        LinearListMarkerCodec.displayText(hiddenInput.text)
+    }
+
+    val annotatedText = remember(displayText, payload.spans, payload.style, uiScale, density.fontScale) {
         RichTextParser.buildRichText(
-            text = hiddenInput.text.ifEmpty { " " },
+            text = displayText.ifEmpty { " " },
             defaultStyle = payload.style,
             spans = payload.spans,
             uiScale = uiScale,
@@ -209,6 +214,12 @@ fun ManualLinearTextEditor(
 
     val contentHeightDp = with(density) {
         ((measuredLayout?.size?.height ?: 0).toDp() + 16.dp).coerceAtLeast(42.dp)
+    }
+
+    LaunchedEffect(measuredLayout?.size?.height, uiScale) {
+        val measuredHeightPx = measuredLayout?.size?.height ?: return@LaunchedEffect
+        if (uiScale <= 0f) return@LaunchedEffect
+        onHeightMeasured((measuredHeightPx / uiScale + 16f).coerceAtLeast(42f))
     }
 
     fun updateSelection(selection: TextRange) {
@@ -407,11 +418,22 @@ fun ManualLinearTextEditor(
 
                 newSpans = mergeAdjacentSpans(newSpans)
 
+                LinearListMarkerCodec.normalizeInsertedNewLine(newText, newValue.selection.end)?.let { (normalizedText, normalizedCursor) ->
+                    hiddenInput = TextFieldValue(
+                        text = normalizedText,
+                        selection = TextRange(normalizedCursor.coerceIn(0, normalizedText.length))
+                    )
+                    onTextChange(normalizedText, newSpans)
+                    onSelectionChange(TextRange(normalizedCursor.coerceIn(0, normalizedText.length)))
+                    return@BasicTextField
+                }
+
                 val maxHeightPx = maxHeightPoints?.let { with(density) { (it * uiScale).toDp().toPx() } }
                 if (maxHeightPx != null && canvasSize.width > 0) {
+                    val overflowDisplayText = LinearListMarkerCodec.displayText(newText)
                     val overflowLayout = textMeasurer.measure(
                         text = RichTextParser.buildRichText(
-                            text = newText.ifEmpty { " " },
+                            text = overflowDisplayText.ifEmpty { " " },
                             defaultStyle = payload.style,
                             spans = newSpans,
                             uiScale = uiScale,

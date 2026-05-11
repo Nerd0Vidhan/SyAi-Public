@@ -122,7 +122,7 @@ class NoteEditorViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true, noteId = noteId) }
 
             val noteEntity = repository.getNoteById(noteId)
-            val content = repository.loadNoteContent(noteId)
+            val content = repository.loadNoteContent(noteId).also(::migrateLinearListsToMarkerText)
 
             undoRedoManager.clear()
             undoRedoManager.push(content)
@@ -695,6 +695,20 @@ class NoteEditorViewModel @Inject constructor(
         mutateContent(trackUndo = false) { content ->
             val page = content.pages.getOrNull(pageIndex) ?: return@mutateContent
             page.updateLinearEntry(id = id, textValue = text, spans = spans) 
+            rebalanceLinearFlow(content, pageIndex)
+        }
+    }
+
+    fun updateLinearEntryMeasuredHeight(pageIndex: Int, entryId: String, heightPoints: Float) {
+        mutateContent(trackUndo = false) { content ->
+            val page = content.pages.getOrNull(pageIndex) ?: return@mutateContent
+            val entry = page.linearContent.find { it.id == entryId } ?: return@mutateContent
+            if (kotlin.math.abs(entry.bounds.height - heightPoints) < 2f) return@mutateContent
+            page.updateLinearEntry(
+                id = entryId,
+                bounds = entry.bounds.copy(height = heightPoints.coerceAtLeast(42f))
+            )
+            rebalanceLinearFlow(content, pageIndex)
         }
     }
 
@@ -825,6 +839,16 @@ class NoteEditorViewModel @Inject constructor(
                 objectId = objectId,
                 textValue = payload.asLinearTextValue()
             )
+            if (page != null && payload is ListPayload) {
+                val entry = page.linearContent.find { it.objectId == objectId }
+                if (entry != null) {
+                    page.updateLinearEntry(
+                        objectId = objectId,
+                        bounds = entry.bounds.copy(height = estimateListHeight(payload, entry.bounds.width))
+                    )
+                }
+                rebalanceLinearFlow(content, pageIndex)
+            }
         }
     }
     // ---------------- DRAWING ----------------
@@ -1629,7 +1653,7 @@ class NoteEditorViewModel @Inject constructor(
 
             try {
                 val fcmToken = runCatching { FirebaseMessaging.getInstance().token.await() }.getOrNull()
-                android.util.Log.d("ImageGen", "Sending request with token: $fcmToken")
+                Log.d("ImageGen", "Sending request with token: $fcmToken")
                 
                 val req = LocalImageGenerationRequest(
                     prompt = prompt, 
@@ -1642,10 +1666,8 @@ class NoteEditorViewModel @Inject constructor(
                 
                 val jobId = jobResponse.jobId
                 val statusUrl = jobResponse.statusUrl
-                android.util.Log.d("ImageGen", "Started Job: $jobId")
+                Log.d("ImageGen", "Started Job: $jobId")
 
-                // We still poll if the note is open for immediate feedback, 
-                // but FCM will handle background/other note scenarios.
                 pollImageGenerationWhileOpen(noteId, pageIndex, jobId, statusUrl)
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -1694,23 +1716,83 @@ class NoteEditorViewModel @Inject constructor(
         }
     }
 
+    fun updateSelection(selection: androidx.compose.ui.text.TextRange?) {
+        _uiState.update { it.copy(globalSelection = selection) }
+        selection?.let { setCursorPosition(it.end) }
+    }
+
+    fun selectListItem(objectId: String?, itemId: String?) {
+        _uiState.update { 
+            it.copy(
+                selectedObjectId = objectId,
+                selectedObjectIds = objectId?.let { setOf(it) } ?: emptySet(),
+                activeListItemId = itemId,
+                activeLinearTextId = if (itemId != null) null else it.activeLinearTextId,
+                selectedLinearPageId = if (itemId != null) null else it.selectedLinearPageId
+            ) 
+        }
+    }
+
     fun handleListInsertion(
         marker: ListMarker,
         orderedStyle: OrderedListStyle? = null,
         bulletStyle: BulletListStyle? = null
     ) {
         val pageIndex = _uiState.value.currentPageIndex
-        val content = _uiState.value.content
-        if (pageIndex !in content.pages.indices) return
-        val page = content.pages[pageIndex]
-        val activeLinearId = _uiState.value.activeLinearTextId ?: page.ensurePrimaryLinearEntry().id
+        var activeEntryId: String? = null
+        var pageId: String? = null
+        var newCursor = 0
 
-        val entryIndex = page.linearContent.indexOfFirst { it.id == activeLinearId }
-        if (entryIndex != -1) {
-            val entry = page.linearContent[entryIndex]
-            if (entry.type == ObjectType.LINEAR_TEXT) {
-                splitTextAndInsertList(pageIndex, entryIndex, marker, orderedStyle, bulletStyle)
-                return
+        mutateContent { content ->
+            val page = content.pages.getOrNull(pageIndex) ?: return@mutateContent
+            val entry = page.linearContent
+                .firstOrNull { it.id == _uiState.value.activeLinearTextId && it.type == ObjectType.LINEAR_TEXT }
+                ?: page.ensurePrimaryLinearEntry()
+            activeEntryId = entry.id
+            pageId = page.pageId
+
+            val markerToken = LinearListMarkerCodec.markerFor(marker, orderedStyle, bulletStyle, depth = 0)
+            val pos = _cursorPosition.value.coerceIn(0, entry.value.length)
+            val before = entry.value.take(pos)
+            val after = entry.value.substring(pos)
+            val prefix = if (before.isBlank() || before.endsWith('\n')) "" else "\n"
+            val suffix = if (after.isBlank()) "" else "\n$after"
+            val inserted = "$prefix$markerToken"
+            val updatedText = before + inserted + suffix
+            newCursor = (before.length + inserted.length).coerceIn(0, updatedText.length)
+
+            page.updateLinearEntry(
+                id = entry.id,
+                textValue = updatedText,
+                bounds = entry.bounds.copy(
+                    width = (page.widthPoints - page.pagePadding.startPoints - page.pagePadding.endPoints)
+                        .coerceAtLeast(80f)
+                )
+            )
+            rebalanceLinearFlow(content, pageIndex)
+        }
+
+        _uiState.update {
+            it.copy(
+                selectedObjectId = null,
+                selectedObjectIds = emptySet(),
+                activeListItemId = null,
+                activeLinearTextId = activeEntryId,
+                selectedLinearPageId = pageId,
+                activeTool = ActiveTool.LINEAR_TEXT,
+                globalSelection = androidx.compose.ui.text.TextRange(newCursor)
+            )
+        }
+        _cursorPosition.value = newCursor
+    }
+
+    fun toggleLinearCheckbox(pageIndex: Int, entryId: String, rawLineStart: Int) {
+        mutateContent(trackUndo = false) { content ->
+            val page = content.pages.getOrNull(pageIndex) ?: return@mutateContent
+            val entry = page.linearContent.find { it.id == entryId } ?: return@mutateContent
+            val updatedText = LinearListMarkerCodec.toggleCheckboxAtLine(entry.value, rawLineStart)
+            if (updatedText != entry.value) {
+                page.updateLinearEntry(id = entryId, textValue = updatedText)
             }
         }
     }
@@ -1722,6 +1804,8 @@ class NoteEditorViewModel @Inject constructor(
         orderedStyle: OrderedListStyle?,
         bulletStyle: BulletListStyle?
     ) {
+        var firstListItemId: String? = null
+        var newListId: String? = null
         mutateContent { content ->
             val page = content.pages[pageIndex]
             val entry = page.linearContent[entryIndex]
@@ -1729,18 +1813,28 @@ class NoteEditorViewModel @Inject constructor(
 
             val textBefore = entry.value.take(pos)
             val textAfter = entry.value.substring(pos)
+            val contentWidth = (page.widthPoints - page.pagePadding.startPoints - page.pagePadding.endPoints)
+                .coerceAtLeast(80f)
 
             val spansBefore = entry.spans.filter { it.start < pos }.map { it.copy(end = minOf(it.end, pos)) }.toMutableList()
             val spansAfter = entry.spans.filter { it.end > pos }.map { it.copy(start = maxOf(0, it.start - pos), end = it.end - pos) }.toMutableList()
 
+            val estimatedHeightBefore = estimateTextHeight(textBefore, entry.style, contentWidth)
+
             // Update current text block
             page.linearContent[entryIndex] = entry.copy(
                 value = textBefore,
-                spans = spansBefore
+                spans = spansBefore,
+                transform = Transform(page.pagePadding.startPoints, page.pagePadding.topPoints),
+                bounds = Bounds(width = contentWidth, height = estimatedHeightBefore.coerceAtLeast(42f))
             )
 
             // Create List Object
             val listId = UUID.randomUUID().toString()
+            newListId = listId
+            val initialItem = ListItem(text = "", style = _uiState.value.textStyle.copy())
+            firstListItemId = initialItem.id
+            
             val listPayload = ListPayload(
                 style = marker,
                 orderedStyle = orderedStyle ?: when (marker) {
@@ -1748,19 +1842,17 @@ class NoteEditorViewModel @Inject constructor(
                     else -> OrderedListStyle.DIGITS
                 },
                 bulletStyle = bulletStyle ?: BulletListStyle.DISC,
-                items = mutableListOf(ListItem(text = "", style = _uiState.value.textStyle.copy()))
+                items = mutableListOf(initialItem)
             )
-            val estimatedHeightBefore = maxOf(1f, textBefore.split("\n").size.toFloat()) * (entry.style.fontSize * 1.5f)
-            val listY = entry.transform.y + estimatedHeightBefore
-
+            
             val listObj = NoteObject(
                 id = listId,
                 type = ObjectType.LIST,
                 payload = listPayload,
-                layer = page.items.size + 1,
-                transform = Transform(x = entry.transform.x, y = listY),
+                layer = entry.layer + 1,
+                transform = Transform(x = page.pagePadding.startPoints, y = page.pagePadding.topPoints),
                 bounds = Bounds(
-                    width = entry.bounds.width,
+                    width = contentWidth,
                     height = 44f
                 )
             )
@@ -1768,34 +1860,44 @@ class NoteEditorViewModel @Inject constructor(
 
             // Insert List Entry
             val listEntry = LinearContentEntry(
+                id = UUID.randomUUID().toString(),
                 objectId = listId,
                 type = ObjectType.LIST,
                 layer = entry.layer + 1,
-                bounds = Bounds(width = entry.bounds.width)
+                transform = listObj.transform.copy(),
+                bounds = listObj.bounds.copy()
             )
             page.linearContent.add(entryIndex + 1, listEntry)
 
             // Insert Remaining Text Entry
             val nextTextEntry = LinearContentEntry(
+                id = UUID.randomUUID().toString(),
                 type = ObjectType.LINEAR_TEXT,
                 value = textAfter,
                 spans = spansAfter,
                 layer = entry.layer + 2,
-                bounds = entry.bounds,
+                transform = Transform(x = page.pagePadding.startPoints, y = page.pagePadding.topPoints),
+                bounds = Bounds(width = contentWidth, height = estimateTextHeight(textAfter, entry.style, contentWidth)),
                 style = entry.style
             )
             page.linearContent.add(entryIndex + 2, nextTextEntry)
 
-            // Shift layers for subsequent entries
+            // Shift layers and positions for subsequent entries
             for (i in entryIndex + 3 until page.linearContent.size) {
                 val old = page.linearContent[i]
                 page.linearContent[i] = old.copy(layer = old.layer + 2)
             }
 
             normalizePageLayers(page)
+            rebalanceLinearFlow(content, pageIndex)
         }
-        _uiState.update { it.copy(selectedObjectId = null, selectedObjectIds = emptySet()) }
+        _uiState.update { it.copy(
+            selectedObjectId = newListId, 
+            selectedObjectIds = newListId?.let { setOf(it) } ?: emptySet(),
+            activeListItemId = firstListItemId
+        ) }
     }
+
 
 
 
@@ -1984,8 +2086,6 @@ class NoteEditorViewModel @Inject constructor(
                 append("/")
                 append(page.pagePadding.bottomPoints)
                 append(", content=\"")
-                append(page.linearTextPaste.take(1400))
-                append("\"")
             }
         }
     }
@@ -2035,6 +2135,200 @@ class NoteEditorViewModel @Inject constructor(
 
         obj.transform.x = obj.transform.x.coerceIn(minX, maxX)
         obj.transform.y = obj.transform.y.coerceIn(minY, maxY)
+    }
+
+    private fun rebalanceLinearFlow(content: NoteContent, startPageIndex: Int) {
+        var pageIndex = startPageIndex
+        while (pageIndex in content.pages.indices) {
+            val page = content.pages[pageIndex]
+            val contentHeight = (page.heightPoints - page.pagePadding.topPoints - page.pagePadding.bottomPoints)
+                .coerceAtLeast(42f)
+            val contentWidth = (page.widthPoints - page.pagePadding.startPoints - page.pagePadding.endPoints)
+                .coerceAtLeast(80f)
+            val sortedEntries = page.linearContent.sortedBy { it.layer }
+            var consumedHeight = 0f
+            var overflowStartIndex = -1
+
+            sortedEntries.forEachIndexed { index, entry ->
+                val entryHeight = estimateEntryHeight(page, entry, contentWidth)
+                if (overflowStartIndex == -1 && consumedHeight + entryHeight > contentHeight && index > 0) {
+                    overflowStartIndex = index
+                }
+                if (overflowStartIndex == -1) {
+                    consumedHeight += entryHeight
+                }
+            }
+
+            if (overflowStartIndex == -1) {
+                normalizePageLayers(page)
+                pageIndex++
+                continue
+            }
+
+            val overflowEntries = sortedEntries.drop(overflowStartIndex)
+            val overflowIds = overflowEntries.map { it.id }.toSet()
+            val overflowObjectIds = overflowEntries.mapNotNull { it.objectId }.toSet()
+            page.linearContent.removeAll { it.id in overflowIds }
+
+            val nextPageIndex = ensureNextFlowPage(content, pageIndex)
+            val nextPage = content.pages[nextPageIndex]
+            nextPage.ensurePrimaryLinearEntry()
+            val nextContentWidth = (nextPage.widthPoints - nextPage.pagePadding.startPoints - nextPage.pagePadding.endPoints)
+                .coerceAtLeast(80f)
+
+            val movedObjects = page.items.filter { it.id in overflowObjectIds }
+            page.items.removeAll { it.id in overflowObjectIds }
+            movedObjects.forEach { obj ->
+                obj.transform.x = nextPage.pagePadding.startPoints
+                obj.transform.y = nextPage.pagePadding.topPoints
+                clampObjectWithinPage(nextPage, obj)
+                nextPage.items.add(obj)
+            }
+
+            val blankPrimary = nextPage.linearContent.firstOrNull {
+                it.type == ObjectType.LINEAR_TEXT && it.objectId == null && it.value.isBlank()
+            }
+            if (blankPrimary != null) {
+                nextPage.linearContent.removeAll { it.id == blankPrimary.id }
+            }
+
+            nextPage.linearContent.addAll(
+                0,
+                overflowEntries.map { entry ->
+                    entry.copy(
+                        transform = Transform(
+                            x = nextPage.pagePadding.startPoints,
+                            y = nextPage.pagePadding.topPoints
+                        ),
+                        bounds = entry.bounds.copy(width = nextContentWidth)
+                    )
+                }
+            )
+
+            content.pages.forEachIndexed { index, currentPage ->
+                content.pages[index] = currentPage.copy(pageNo = index)
+            }
+            normalizePageLayers(page)
+            normalizePageLayers(nextPage)
+            pageIndex = nextPageIndex
+        }
+    }
+
+    private fun ensureNextFlowPage(content: NoteContent, currentPageIndex: Int): Int {
+        if (currentPageIndex < content.pages.lastIndex) return currentPageIndex + 1
+        val currentPage = content.pages[currentPageIndex]
+        content.pages.add(
+            PageData(
+                pageNo = content.pages.size,
+                pageSize = currentPage.pageSize,
+                pageDimensions = currentPage.pageDimensions,
+                backgroundColor = currentPage.backgroundColor,
+                pagePadding = currentPage.pagePadding,
+                borderStyle = currentPage.borderStyle,
+                linearTextStyle = currentPage.linearTextStyle
+            ).apply { ensurePrimaryLinearEntry() }
+        )
+        return content.pages.lastIndex
+    }
+
+    private fun estimateEntryHeight(page: PageData, entry: LinearContentEntry, contentWidth: Float): Float {
+        return when (entry.type) {
+            ObjectType.LINEAR_TEXT -> estimateTextHeight(entry.value, entry.style, contentWidth)
+            ObjectType.LIST -> {
+                val payload = page.items.find { it.id == entry.objectId }?.payload as? ListPayload
+                if (payload != null) estimateListHeight(payload, contentWidth) else entry.bounds.height.coerceAtLeast(42f)
+            }
+            else -> entry.bounds.height.coerceAtLeast(42f)
+        }
+    }
+
+    private fun estimateTextHeight(text: String, style: TextStyleData, widthPoints: Float): Float {
+        val fontSize = style.fontSize.coerceAtLeast(8f)
+        val charsPerLine = (widthPoints / (fontSize * 0.58f)).toInt().coerceAtLeast(8)
+        val lines = text
+            .ifBlank { " " }
+            .split('\n')
+            .sumOf { line -> maxOf(1, (line.length + charsPerLine - 1) / charsPerLine) }
+        return (lines * fontSize * 1.45f + 16f).coerceAtLeast(42f)
+    }
+
+    private fun estimateListHeight(payload: ListPayload, widthPoints: Float): Float {
+        if (payload.items.isEmpty()) return 42f
+        val textWidth = (widthPoints - 42f).coerceAtLeast(80f)
+        return payload.items.sumOf { item ->
+            (estimateTextHeight(item.text, item.style, textWidth) + 4f).toDouble()
+        }.toFloat().coerceAtLeast(42f)
+    }
+
+    private fun migrateLinearListsToMarkerText(content: NoteContent) {
+        content.pages.forEach { page ->
+            if (page.linearContent.none { it.type == ObjectType.LIST }) return@forEach
+
+            val contentWidth = (page.widthPoints - page.pagePadding.startPoints - page.pagePadding.endPoints)
+                .coerceAtLeast(80f)
+            val mergedText = buildString {
+                page.linearContent.sortedBy { it.layer }.forEach { entry ->
+                    when (entry.type) {
+                        ObjectType.LINEAR_TEXT -> {
+                            if (entry.value.isNotBlank()) {
+                                if (isNotEmpty()) append('\n')
+                                append(entry.value.trim('\n'))
+                            }
+                        }
+                        ObjectType.LIST -> {
+                            val payload = page.items.find { it.id == entry.objectId }?.payload as? ListPayload
+                            if (payload != null && payload.items.isNotEmpty()) {
+                                if (isNotEmpty()) append('\n')
+                                append(encodeListPayload(payload, depth = 0))
+                            }
+                        }
+                        else -> Unit
+                    }
+                }
+            }
+
+            page.items.removeAll { item ->
+                page.linearContent.any { it.objectId == item.id && it.type == ObjectType.LIST }
+            }
+
+            val preservedObjectEntries = page.linearContent
+                .filter { it.type != ObjectType.LINEAR_TEXT && it.type != ObjectType.LIST }
+                .toMutableList()
+            val primary = page.primaryLinearEntry ?: page.ensurePrimaryLinearEntry()
+            page.linearContent = mutableListOf(
+                primary.copy(
+                    layer = 0,
+                    value = mergedText,
+                    transform = Transform(page.pagePadding.startPoints, page.pagePadding.topPoints),
+                    bounds = Bounds(
+                        width = contentWidth,
+                        height = estimateTextHeight(mergedText, page.linearTextStyle, contentWidth)
+                    ),
+                    style = page.linearTextStyle
+                )
+            ).apply {
+                addAll(preservedObjectEntries.mapIndexed { index, entry -> entry.copy(layer = index + 1) })
+            }
+            page.refreshLinearTextPaste()
+            normalizePageLayers(page)
+        }
+    }
+
+    private fun encodeListPayload(payload: ListPayload, depth: Int): String {
+        return payload.items.joinToString("\n") { item ->
+            val marker = if (payload.style == ListMarker.CHECKBOX || payload.style == ListMarker.CHECK) {
+                if (item.isChecked) "#221#$depth#" else "#220#$depth#"
+            } else {
+                LinearListMarkerCodec.markerFor(
+                    marker = payload.style,
+                    orderedStyle = payload.orderedStyle,
+                    bulletStyle = payload.bulletStyle,
+                    depth = depth
+                )
+            }
+            val nested = item.nestedList?.let { "\n" + encodeListPayload(it, depth + 1) }.orEmpty()
+            marker + item.text + nested
+        }
     }
 
     private fun normalizePageLayers(page: PageData) {
