@@ -342,9 +342,9 @@ private fun buildMarkerText(index: Int, payload: ListPayload): String {
         ListMarker.NUMBER -> orderedMarker(index + 1, payload.orderedStyle)
         ListMarker.ROMAN -> orderedMarker(index + 1, payload.orderedStyle)
         ListMarker.BULLET -> bulletMarker(payload.bulletStyle)
-        ListMarker.DASH -> bulletMarker(payload.bulletStyle)
-        ListMarker.CHECK -> bulletMarker(payload.bulletStyle)
-        ListMarker.STAR -> bulletMarker(payload.bulletStyle)
+        ListMarker.DASH -> "-"
+        ListMarker.CHECK -> "✓"
+        ListMarker.STAR -> "*"
     }
 }
 

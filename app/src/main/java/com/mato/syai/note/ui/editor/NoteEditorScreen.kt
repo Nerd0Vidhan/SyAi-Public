@@ -312,6 +312,7 @@ fun NoteEditorScreen(
                     onListSelection = { marker, orderedStyle, bulletStyle ->
                         viewModel.handleListInsertion(marker, orderedStyle, bulletStyle)
                     },
+                    onListIndentChange = viewModel::changeCurrentLinearListDepth,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .navigationBarsPadding()
@@ -1119,6 +1120,9 @@ fun NotePage(
                                 onBackspaceAtStart = {
                                     viewModel.mergeWithPreviousBlock(pageIndex, entry.id)
                                 },
+                                onCheckboxToggle = { lineStart ->
+                                    viewModel.toggleLinearCheckbox(pageIndex, entry.id, lineStart)
+                                },
                                 onOverflow = { visibleText, overflowText, visibleSpans, overflowSpans ->
                                     viewModel.handleLinearTextOverflow(
                                         pageIndex = pageIndex,
@@ -1626,6 +1630,7 @@ fun EditorBottomToolbar(
     onCheckListSelect:()->Unit,
     onDelete:()-> Unit,
     onListSelection :(ListMarker, OrderedListStyle?, BulletListStyle?)-> Unit,
+    onListIndentChange: (Int) -> Unit,
     modifier: Modifier = Modifier
 ){
     var showColorPicker by remember { mutableStateOf(false) }
@@ -1684,7 +1689,8 @@ fun EditorBottomToolbar(
                         onListSelection(marker, orderedStyle, bulletStyle)
                         showListOptions = false
                         onToolSelect(ActiveTool.LINEAR_TEXT)
-                    }
+                    },
+                    onIndentChange = onListIndentChange
                 )
             }
 
@@ -1696,7 +1702,8 @@ fun EditorBottomToolbar(
                 onMarkerSelect = { marker, orderedStyle, bulletStyle ->
                     onListSelection(marker, orderedStyle, bulletStyle)
                     showListOptions = false
-                }
+                },
+                onIndentChange = onListIndentChange
             )
         }
 

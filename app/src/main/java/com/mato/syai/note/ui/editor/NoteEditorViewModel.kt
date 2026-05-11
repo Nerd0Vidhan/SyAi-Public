@@ -380,44 +380,31 @@ class NoteEditorViewModel @Inject constructor(
         if (activeLinearTextId != null) {
             mutateContent { content ->
                 content.pages.forEach { page ->
-                    val entryIndex = page.linearContent.indexOfFirst { it.id == activeLinearTextId }
-                    if (entryIndex != -1) {
-                        val entry = page.linearContent[entryIndex]
-                        
-                        if (selection != null && !selection.collapsed) {
-                            val minSel = selection.min
-                            val maxSel = selection.max
-                            entry.spans = replaceStyledRange(
-                                spans = entry.spans,
-                                selectionStart = minSel,
-                                selectionEnd = maxSel,
-                                style = style
-                            )
-                            entry.style = entry.style.copy(alignment = style.alignment)
-                            
-                            if (entry.objectId != null) {
-                                val obj = page.items.find { it.id == entry.objectId }
-                                val payload = obj?.payload as? TextPayload
-                                if (payload != null) {
-                                    payload.spans = replaceStyledRange(
-                                        spans = payload.spans,
-                                        selectionStart = minSel,
-                                        selectionEnd = maxSel,
-                                        style = style
-                                    )
-                                    payload.style = payload.style.copy(alignment = style.alignment)
-                                }
+                    val entry = page.linearContent.find { it.id == activeLinearTextId } ?: return@forEach
+
+                    if (selection != null && !selection.collapsed) {
+                        entry.spans = replaceStyledRange(
+                            spans = entry.spans,
+                            selectionStart = selection.min,
+                            selectionEnd = selection.max,
+                            style = style
+                        )
+                    }
+
+                    entry.style = entry.style.copy(alignment = style.alignment)
+                    if (entry.objectId != null) {
+                        val obj = page.items.find { it.id == entry.objectId }
+                        val payload = obj?.payload as? TextPayload
+                        if (payload != null) {
+                            if (selection != null && !selection.collapsed) {
+                                payload.spans = replaceStyledRange(
+                                    spans = payload.spans,
+                                    selectionStart = selection.min,
+                                    selectionEnd = selection.max,
+                                    style = style
+                                )
                             }
-                        } else {
-                            // Update whole block style
-                            entry.style = style
-                            if (entry.objectId != null) {
-                                val obj = page.items.find { it.id == entry.objectId }
-                                val payload = obj?.payload as? TextPayload
-                                if (payload != null) {
-                                    payload.style = style
-                                }
-                            }
+                            payload.style = payload.style.copy(alignment = style.alignment)
                         }
                     }
                 }
@@ -592,6 +579,9 @@ class NoteEditorViewModel @Inject constructor(
 
         val selectedId = _uiState.value.selectedObjectId
         val selectedLinearPageId = _uiState.value.selectedLinearPageId
+        val activeLinearTextId = _uiState.value.activeLinearTextId
+        val selectionRange = _uiState.value.globalSelection
+        val nextStyle = _uiState.value.textStyle.copy(color = color)
 
         // if object selected → apply to object
         if (selectedId != null) {
@@ -599,7 +589,6 @@ class NoteEditorViewModel @Inject constructor(
                 content.pages.forEach { page ->
                     val obj = page.items.find { it.id == selectedId } ?: return@forEach
                     val payload = obj.payload as? TextPayload ?: return@forEach
-                    val selectionRange = _uiState.value.globalSelection
                     val updatedPayload = if (selectionRange != null && !selectionRange.collapsed) {
                         payload.copy(
                             spans = replaceStyledRange(
@@ -622,6 +611,20 @@ class NoteEditorViewModel @Inject constructor(
                     )
                 }
             }
+        } else if (activeLinearTextId != null) {
+            mutateContent { content ->
+                content.pages.forEach { page ->
+                    val entry = page.linearContent.find { it.id == activeLinearTextId } ?: return@forEach
+                    if (selectionRange != null && !selectionRange.collapsed) {
+                        entry.spans = replaceStyledRange(
+                            spans = entry.spans,
+                            selectionStart = selectionRange.min,
+                            selectionEnd = selectionRange.max,
+                            style = nextStyle
+                        )
+                    }
+                }
+            }
         } else if (selectedLinearPageId != null) {
             mutateContent { content ->
                 val pageIndex = content.pages.indexOfFirst { it.pageId == selectedLinearPageId }
@@ -629,7 +632,6 @@ class NoteEditorViewModel @Inject constructor(
                 val page = content.pages[pageIndex]
                 val updatedStyle = page.linearTextStyle.copy(color = color)
                 content.pages[pageIndex] = page.copy(linearTextStyle = updatedStyle).also {
-                    val selectionRange = _uiState.value.globalSelection
                     if (selectionRange != null && !selectionRange.collapsed) {
                         val entry = it.ensurePrimaryLinearEntry()
                         entry.spans = replaceStyledRange(
@@ -1751,15 +1753,26 @@ class NoteEditorViewModel @Inject constructor(
             activeEntryId = entry.id
             pageId = page.pageId
 
-            val markerToken = LinearListMarkerCodec.markerFor(marker, orderedStyle, bulletStyle, depth = 0)
             val pos = _cursorPosition.value.coerceIn(0, entry.value.length)
-            val before = entry.value.take(pos)
-            val after = entry.value.substring(pos)
-            val prefix = if (before.isBlank() || before.endsWith('\n')) "" else "\n"
-            val suffix = if (after.isBlank()) "" else "\n$after"
-            val inserted = "$prefix$markerToken"
-            val updatedText = before + inserted + suffix
-            newCursor = (before.length + inserted.length).coerceIn(0, updatedText.length)
+            val currentLine = LinearListMarkerCodec.lineAt(entry.value, pos)
+            val markerToken = LinearListMarkerCodec.markerFor(
+                marker = marker,
+                orderedStyle = orderedStyle,
+                bulletStyle = bulletStyle,
+                depth = currentLine.marker?.depth ?: 0
+            )
+            val (updatedText, updatedCursor) = if (currentLine.marker != null) {
+                LinearListMarkerCodec.replaceLineMarker(entry.value, pos, markerToken)
+            } else {
+                val before = entry.value.take(pos)
+                val after = entry.value.substring(pos)
+                val prefix = if (before.isBlank() || before.endsWith('\n')) "" else "\n"
+                val suffix = if (after.isBlank()) "" else "\n$after"
+                val inserted = "$prefix$markerToken"
+                val text = before + inserted + suffix
+                text to (before.length + inserted.length).coerceIn(0, text.length)
+            }
+            newCursor = updatedCursor.coerceIn(0, updatedText.length)
 
             page.updateLinearEntry(
                 id = entry.id,
@@ -1784,6 +1797,49 @@ class NoteEditorViewModel @Inject constructor(
             )
         }
         _cursorPosition.value = newCursor
+    }
+
+    fun changeCurrentLinearListDepth(delta: Int) {
+        val pageIndex = _uiState.value.currentPageIndex
+        var activeEntryId: String? = _uiState.value.activeLinearTextId
+        var pageId: String? = _uiState.value.selectedLinearPageId
+        var newCursor = _cursorPosition.value
+        var changed = false
+
+        mutateContent { content ->
+            val page = content.pages.getOrNull(pageIndex) ?: return@mutateContent
+            val entry = page.linearContent
+                .firstOrNull { it.id == activeEntryId && it.type == ObjectType.LINEAR_TEXT }
+                ?: return@mutateContent
+            val pos = _cursorPosition.value.coerceIn(0, entry.value.length)
+            val (updatedText, updatedCursor) = LinearListMarkerCodec.shiftLineDepth(entry.value, pos, delta)
+                ?: return@mutateContent
+
+            activeEntryId = entry.id
+            pageId = page.pageId
+            newCursor = updatedCursor
+            changed = updatedText != entry.value
+
+            if (changed) {
+                page.updateLinearEntry(id = entry.id, textValue = updatedText)
+                rebalanceLinearFlow(content, pageIndex)
+            }
+        }
+
+        if (changed) {
+            _uiState.update {
+                it.copy(
+                    selectedObjectId = null,
+                    selectedObjectIds = emptySet(),
+                    activeListItemId = null,
+                    activeLinearTextId = activeEntryId,
+                    selectedLinearPageId = pageId,
+                    activeTool = ActiveTool.LINEAR_TEXT,
+                    globalSelection = androidx.compose.ui.text.TextRange(newCursor)
+                )
+            }
+            _cursorPosition.value = newCursor
+        }
     }
 
     fun toggleLinearCheckbox(pageIndex: Int, entryId: String, rawLineStart: Int) {

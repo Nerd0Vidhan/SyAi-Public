@@ -9,6 +9,8 @@ import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -24,7 +26,8 @@ import com.mato.syai.note.domain.local.model.OrderedListStyle
 
 @Composable
 fun ListToolSubToolbar(
-    onMarkerSelect: (ListMarker, OrderedListStyle?, BulletListStyle?) -> Unit
+    onMarkerSelect: (ListMarker, OrderedListStyle?, BulletListStyle?) -> Unit,
+    onIndentChange: (Int) -> Unit = {}
 ) {
     EditorGlassContainer(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp)
@@ -42,6 +45,12 @@ fun ListToolSubToolbar(
             IconButton(onClick = { onMarkerSelect(ListMarker.BULLET, null, BulletListStyle.SQUARE) }) {
                 Icon(Icons.Default.Stop, "Square bullet", tint = Color.White)
             }
+            IconButton(onClick = { onMarkerSelect(ListMarker.DASH, null, BulletListStyle.DASH) }) {
+                Icon(Icons.Default.Remove, "Dash bullet", tint = Color.White)
+            }
+            IconButton(onClick = { onMarkerSelect(ListMarker.STAR, null, null) }) {
+                Icon(Icons.Default.Star, "Star bullet", tint = Color.White)
+            }
             IconButton(onClick = { onMarkerSelect(ListMarker.NUMBER, OrderedListStyle.DIGITS, null) }) {
                 Icon(Icons.Default.FormatListNumbered, "Numbered", tint = Color.White)
             }
@@ -53,6 +62,12 @@ fun ListToolSubToolbar(
             }
             IconButton(onClick = { onMarkerSelect(ListMarker.CHECKBOX, null, null) }) {
                 Icon(Icons.Default.CheckBox, "Checkbox", tint = Color.White)
+            }
+            IconButton(onClick = { onIndentChange(-1) }) {
+                Text("<", color = Color.White, fontWeight = FontWeight.Bold)
+            }
+            IconButton(onClick = { onIndentChange(1) }) {
+                Text(">", color = Color.White, fontWeight = FontWeight.Bold)
             }
         }
     }
