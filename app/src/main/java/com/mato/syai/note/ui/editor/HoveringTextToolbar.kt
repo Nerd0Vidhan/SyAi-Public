@@ -3,14 +3,12 @@ package com.mato.syai.note.ui.editor
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -18,7 +16,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.mato.syai.note.domain.local.model.TextStyleData
 
@@ -30,6 +27,7 @@ fun HoveringTextToolbar(
     onStyleChange: (TextStyleData) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var showColorPicker by remember { mutableStateOf(false) }
     val quickColors = listOf(
         Color(0xFF111111),
         Color(0xFF3F2A7A),
@@ -38,6 +36,14 @@ fun HoveringTextToolbar(
         Color(0xFFB45309),
         Color(0xFFB91C1C)
     )
+
+    if (showColorPicker) {
+        ColorPickerBottomSheet(
+            initialColor = style.color,
+            onColorSelected = onColorChange,
+            onDismissRequest = { showColorPicker = false }
+        )
+    }
 
     EditorGlassContainer(
         modifier = modifier.fillMaxWidth()
@@ -53,6 +59,9 @@ fun HoveringTextToolbar(
             var expanded by remember { mutableStateOf(false) }
             var sizeText by remember(style.fontSize) { mutableStateOf(style.fontSize.toInt().toString()) }
 
+            ToolbarIcon(Icons.Default.Remove, false) {
+                onStyleChange(style.copy(fontSize = (style.fontSize - 1f).coerceIn(8f, 100f)))
+            }
             Box {
                 TextButton(onClick = { expanded = true }) {
                     Text(sizeText)
@@ -68,24 +77,10 @@ fun HoveringTextToolbar(
                             }
                         )
                     }
-                    OutlinedTextField(
-                        value = sizeText,
-                        onValueChange = { 
-                            sizeText = it
-                            it.toFloatOrNull()?.let { num ->
-                                if(num in 8f..100f) {
-                                    onStyleChange(style.copy(fontSize = num))
-                                }
-                            }
-                        },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier
-                            .padding(8.dp)
-                            .width(100.dp),
-                        label = { Text("Custom") },
-                        singleLine = true
-                    )
                 }
+            }
+            ToolbarIcon(Icons.Default.Add, false) {
+                onStyleChange(style.copy(fontSize = (style.fontSize + 1f).coerceIn(8f, 100f)))
             }
 
             HorizontalDivider(modifier = Modifier.height(24.dp).width(1.dp), color = Color.Gray)
@@ -117,6 +112,12 @@ fun HoveringTextToolbar(
             }
 
             HorizontalDivider(modifier = Modifier.height(24.dp).width(1.dp), color = Color.Gray)
+
+            ColorCircle(
+                color = Color(style.color),
+                selected = false,
+                onClick = { showColorPicker = true }
+            )
 
             quickColors.forEach { quickColor ->
                 ColorCircle(

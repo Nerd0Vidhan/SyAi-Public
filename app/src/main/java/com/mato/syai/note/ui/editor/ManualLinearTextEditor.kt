@@ -88,6 +88,7 @@ fun ManualLinearTextEditor(
     onPaste: (Int) -> Unit = { _ -> },
     onHeightMeasured: (Float) -> Unit = {},
     onBackspaceAtStart: () -> Unit = {},
+    onCheckboxToggle: (Int) -> Unit = {},
     onOverflow: (String, String, List<TextSpan>, List<TextSpan>) -> Unit = { _, _, _, _ -> }
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -203,7 +204,10 @@ fun ManualLinearTextEditor(
                 text = annotatedText,
                 style = textStyle,
                 maxLines = Int.MAX_VALUE,
-                constraints = Constraints(maxWidth = canvasSize.width)
+                constraints = Constraints(
+                    minWidth = canvasSize.width,
+                    maxWidth = canvasSize.width
+                )
             )
         }
     }
@@ -268,6 +272,14 @@ fun ManualLinearTextEditor(
                     onTap = { offset ->
                         val layout = latestLayout ?: return@detectTapGestures
                         val position = layout.getOffsetForPosition(offset)
+                        val lineInfo = LinearListMarkerCodec.lineAt(hiddenInput.text, position)
+                        if (
+                            LinearListMarkerCodec.isCheckboxMarker(lineInfo.marker) &&
+                            position < lineInfo.start + (lineInfo.marker?.rawLength ?: 0)
+                        ) {
+                            onCheckboxToggle(lineInfo.start)
+                            return@detectTapGestures
+                        }
                         updateSelection(TextRange(position))
                         focusRequester.requestFocus()
                         keyboardController?.show()
@@ -441,7 +453,10 @@ fun ManualLinearTextEditor(
                         ),
                         style = textStyle,
                         maxLines = Int.MAX_VALUE,
-                        constraints = Constraints(maxWidth = canvasSize.width)
+                        constraints = Constraints(
+                            minWidth = canvasSize.width,
+                            maxWidth = canvasSize.width
+                        )
                     )
 
                     if (overflowLayout.size.height > maxHeightPx) {
