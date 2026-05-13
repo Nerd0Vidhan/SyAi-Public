@@ -1431,6 +1431,46 @@ class NoteEditorViewModel @Inject constructor(
             }
         }
     }
+    private fun parseAiColor(colorVal: Any?): Int {
+        if (colorVal == null) return -16777216
+        return when {
+            colorVal is String && colorVal.startsWith("#") -> try { android.graphics.Color.parseColor(colorVal) } catch (e: Exception) { -16777216 }
+            colorVal is Number -> {
+                val c = colorVal.toInt()
+                if (c > 0 && c <= 0xFFFFFF) c or -16777216 else c
+            }
+            colorVal is String -> {
+                val c = colorVal.toLongOrNull()?.toInt() ?: -16777216
+                if (c > 0 && c <= 0xFFFFFF) c or -16777216 else c
+            }
+            else -> -16777216
+        }
+    }
+
+    private fun parseAiPoints(pointsJson: org.json.JSONArray?): MutableList<Point> {
+        val points = mutableListOf<Point>()
+        if (pointsJson == null) return points
+        if (pointsJson.length() > 0 && pointsJson.opt(0) is Number) {
+            for (j in 0 until pointsJson.length() step 2) {
+                if (j + 1 < pointsJson.length()) {
+                    points.add(Point(x = pointsJson.optDouble(j).toFloat(), y = pointsJson.optDouble(j + 1).toFloat()))
+                }
+            }
+        } else {
+            for (j in 0 until pointsJson.length()) {
+                val pointArray = pointsJson.optJSONArray(j)
+                if (pointArray != null && pointArray.length() >= 2) {
+                    points.add(Point(x = pointArray.optDouble(0).toFloat(), y = pointArray.optDouble(1).toFloat()))
+                } else {
+                    val p = pointsJson.optJSONObject(j)
+                    if (p != null) {
+                        points.add(Point(x = p.optDouble("x").toFloat(), y = p.optDouble("y").toFloat()))
+                    }
+                }
+            }
+        }
+        return points
+    }
 
     fun applyAIObjects(pageIndex: Int, aiJson: JSONObject) {
         mutateContent { content ->
@@ -1477,19 +1517,8 @@ class NoteEditorViewModel @Inject constructor(
                                 page.upsertObject(noteObject)
                             }
                             "DRAWING" -> {
-                                val pointsJson = payloadJson.optJSONArray("points") ?: continue
-                                val points = mutableListOf<Point>()
-                                for (j in 0 until pointsJson.length()) {
-                                    val pointArray = pointsJson.optJSONArray(j)
-                                    if (pointArray != null && pointArray.length() >= 2) {
-                                        points.add(Point(x = pointArray.getDouble(0).toFloat(), y = pointArray.getDouble(1).toFloat()))
-                                    } else {
-                                        val p = pointsJson.optJSONObject(j)
-                                        if (p != null) {
-                                            points.add(Point(x = p.optDouble("x").toFloat(), y = p.optDouble("y").toFloat()))
-                                        }
-                                    }
-                                }
+                                val points = parseAiPoints(payloadJson.optJSONArray("points"))
+                                if (points.isEmpty()) continue
                                 val minX = points.minOfOrNull { it.x } ?: 0f
                                 val minY = points.minOfOrNull { it.y } ?: 0f
                                 val maxX = points.maxOfOrNull { it.x } ?: 0f
@@ -1503,7 +1532,7 @@ class NoteEditorViewModel @Inject constructor(
                                     payload = DrawingPayload(
                                         strokes = mutableListOf(
                                             Stroke(
-                                                color = payloadJson.optInt("color", -16777216),
+                                                color = parseAiColor(payloadJson.opt("color")),
                                                 width = payloadJson.optDouble("width", 5.0).toFloat(),
                                                 points = points,
                                             )
@@ -1572,24 +1601,12 @@ class NoteEditorViewModel @Inject constructor(
                                 is DrawingPayload -> {
                                     val stroke = payload.strokes.firstOrNull()
                                     if (stroke != null) {
-                                        if (changes.has("color")) stroke.color = changes.getInt("color")
+                                        if (changes.has("color")) stroke.color = parseAiColor(changes.opt("color"))
                                         if (changes.has("width")) stroke.width = changes.getDouble("width").toFloat()
                                         if (changes.has("alpha")) stroke.alpha = changes.getDouble("alpha").toFloat()
                                         if (changes.has("points")) {
-                                            val pointsJson = changes.getJSONArray("points")
-                                            val points = mutableListOf<Point>()
-                                            for (j in 0 until pointsJson.length()) {
-                                                val pointArray = pointsJson.optJSONArray(j)
-                                                if (pointArray != null && pointArray.length() >= 2) {
-                                                    points.add(Point(x = pointArray.getDouble(0).toFloat(), y = pointArray.getDouble(1).toFloat()))
-                                                } else {
-                                                    val p = pointsJson.optJSONObject(j)
-                                                    if (p != null) {
-                                                        points.add(Point(x = p.optDouble("x").toFloat(), y = p.optDouble("y").toFloat()))
-                                                    }
-                                                }
-                                            }
-                                            stroke.points = points
+                                            val points = parseAiPoints(changes.optJSONArray("points"))
+                                            if (points.isNotEmpty()) stroke.points = points
                                         }
                                     }
                                 }
