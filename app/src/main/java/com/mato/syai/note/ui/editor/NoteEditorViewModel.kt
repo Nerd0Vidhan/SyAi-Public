@@ -99,6 +99,24 @@ class NoteEditorViewModel @Inject constructor(
 
     private val _activeLinearTextId = MutableStateFlow<String?>(null)
 
+    val savedColors = repository.savedColors.stateIn(
+        scope = viewModelScope,
+        started = kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
+
+    fun saveColorToDb(colorHex: Int) {
+        viewModelScope.launch {
+            repository.saveColor(colorHex)
+        }
+    }
+
+    fun deleteSavedColor(id: Long) {
+        viewModelScope.launch {
+            repository.deleteSavedColor(id)
+        }
+    }
+
     private val _pagePreviews = MutableStateFlow<Map<String, Bitmap>>(emptyMap())
     val pagePreviews: StateFlow<Map<String, Bitmap>> = _pagePreviews.asStateFlow()
 
