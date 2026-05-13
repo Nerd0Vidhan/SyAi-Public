@@ -132,14 +132,15 @@ data class PageData(
         get() {
             if (linearContent.isEmpty()) return items.sortedBy { it.layer }
 
-            val ids = linearContent
+            val linearObjectIds = linearContent
                 .filter { it.type != ObjectType.LINEAR_TEXT }
                 .mapNotNull { it.objectId }
                 .toSet()
+
             return items
-                .filter { it.id in ids }
+                .filter { it.id in linearObjectIds || it.type == ObjectType.DRAWING || it.type == ObjectType.TEXT }
                 .sortedBy { obj ->
-                    linearContent.firstOrNull { it.objectId == obj.id }?.layer ?: obj.layer
+                    linearContent.find { it.objectId == obj.id }?.layer ?: obj.layer
                 }
         }
 

@@ -16,6 +16,8 @@ import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.navigation
+import androidx.compose.runtime.remember
 import androidx.navigation.compose.rememberNavController
 import com.google.firebase.auth.FirebaseAuth
 import com.mato.syai.CutePrompts.PromptUI
@@ -23,6 +25,7 @@ import com.mato.syai.splashScreen.ui.SplashScreen
 import com.mato.syai.ai_assistant.MainAssistantScreen
 import com.mato.syai.mood_tracker.MoodTrackerApp
 import com.mato.syai.note.ui.editor.NoteEditorScreen
+import com.mato.syai.note.ui.editor.PagePreviewScreen
 import com.mato.syai.note.ui.home.NotesHomeScreen
 import com.mato.syai.presentation.main.HomeScreen
 import com.mato.syai.profile.LoginScreen
@@ -66,16 +69,39 @@ fun AppNavGraph(navController: NavHostController) {
                 SettingsScreen(navController)
             }
         }
-        composable("note_editor/{noteId}") { backStackEntry ->
-            val noteId = backStackEntry.arguments?.getString("noteId")?.toLongOrNull() ?: 0L
-            NoteEditorScreen(
-                noteId = noteId,
-                onBack = { navController.popBackStack() }
-            )
+        navigation(startDestination = "note_editor/{noteId}", route = "note_editor_flow/{noteId}") {
+            composable("note_editor/{noteId}") { backStackEntry ->
+                val parentEntry = remember(backStackEntry) {
+                    navController.getBackStackEntry("note_editor_flow/{noteId}")
+                }
+                val noteId = parentEntry.arguments?.getString("noteId")?.toLongOrNull() ?: 0L
+                val viewModel: com.mato.syai.note.ui.editor.NoteEditorViewModel = hiltViewModel(parentEntry)
+                
+                NoteEditorScreen(
+                    noteId = noteId,
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() },
+                    parentNavController = navController
+                )
+            }
+            composable("page_preview/{noteId}") { backStackEntry ->
+                val parentEntry = remember(backStackEntry) {
+                    navController.getBackStackEntry("note_editor_flow/{noteId}")
+                }
+                val noteId = parentEntry.arguments?.getString("noteId")?.toLongOrNull() ?: 0L
+                val viewModel: com.mato.syai.note.ui.editor.NoteEditorViewModel = hiltViewModel(parentEntry)
+                
+                PagePreviewScreen(
+                    noteId = noteId,
+                    onBack = { navController.popBackStack() },
+                    navController = navController,
+                    viewModel = viewModel
+                )
+            }
         }
-    }
 
     }
+}
 
 
 @Composable
@@ -124,7 +150,7 @@ fun BottomNavigationGraph(
         composable("notes_list") {
             NotesHomeScreen(
                 onNoteClick = { noteId ->
-                    parentNavController.navigate("note_editor/$noteId")
+                    parentNavController.navigate("note_editor_flow/$noteId")
                 }
             )
         }

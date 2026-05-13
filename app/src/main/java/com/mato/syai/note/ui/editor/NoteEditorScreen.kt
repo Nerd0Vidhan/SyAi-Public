@@ -38,6 +38,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.navigation.NavController
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
@@ -87,7 +88,8 @@ val AuraPurple = Color(0xFF3F2A7A)
 fun NoteEditorScreen(
     noteId: Long,
     viewModel: NoteEditorViewModel = hiltViewModel(),
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    parentNavController: NavController? = null
 ) {
     val context = LocalContext.current
     val state by viewModel.uiState.collectAsState()
@@ -146,7 +148,7 @@ fun NoteEditorScreen(
         }
             .filterNotNull()
             .distinctUntilChanged()
-            .collect(viewModel::setVisiblePage)
+            .collect(viewModel::updateCurrentPageIndex)
     }
 
     LaunchedEffect(state.pendingViewportPageIndex, state.content.pages.size) {
@@ -184,7 +186,8 @@ fun NoteEditorScreen(
                 onDeleteLayer = { objectId -> viewModel.deleteLayer(state.currentPageIndex, objectId) },
                 onToggleViewOnly = { viewModel.toggleViewOnly() },
                 onExportPdf = {viewModel.exportToPdf(context)},
-                onPageSettings = { showPageSettings = true }
+                onPageSettings = { showPageSettings = true },
+                onPagePreview = { parentNavController?.navigate("page_preview/$noteId") }
             )
         },
         containerColor = MaterialTheme.colorScheme.primary
@@ -391,7 +394,8 @@ fun EditorTopBar(
     onDeleteLayer: (String) -> Unit,
     onToggleViewOnly: () -> Unit,
     onExportPdf: () -> Unit,
-    onPageSettings: () -> Unit
+    onPageSettings: () -> Unit,
+    onPagePreview: () -> Unit
 ) {
     TopAppBar(
         title = {
@@ -477,6 +481,13 @@ fun EditorTopBar(
                     onClick = {
                         menuExpanded = false
                         onPageSettings()
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Page Preview", color = Color.White) },
+                    onClick = {
+                        menuExpanded = false
+                        onPagePreview()
                     }
                 )
                 DropdownMenuItem(
@@ -1762,8 +1773,6 @@ fun EditorBottomToolbar(
         }
     }
 }
-
-// Removed UniversalColorToolbar
 
 @Composable
 fun ToolbarIcon(
