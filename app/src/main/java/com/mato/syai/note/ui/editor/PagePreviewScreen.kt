@@ -51,6 +51,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.unit.DpOffset
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mato.syai.utils.GlassEffect
 import kotlinx.coroutines.CoroutineScope
 
@@ -402,10 +403,12 @@ fun PagePreviewItem(
                             val holdJob = coroutineScope.launch {
                                 delay(300)
                                 if (!isDragged) isHolding = true
-                                delay(700) // Total 1s
+                                delay(700)
                                 if (!dragOccurred && !isDragged) {
                                     showMenu = true
-                                    isHolding = false
+//                                    isHolding = false
+                                } else {
+                                    showMenu = false
                                 }
                             }
                             
