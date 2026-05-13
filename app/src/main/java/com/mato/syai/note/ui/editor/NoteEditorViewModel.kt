@@ -2155,14 +2155,23 @@ class NoteEditorViewModel @Inject constructor(
     }
 
     fun reorderPages(fromIndex: Int, toIndex: Int) {
-        mutateContent { content ->
-            if (fromIndex !in content.pages.indices || toIndex !in content.pages.indices || fromIndex == toIndex) return@mutateContent
-            val page = content.pages.removeAt(fromIndex)
-            content.pages.add(toIndex, page)
-            content.pages.forEachIndexed { i, p -> content.pages[i] = p.copy(pageNo = i) }
-            _uiState.update { it.copy(currentPageIndex = toIndex) }
-            _pagePreviews.update { emptyMap() } // Reorder invalidates all cache or we could re-map, but clearing is safer
-        }
+        if (fromIndex !in _uiState.value.content.pages.indices || toIndex !in _uiState.value.content.pages.indices || fromIndex == toIndex) return
+        
+        val currentContent = _uiState.value.content
+        val newPages = currentContent.pages.toMutableList()
+        val page = newPages.removeAt(fromIndex)
+        newPages.add(toIndex, page)
+        
+        // Shallow copy for UI update - only copy pages that changed their index
+        val updatedPages = newPages.mapIndexed { i, p -> 
+            if (p.pageNo != i) p.copy(pageNo = i) else p 
+        }.toMutableList()
+        
+        val newContent = currentContent.copy(pages = updatedPages)
+        _uiState.update { it.copy(content = newContent, currentPageIndex = toIndex) }
+        
+        // Deep copy for undo stack with debounce
+        scheduleAutoSave() // persistToDisk is already debounced
     }
 
     fun mergeListWithPreviousBlock(pageIndex: Int, listObjectId: String, itemToMerge: ListItem) {

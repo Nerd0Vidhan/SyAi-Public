@@ -8,9 +8,12 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -46,8 +49,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.unit.DpOffset
 import com.mato.syai.utils.GlassEffect
+import kotlinx.coroutines.CoroutineScope
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -112,6 +117,18 @@ fun PagePreviewScreen(
                     TextButton(
                         onClick = {
                             val pagesToDelete = selectedPages.toList()
+                            if (pagesToDelete.size >= pages.size) {
+                                globalSnackbar?.showCustomUndoSnackbar(
+                                    message = "All Pages Cannot be Selected",
+                                    actionLabel = "Refresh?",
+                                    onAction = {
+                                        viewModel.refreshAllPreviews(context)
+                                        isEditMode = false
+                                    }
+                                )
+                                return@TextButton
+                            }
+
                             val cachedPages = pagesToDelete.map { it to pages[it].copy() }
                             
                             viewModel.deletePages(pagesToDelete.toSet())
@@ -126,6 +143,7 @@ fun PagePreviewScreen(
                             
                             selectedPages.clear()
                             isEditMode = false
+                            viewModel.refreshAllPreviews(context)
                         },
                         modifier = Modifier.padding(16.dp)
                     ) {
@@ -144,79 +162,110 @@ fun PagePreviewScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier
                     .fillMaxSize()
-                    .pointerInput(pages) {
-                        detectDragGesturesAfterLongPress(
-                            onDragStart = { offset ->
-                                if (isEditMode) return@detectDragGesturesAfterLongPress
-                                val item = gridState.layoutInfo.visibleItemsInfo.firstOrNull {
-                                    offset.y >= it.offset.y && offset.y <= it.offset.y + it.size.height &&
-                                    offset.x >= it.offset.x && offset.x <= it.offset.x + it.size.width
-                                }
-                                if (item != null) {
-                                    draggedItemIndex = item.index
-                                }
-                            },
-                            onDrag = { change, dragAmount ->
-                                change.consume()
-                                dragOffset += dragAmount
-
-                                val draggedIndex = draggedItemIndex ?: return@detectDragGesturesAfterLongPress
-                                val draggedItemInfo = gridState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == draggedIndex }
-                                if (draggedItemInfo != null) {
-                                    val centerY = draggedItemInfo.offset.y + (draggedItemInfo.size.height / 2f) + dragOffset.y
-                                    val centerX = draggedItemInfo.offset.x + (draggedItemInfo.size.width / 2f) + dragOffset.x
-
-                                    val targetItem = gridState.layoutInfo.visibleItemsInfo.find {
-                                        centerY >= it.offset.y && centerY <= it.offset.y + it.size.height &&
-                                        centerX >= it.offset.x && centerX <= it.offset.x + it.size.width &&
-                                        it.index != draggedIndex
+                    .pointerInput(noteId, isEditMode) {
+                        if (isEditMode) return@pointerInput
+                        awaitPointerEventScope {
+                            while (true) {
+                                val down = awaitFirstDown(requireUnconsumed = false)
+                                var dragTriggered = false
+                                
+                                val dragJob = withTimeoutOrNull(300) {
+                                    while (true) {
+                                        val event = awaitPointerEvent()
+                                        if (event.changes.any { it.changedToUp() }) return@withTimeoutOrNull "up"
                                     }
-
-                                    if (targetItem != null) {
-                                        viewModel.reorderPages(draggedIndex, targetItem.index)
-                                        draggedItemIndex = targetItem.index
-                                        dragOffset = Offset.Zero
+                                }
+                                
+                                if (dragJob == null) {
+                                    // 300ms Passed -> Check for Drag
+                                    val offset = down.position
+                                    val item = gridState.layoutInfo.visibleItemsInfo.firstOrNull {
+                                        offset.y >= it.offset.y && offset.y <= it.offset.y + it.size.height &&
+                                        offset.x >= it.offset.x && offset.x <= it.offset.x + it.size.width
                                     }
                                     
-                                    // Auto-scroll
-                                    val viewportHeight = gridState.layoutInfo.viewportSize.height
-                                    if (change.position.y < 100) {
-                                        if (overscrollJob?.isActive != true) {
-                                            overscrollJob = scope.launch { 
-                                                while(true) {
-                                                    gridState.scrollBy(-15f)
-                                                    delay(16)
+                                    if (item != null) {
+                                        // Wait for actual movement to start "drag"
+                                        val dragStart = awaitTouchSlopOrCancellation(down.id) { change, over ->
+                                            change.consume()
+                                        }
+                                        
+                                        if (dragStart != null) {
+                                            draggedItemIndex = item.index
+                                            dragTriggered = true
+                                            
+                                            while (true) {
+                                                val event = awaitPointerEvent()
+                                                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                                if (change.changedToUp()) break
+                                                
+                                                val dragAmount = change.position - change.previousPosition
+                                                change.consume()
+                                                dragOffset += dragAmount
+                                                
+                                                val currentDraggedIndex = draggedItemIndex ?: break
+                                                val draggedItemInfo = gridState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == currentDraggedIndex }
+                                                if (draggedItemInfo != null) {
+                                                    val centerY = draggedItemInfo.offset.y + (draggedItemInfo.size.height / 2f) + dragOffset.y
+                                                    val centerX = draggedItemInfo.offset.x + (draggedItemInfo.size.width / 2f) + dragOffset.x
+
+                                                    val targetItem = gridState.layoutInfo.visibleItemsInfo.find {
+                                                        centerY >= it.offset.y && centerY <= it.offset.y + it.size.height &&
+                                                        centerX >= it.offset.x && centerX <= it.offset.x + it.size.width &&
+                                                        it.index != currentDraggedIndex
+                                                    }
+
+                                                    if (targetItem != null) {
+                                                        val oldPos = Offset(draggedItemInfo.offset.x.toFloat(), draggedItemInfo.offset.y.toFloat())
+                                                        val newPos = Offset(targetItem.offset.x.toFloat(), targetItem.offset.y.toFloat())
+                                                        
+                                                        viewModel.reorderPages(currentDraggedIndex, targetItem.index)
+                                                        draggedItemIndex = targetItem.index
+                                                        // Compensation: adjust dragOffset so the item stays under the finger
+                                                        dragOffset += (oldPos - newPos)
+                                                    }
+                                                    
+                                                    // Improved Auto-scroll
+                                                    val viewportHeight = gridState.layoutInfo.viewportSize.height
+                                                    val topThreshold = viewportHeight * 0.3f
+                                                    val bottomThreshold = viewportHeight * 0.7f
+                                                    
+                                                    if (change.position.y < topThreshold) {
+                                                        val intensity = (topThreshold - change.position.y) / topThreshold
+                                                        if (overscrollJob?.isActive != true) {
+                                                            overscrollJob = scope.launch { 
+                                                                while(true) {
+                                                                    gridState.scrollBy(-25f * intensity.coerceIn(0.2f, 1f))
+                                                                    delay(16)
+                                                                }
+                                                            }
+                                                        }
+                                                    } else if (change.position.y > bottomThreshold) {
+                                                        val intensity = (change.position.y - bottomThreshold) / (viewportHeight - bottomThreshold)
+                                                        if (overscrollJob?.isActive != true) {
+                                                            overscrollJob = scope.launch { 
+                                                                while(true) {
+                                                                    gridState.scrollBy(25f * intensity.coerceIn(0.2f, 1f))
+                                                                    delay(16)
+                                                                }
+                                                            }
+                                                        }
+                                                    } else {
+                                                        overscrollJob?.cancel()
+                                                    }
                                                 }
                                             }
+                                            draggedItemIndex = null
+                                            dragOffset = Offset.Zero
+                                            overscrollJob?.cancel()
                                         }
-                                    } else if (change.position.y > viewportHeight - 100) {
-                                        if (overscrollJob?.isActive != true) {
-                                            overscrollJob = scope.launch { 
-                                                while(true) {
-                                                    gridState.scrollBy(15f)
-                                                    delay(16)
-                                                }
-                                            }
-                                        }
-                                    } else {
-                                        overscrollJob?.cancel()
                                     }
                                 }
-                            },
-                            onDragEnd = {
-                                draggedItemIndex = null
-                                dragOffset = Offset.Zero
-                                overscrollJob?.cancel()
-                            },
-                            onDragCancel = {
-                                draggedItemIndex = null
-                                dragOffset = Offset.Zero
-                                overscrollJob?.cancel()
                             }
-                        )
+                        }
                     }
             ) {
-                itemsIndexed(pages, key = { index, page -> "${page.pageId}_$index" }) { index, page ->
+                itemsIndexed(pages, key = { index, page -> page.pageId }) { index, page ->
                     val isDragged = index == draggedItemIndex
                     val previewBitmap = pagePreviews[page.pageId]
                     
@@ -227,14 +276,30 @@ fun PagePreviewScreen(
                     PagePreviewItem(
                         page = page,
                         index = index,
+                        pageCount = pages.size,
                         bitmap = previewBitmap,
                         isEditMode = isEditMode,
                         isSelected = selectedPages.contains(index),
                         isDragged = isDragged,
                         dragOffset = dragOffset,
+                        modifier = Modifier.animateItem(),
                         onSelect = {
-                            if (selectedPages.contains(index)) selectedPages.remove(index)
-                            else selectedPages.add(index)
+                            if (selectedPages.contains(index)) {
+                                selectedPages.remove(index)
+                            } else {
+                                if (selectedPages.size + 1 >= pages.size) {
+                                    globalSnackbar?.showCustomUndoSnackbar(
+                                        message = "All Pages Cannot be Selected",
+                                        actionLabel = "Clear All?",
+                                        onAction = {
+                                            selectedPages.clear()
+                                            isEditMode = false
+                                        }
+                                    )
+                                } else {
+                                    selectedPages.add(index)
+                                }
+                            }
                         },
                         onTap = {
                             viewModel.updateCurrentPageIndex(index)
@@ -279,11 +344,13 @@ fun PagePreviewScreen(
 fun PagePreviewItem(
     page: PageData,
     index: Int,
+    pageCount: Int,
     bitmap: Bitmap?,
     isEditMode: Boolean,
     isSelected: Boolean,
     isDragged: Boolean,
     dragOffset: Offset,
+    modifier: Modifier = Modifier,
     onSelect: () -> Unit,
     onTap: () -> Unit,
     onDelete: () -> Unit,
@@ -292,6 +359,11 @@ fun PagePreviewItem(
 ) {
     var isHolding by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(isDragged) {
+        if (isDragged) isHolding = false
+    }
     
     val scale by animateFloatAsState(
         targetValue = if (isDragged || isHolding) 0.8f else 1f,
@@ -300,7 +372,7 @@ fun PagePreviewItem(
     )
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .zIndex(if (isDragged) 10f else 1f)
             .graphicsLayer {
                 scaleX = scale
@@ -318,27 +390,36 @@ fun PagePreviewItem(
                 color = if (isSelected) MaterialTheme.colorScheme.secondary else Color.LightGray,
                 shape = RoundedCornerShape(8.dp)
             )
-            .pointerInput(isEditMode) {
-                detectTapGestures(
-                    onTap = { 
-                        if (isEditMode) onSelect() else onTap()
-                    },
-                    onLongPress = {
-                        if (!isEditMode) {
-                            showMenu = true
-                        }
-                    },
-                    onPress = {
-                        if (!isEditMode) {
-                            isHolding = true
-                            try {
-                                awaitRelease()
-                            } finally {
-                                isHolding = false
+            .pointerInput(isEditMode, isDragged) {
+                if (isEditMode) {
+                    detectTapGestures(onTap = { onSelect() })
+                } else {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val down = awaitFirstDown()
+                            var dragOccurred = false
+                            
+                            val holdJob = coroutineScope.launch {
+                                delay(300)
+                                if (!isDragged) isHolding = true
+                                delay(700) // Total 1s
+                                if (!dragOccurred && !isDragged) {
+                                    showMenu = true
+                                    isHolding = false
+                                }
+                            }
+                            
+                            // Check for release or move
+                            val up = waitForUpOrCancellation()
+                            holdJob.cancel()
+                            isHolding = false
+                            
+                            if (up != null && !dragOccurred && !showMenu) {
+                                onTap()
                             }
                         }
                     }
-                )
+                }
             }
     ) {
         if (bitmap != null) {
@@ -393,7 +474,7 @@ fun PagePreviewItem(
                     onClick = { showMenu = false; onReset() },
                     leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null, tint = Color.Black) }
                 )
-                if (index > 0) {
+                if (pageCount > 1) {
                     DropdownMenuItem(
                         text = { Text("Delete Page", color = Color.Red) },
                         onClick = { showMenu = false; onDelete() },
