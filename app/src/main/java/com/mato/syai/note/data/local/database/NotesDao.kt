@@ -66,4 +66,16 @@ interface NoteDao {
 
     @Query("SELECT imagePreview from notes_path WHERE noteId = :noteId")
     suspend fun fetchPreviewId(noteId: Long): String?
+
+    @Query("SELECT * FROM saved_colors ORDER BY timestamp DESC LIMIT 15")
+    fun getSavedColors(): Flow<List<SavedColorEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSavedColor(color: SavedColorEntity)
+
+    @Query("DELETE FROM saved_colors WHERE id = :id")
+    suspend fun deleteSavedColorById(id: Long)
+
+    @Query("DELETE FROM saved_colors WHERE id NOT IN (SELECT id FROM saved_colors ORDER BY timestamp DESC LIMIT 15)")
+    suspend fun deleteOldSavedColors()
 }

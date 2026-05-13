@@ -277,4 +277,15 @@ class NoteRepository @Inject constructor(
         page.refreshLinearTextPaste()
         saveNoteContent(noteId, content)
     }
+
+    val savedColors: Flow<List<SavedColorEntity>> = dao.getSavedColors()
+
+    suspend fun saveColor(colorHex: Int) = withContext(Dispatchers.IO) {
+        dao.insertSavedColor(SavedColorEntity(colorHex = colorHex))
+        dao.deleteOldSavedColors()
+    }
+
+    suspend fun deleteSavedColor(id: Long) = withContext(Dispatchers.IO) {
+        dao.deleteSavedColorById(id)
+    }
 }
