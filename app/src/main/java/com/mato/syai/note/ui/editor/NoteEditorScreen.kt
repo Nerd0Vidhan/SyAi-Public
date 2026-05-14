@@ -345,7 +345,7 @@ fun NoteEditorScreen(
             onDismiss = { showCustomPageDialog = false },
             onCreate = { width, height ->
                 viewModel.addPageAt(
-                    insertIndex = expandedInsertIndex ?: state.currentPageIndex + 1,
+                    insertIndex = expandedInsertIndex ?: (state.currentPageIndex + 1),
                     pageSize = PageSize.CUSTOM,
                     customDimensions = PageDimensions(widthPoints = width, heightPoints = height)
                 )
@@ -1804,14 +1804,9 @@ fun DrawToolSubToolbar(
     onWidthChange: (Float) -> Unit,
     onBrushStyleChange: (BrushStyle) -> Unit
 ) {
-    val quickColors = listOf(
-        Color(0xFF111111),
-        Color(0xFF3F2A7A),
-        Color(0xFF0057B8),
-        Color(0xFF0F766E),
-        Color(0xFFB45309),
-        Color(0xFFB91C1C)
-    )
+
+    var showColorPicker by remember { mutableStateOf(false) }
+
     EditorGlassContainer(
         modifier = Modifier
             .fillMaxWidth()
@@ -1856,14 +1851,21 @@ fun DrawToolSubToolbar(
 
             Spacer(modifier = Modifier.width(10.dp))
 
-            quickColors.forEach { quickColor ->
-                ColorCircle(
-                    color = quickColor,
-                    selected = color == quickColor.toArgb(),
-                    onClick = { onColorChange(quickColor.toArgb()) }
-                )
-            }
+            ColorCircle(
+                color = Color(color),
+                selected = false,
+                onClick = { showColorPicker = true }
+            )
         }
+    }
+    if (showColorPicker) {
+        ColorPickerBottomSheet(
+            initialColor = color,
+            onColorSelected = { color ->
+                onColorChange(color)
+            },
+            onDismissRequest = { showColorPicker = false }
+        )
     }
 }
 
