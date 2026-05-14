@@ -533,7 +533,7 @@ fun PageSettingsDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(
+            Button(
                 onClick = {
                     onApply(
                         textSize,
@@ -545,9 +545,17 @@ fun PageSettingsDialog(
             ) { Text("Apply") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            OutlinedButton(
+                onClick = onDismiss,
+                border = BorderStroke(
+                    width = 2.dp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            ) {
+                Text("Cancel",color = MaterialTheme.colorScheme.primary)
+            }
         },
-        title = { Text("Page Settings") },
+        title = { Text("Settings") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Default text size: ${textSize.toInt()} pt")
