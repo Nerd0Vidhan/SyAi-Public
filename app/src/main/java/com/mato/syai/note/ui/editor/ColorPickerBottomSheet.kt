@@ -4,6 +4,7 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -22,6 +23,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.mato.syai.note.data.local.database.SavedColorEntity
+import com.mato.syai.note.utils.AlphaSlider
+import com.mato.syai.note.utils.OutlinedTextFieldStyled
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -37,7 +40,7 @@ fun ColorPickerBottomSheet(
     
     var currentColor by remember { mutableStateOf(Color(initialColor)) }
 
-    val alpha = currentColor.alpha
+    var alpha = currentColor.alpha
     val red = currentColor.red
     val green = currentColor.green
     val blue = currentColor.blue
@@ -63,9 +66,9 @@ fun ColorPickerBottomSheet(
     
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
-        containerColor = MaterialTheme.colorScheme.surface,
-        dragHandle = { BottomSheetDefaults.DragHandle() },
-        modifier = Modifier.fillMaxHeight(0.9f)
+        containerColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        dragHandle = { BottomSheetDefaults.DragHandle(color = Color.DarkGray) },
+        modifier = Modifier.fillMaxHeight()
     ) {
         Column(
             modifier = Modifier
@@ -74,7 +77,7 @@ fun ColorPickerBottomSheet(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text("Color Picker", style = MaterialTheme.typography.titleLarge)
+            Text("Color Picker", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
 
             Row(
                 modifier = Modifier.fillMaxWidth().height(200.dp),
@@ -132,49 +135,88 @@ fun ColorPickerBottomSheet(
             }
             
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Alpha", style = MaterialTheme.typography.bodyMedium)
-                Slider(
-                    value = alpha,
-                    onValueChange = { newAlpha -> currentColor = currentColor.copy(alpha = newAlpha) },
-                    modifier = Modifier.weight(1f)
+                Text("Alpha", style = MaterialTheme.typography.bodyMedium,color = MaterialTheme.colorScheme.primary)
+                AlphaSlider(
+                    alpha = alpha,
+                    currentColor = currentColor.copy(alpha = 1f),
+                    onAlphaChanged = { newAlpha ->
+                        currentColor = currentColor.copy(alpha = newAlpha)
+                    },
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
-            
+
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = aInput,
                     onValueChange = { aInput = it; it.toIntOrNull()?.coerceIn(0, 255)?.let { a -> updateFromARGB(a, (red*255).toInt(), (green*255).toInt(), (blue*255).toInt()) } },
-                    label = { Text("A") },
+                    label = { Text("#Alpha", color = MaterialTheme.colorScheme.primary) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.weight(1f),
-                    singleLine = true
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primaryContainer,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.primary,
+                        focusedTextColor = MaterialTheme.colorScheme.tertiary,
+                        unfocusedTextColor = MaterialTheme.colorScheme.primary,
+                        cursorColor =  MaterialTheme.colorScheme.tertiary,
+                        focusedPrefixColor =  MaterialTheme.colorScheme.tertiary,
+                        unfocusedPrefixColor = MaterialTheme.colorScheme.primary
+                    ),
                 )
                 OutlinedTextField(
                     value = rInput,
                     onValueChange = { rInput = it; it.toIntOrNull()?.coerceIn(0, 255)?.let { r -> updateFromARGB((alpha*255).toInt(), r, (green*255).toInt(), (blue*255).toInt()) } },
-                    label = { Text("R") },
+                    label = { Text("#Red", color = Color.Red) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.weight(1f),
-                    singleLine = true
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primaryContainer,
+                        unfocusedBorderColor = Color.Red,
+                        focusedTextColor = MaterialTheme.colorScheme.tertiary,
+                        unfocusedTextColor = Color.Red,
+                        cursorColor =  MaterialTheme.colorScheme.tertiary,
+                        focusedPrefixColor =  MaterialTheme.colorScheme.tertiary,
+                        unfocusedPrefixColor = Color.Red
+                    ),
                 )
                 OutlinedTextField(
                     value = gInput,
                     onValueChange = { gInput = it; it.toIntOrNull()?.coerceIn(0, 255)?.let { g -> updateFromARGB((alpha*255).toInt(), (red*255).toInt(), g, (blue*255).toInt()) } },
-                    label = { Text("G") },
+                    label = { Text("#Green", color = Color.Green) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.weight(1f),
-                    singleLine = true
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primaryContainer,
+                        unfocusedBorderColor = Color.Green,
+                        focusedTextColor = MaterialTheme.colorScheme.tertiary,
+                        unfocusedTextColor = Color.Green,
+                        cursorColor =  MaterialTheme.colorScheme.tertiary,
+                        focusedPrefixColor =  MaterialTheme.colorScheme.tertiary,
+                        unfocusedPrefixColor = Color.Green
+                    ),
                 )
                 OutlinedTextField(
                     value = bInput,
                     onValueChange = { bInput = it; it.toIntOrNull()?.coerceIn(0, 255)?.let { b -> updateFromARGB((alpha*255).toInt(), (red*255).toInt(), (green*255).toInt(), b) } },
-                    label = { Text("B") },
+                    label = { Text("#Blue", color = Color.Blue) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.weight(1f),
-                    singleLine = true
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primaryContainer,
+                        unfocusedBorderColor = Color.Blue,
+                        focusedTextColor = MaterialTheme.colorScheme.tertiary,
+                        unfocusedTextColor = Color.Blue,
+                        cursorColor =  MaterialTheme.colorScheme.tertiary,
+                        focusedPrefixColor =  MaterialTheme.colorScheme.tertiary,
+                        unfocusedPrefixColor = Color.Blue
+                    ),
                 )
             }
-            
+
             OutlinedTextField(
                 value = hexInput,
                 onValueChange = { newValue ->
@@ -188,20 +230,29 @@ fun ColorPickerBottomSheet(
                         } catch (e: Exception) {}
                     }
                 },
-                label = { Text("HEX Color") },
+                label = { Text("#HEX Color", color = MaterialTheme.colorScheme.primary) },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = MaterialTheme.colorScheme.primaryContainer,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.primary,
+                    focusedTextColor = MaterialTheme.colorScheme.tertiary,
+                    unfocusedTextColor = MaterialTheme.colorScheme.primary,
+                    cursorColor =  MaterialTheme.colorScheme.tertiary,
+                    focusedPrefixColor =  MaterialTheme.colorScheme.tertiary,
+                    unfocusedPrefixColor = MaterialTheme.colorScheme.primary
+                ),
             )
             
-            Text("Saved Colors", style = MaterialTheme.typography.titleMedium)
+            Text("Saved Colors", style = MaterialTheme.typography.titleMedium,color = MaterialTheme.colorScheme.primary)
             
             val defaultColors = listOf(0xFF000000.toInt(), 0xFFFFFFFF.toInt(), 0xFFFF0000.toInt(), 0xFF00FF00.toInt(), 0xFF0000FF.toInt())
             val displayColors = (savedColors.map { it.colorHex } + defaultColors).distinct().take(15)
             
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp),modifier = Modifier.fillMaxWidth()) {
                 val chunked = displayColors.chunked(5)
                 for (row in chunked) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(horizontalArrangement = Arrangement.SpaceEvenly,modifier = Modifier.fillMaxWidth()) {
                         for (colorInt in row) {
                             val isSaved = savedColors.any { it.colorHex == colorInt }
                             val entity = savedColors.find { it.colorHex == colorInt }
@@ -212,7 +263,7 @@ fun ColorPickerBottomSheet(
                                     .size(48.dp)
                                     .clip(CircleShape)
                                     .background(Color(colorInt))
-                                    .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                                    .border(2.dp, MaterialTheme.colorScheme.secondary, CircleShape)
                                     .pointerInput(Unit) {
                                         detectTapGestures(
                                             onTap = { currentColor = Color(colorInt) },
@@ -235,17 +286,31 @@ fun ColorPickerBottomSheet(
                 }
             }
 
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onDismissRequest) { Text("Cancel") }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                OutlinedButton(
+                    onClick = onDismissRequest,
+                    border = BorderStroke(width = 2.dp, color = MaterialTheme.colorScheme.primary)
+                ) {
+                    Text("Cancel",color = MaterialTheme.colorScheme.primary)
+                }
                 Spacer(modifier = Modifier.width(8.dp))
-                TextButton(onClick = { onSaveColor(currentColor.toArgb()) }) { Text("Save to DB") }
+                OutlinedButton(
+                    onClick = {
+                        onSaveColor(currentColor.toArgb())
+                    },
+                    border = BorderStroke(width = 2.dp, color = MaterialTheme.colorScheme.primary)
+                ) {
+                    Text("Save Color",color = MaterialTheme.colorScheme.primary)
+                }
                 Spacer(modifier = Modifier.width(8.dp))
-                Button(onClick = { 
+
+                Button(onClick = {
+                    onSaveColor(currentColor.toArgb())
                     onColorSelected(currentColor.toArgb())
                     onDismissRequest()
-                }) { Text("Apply") }
+                }) { Text("Continue") }
             }
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.navigationBarsPadding())
         }
     }
 }

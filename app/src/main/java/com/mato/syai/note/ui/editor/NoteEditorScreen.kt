@@ -1220,27 +1220,6 @@ fun NotePage(
             }
         }
 
-        // Layer 2 - Live drawing
-        if (state.activeTool == ActiveTool.DRAW && !state.isViewOnly) {
-            DrawingCanvas(
-                pageIndex = pageIndex,
-                drawColor = state.drawColor,
-                drawWidth = state.drawWidth,
-                brushStyle = state.brushStyle,
-                pageScaleX = pageScaleX,
-                pageScaleY = pageScaleY,
-                onStrokeFinished = { stroke ->
-                    onAnyInteraction()
-                    viewModel.addStroke(pageIndex, stroke)
-                },
-                onErase = { point ->
-                    onAnyInteraction()
-                    viewModel.eraseStrokesAt(pageIndex, point)
-                },
-                modifier = Modifier.fillMaxSize()
-            )
-        }
-
         selectionRect?.let { rect ->
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val safeLeft = rect.left.coerceIn(0f, pageWidthPx.toFloat())
@@ -1287,6 +1266,27 @@ fun NotePage(
                     pageScaleY = pageScaleY
                 )
             }
+
+        // Layer 2 - Live drawing (moved to top to intercept touches)
+        if (state.activeTool == ActiveTool.DRAW && !state.isViewOnly) {
+            DrawingCanvas(
+                pageIndex = pageIndex,
+                drawColor = state.drawColor,
+                drawWidth = state.drawWidth,
+                brushStyle = state.brushStyle,
+                pageScaleX = pageScaleX,
+                pageScaleY = pageScaleY,
+                onStrokeFinished = { stroke ->
+                    onAnyInteraction()
+                    viewModel.addStroke(pageIndex, stroke)
+                },
+                onErase = { point ->
+                    onAnyInteraction()
+                    viewModel.eraseStrokesAt(pageIndex, point)
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
         }
 
         if (state.generatingPageIds.contains(page.pageId)) {
