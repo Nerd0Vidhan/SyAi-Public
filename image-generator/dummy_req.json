@@ -1,4 +1,8 @@
 {
-  "prompt": "A cute cat",
-  "seed": 42
+  "prompt": "stary night with moon",
+  "width":768,
+  "height":432,
+  "steps":40,
+  "guidanceScale":7,
+  "seed":26100603
 }
