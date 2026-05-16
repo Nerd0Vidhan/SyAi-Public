@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import random
+from diffusers import DPMSolverMultistepScheduler
 
 
 def parse_args():
@@ -26,14 +27,20 @@ def main():
 
     pipe = StableDiffusionPipeline.from_pretrained(
         args.model_id,
-        torch_dtype=dtype
+        torch_dtype=dtype,
+        safety_checker=None,
+        requires_safety_checker=False
     )
 
     pipe.enable_attention_slicing()
     pipe.enable_vae_slicing()
 
+    pipe.scheduler = DPMSolverMultistepScheduler.from_config(
+        pipe.scheduler.config
+    )
+
     if args.device.startswith("cuda"):
-        pipe = pipe.to(args.device)
+        pipe.enable_model_cpu_offload()
 
     seed = request.get("seed")
     if seed is None:
@@ -63,8 +70,8 @@ def main():
         guidance_scale = max(1.0, min(guidance_scale, 20.0))
 
         image = pipe(
-            prompt=prompt,
-            negative_prompt=request.get("negativePrompt"),
+            prompt=f"ultra detailed,masterpiece,best quality,cinematic lighting,highly detailed,{prompt}".strip(),
+            negative_prompt = "blurry, bad anatomy, deformed, low quality,extra fingers, cropped, watermark, text,ugly, duplicate, malformed, distorted face",
             width=width,
             height=height,
             num_inference_steps=steps,

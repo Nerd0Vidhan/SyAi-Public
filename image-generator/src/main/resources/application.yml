@@ -12,11 +12,12 @@ spring:
 
 image-generator:
   output-dir: generated
-  python-executable: C:/Users/Vidhan/AppData/Local/Programs/Python/Python311/python.exe
-  python-script: C:/Users/Vidhan/AndroidStudioProjects/SyAi-Public/image-generator/python/stable_diffusion_runner.py
-  model-id: segmind/tiny-sd
-  device: cpu
+  python-executable: C:/Users/vidha/AppData/Local/Programs/Python/Python311/python.exe
+  python-script: C:/Users/vidha/AndroidStudioProjects/SyAi-Public/image-generator/python/stable_diffusion_runner.py
+  model-id: Lykon/DreamShaper
+  device: cuda
   allow-origins:
     - "*"
 
+#segmind/tiny-sd -- cpu
 #runwayml/stable-diffusion-v1-5 --alternate model to try for gpu based loading
