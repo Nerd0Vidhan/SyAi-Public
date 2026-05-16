@@ -1507,7 +1507,9 @@ fun NotePage(
                     onAnyInteraction()
                     viewModel.eraseStrokesAt(pageIndex, point)
                 },
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                    .fillMaxSize()
+                    .zIndex(1_000_000f)
             )
         }
         }
@@ -1678,7 +1680,8 @@ fun RenderObject(
             }
 
             // 🔥 TAP SELECT (NO bringToFront here)
-            .pointerInput(Unit) {
+            .pointerInput(activeTool) {
+                if (activeTool != ActiveTool.SELECT) return@pointerInput
                 detectTapGestures(
                     onTap = {
                         onAnyInteraction()
