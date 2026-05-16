@@ -18,6 +18,7 @@ enum class OfflineModelDownloadState {
 data class EditorState(
     val noteId: Long = -1L,
     val title: String = "",
+    val noteMetadata: NoteMetadata = NoteMetadata(),
     val content: NoteContent = NoteContent(),
     val currentPageIndex: Int = 0,
     val activeTool: ActiveTool = ActiveTool.LINEAR_TEXT,

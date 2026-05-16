@@ -1,14 +1,18 @@
 package com.mato.syai.note.ui.editor
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
@@ -51,12 +55,13 @@ fun HoveringTextToolbar(
             var expanded by remember { mutableStateOf(false) }
             var sizeText by remember(style.fontSize) { mutableStateOf(style.fontSize.toInt().toString()) }
 
-            ToolbarIcon(Icons.Default.Remove, false) {
+            ToolbarIcon(Icons.Default.Remove, true) {
                 onStyleChange(style.copy(fontSize = (style.fontSize - 1f).coerceIn(8f, 100f)))
             }
+            Spacer(modifier=Modifier.width(6.dp))
             Box {
-                TextButton(onClick = { expanded = true }) {
-                    Text(sizeText)
+                OutlinedButton(onClick = { expanded = true },border = BorderStroke(width= 2.dp,color = MaterialTheme.colorScheme.secondary)) {
+                    Text(sizeText, color = MaterialTheme.colorScheme.secondary)
                 }
                 DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                     val sizes = listOf(10, 12, 14, 16, 18, 20, 24, 30, 36)
@@ -71,9 +76,12 @@ fun HoveringTextToolbar(
                     }
                 }
             }
-            ToolbarIcon(Icons.Default.Add, false) {
+            Spacer(modifier=Modifier.width(6.dp))
+            ToolbarIcon(Icons.Default.Add, true) {
                 onStyleChange(style.copy(fontSize = (style.fontSize + 1f).coerceIn(8f, 100f)))
             }
+            Spacer(modifier=Modifier.width(6.dp))
+
 
             VerticalDivider(modifier = Modifier.height(24.dp).width(2.dp), color = Color.White)
 
