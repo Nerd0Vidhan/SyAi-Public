@@ -327,12 +327,13 @@ fun PagePreviewScreen(
         val pageIndex = showSettingsForPage!!
         val page = pages[pageIndex]
         PageSettingsDialog(
+            isNoteLevel = false,
             page = page,
             offlineModelDownloadState = activeState.offlineModelDownloadState,
             offlineModelStatusMessage = activeState.offlineModelStatusMessage,
             onOfflineModelDownload = viewModel::startOfflineModelDownload,
             onDismiss = { showSettingsForPage = null },
-            onApply = { textSize, bg, padding, border ->
+            onApply = { textSize, bg, padding, border, textColor, drawColor ->
                 viewModel.updatePageStyle(pageIndex, textSize, bg, padding, border)
                 showSettingsForPage = null
                 viewModel.refreshAllPreviews(context)

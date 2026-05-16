@@ -50,6 +50,10 @@ class NoteRepository @Inject constructor(
     }
 
     suspend fun getNoteById(id: Long): NoteEntity? = dao.getNoteById(id)
+    
+    suspend fun getNoteMetadata(id: Long): MetadataEntity? = dao.getMetadataByNoteId(id)
+    
+    suspend fun updateNoteMetadata(metadata: MetadataEntity) = dao.insertMetadata(metadata)
 
     suspend fun createNewNote(title: String, folder: String): Long = withContext(Dispatchers.IO) {
         val root = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)

@@ -146,6 +146,19 @@ class NoteEditorViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true, noteId = noteId) }
 
             val noteEntity = repository.getNoteById(noteId)
+            val metadataEntity = repository.getNoteMetadata(noteId)
+            val domainMetadata = metadataEntity?.let {
+                com.mato.syai.note.domain.local.model.NoteMetadata(
+                    textSize = it.textSize,
+                    colorHex = it.colorHex,
+                    background = it.background,
+                    defaultTextSize = it.defaultTextSize,
+                    cursorColor = it.cursorColor,
+                    backgroundType = it.backgroundType,
+                    totalPages = it.totalPages,
+                    pageSize = it.pageSize
+                )
+            } ?: com.mato.syai.note.domain.local.model.NoteMetadata()
             val content = repository.loadNoteContent(noteId).also(::migrateLinearListsToMarkerText)
 
             undoRedoManager.clear()
@@ -157,6 +170,7 @@ class NoteEditorViewModel @Inject constructor(
                 it.copy(
                     noteId = noteId,
                     title = noteEntity?.title ?: "Untitled",
+                    noteMetadata = domainMetadata,
                     content = content,
                     activeTool = ActiveTool.LINEAR_TEXT,
                     currentPageIndex = 0,
@@ -2175,6 +2189,43 @@ class NoteEditorViewModel @Inject constructor(
             updatedPage.updatePrimaryLinearText(style = updatedPage.linearTextStyle, padding = updatedPage.pagePadding)
             
             content.pages[pageIndex] = updatedPage
+        }
+    }
+
+    fun updateNoteLevelDefaults(
+        textSize: Float,
+        background: Int,
+        padding: com.mato.syai.note.domain.local.model.PagePadding,
+        border: com.mato.syai.note.domain.local.model.PageBorderStyle,
+        textColor: Int,
+        drawColor: Int
+    ) {
+        viewModelScope.launch {
+            val noteId = _uiState.value.noteId
+            val existingMetadata = repository.getNoteMetadata(noteId) ?: com.mato.syai.note.data.local.database.MetadataEntity(noteId = noteId, textSize = textSize)
+            
+            val updatedMetadataEntity = existingMetadata.copy(
+                textSize = textSize,
+                colorHex = textColor,
+                background = String.format("#%08X", background),
+                defaultTextSize = textSize
+            )
+            repository.updateNoteMetadata(updatedMetadataEntity)
+            
+            val updatedDomainMetadata = _uiState.value.noteMetadata.copy(
+                textSize = textSize,
+                colorHex = textColor,
+                background = String.format("#%08X", background),
+                defaultTextSize = textSize
+            )
+            
+            _uiState.update { 
+                it.copy(
+                    noteMetadata = updatedDomainMetadata,
+                    textStyle = it.textStyle.copy(color = textColor),
+                    drawColor = drawColor
+                ) 
+            }
         }
     }
 
