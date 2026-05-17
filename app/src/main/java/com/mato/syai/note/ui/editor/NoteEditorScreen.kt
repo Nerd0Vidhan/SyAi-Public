@@ -24,11 +24,13 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -218,7 +220,10 @@ fun NoteEditorScreen(
                 onToggleViewOnly = { viewModel.toggleViewOnly() },
                 onExportPdf = {viewModel.exportToPdf(context)},
                 onPageSettings = { showPageSettings = true },
-                onPagePreview = { parentNavController?.navigate("page_preview/$noteId") }
+                onPagePreview = { parentNavController?.navigate("page_preview/$noteId") },
+                onReorderLayer = { from, to ->
+                    viewModel.reorderLayers(state.currentPageIndex, from, to)
+                }
             )
         },
         containerColor = MaterialTheme.colorScheme.primary
@@ -509,7 +514,8 @@ fun EditorTopBar(
     onToggleViewOnly: () -> Unit,
     onExportPdf: () -> Unit,
     onPageSettings: () -> Unit,
-    onPagePreview: () -> Unit
+    onPagePreview: () -> Unit,
+    onReorderLayer: (Int, Int) -> Unit
 ) {
     TopAppBar(
         title = {
@@ -540,7 +546,17 @@ fun EditorTopBar(
         actions = {
             var menuExpanded by remember { mutableStateOf(false) }
             var layerMenuExpanded by remember { mutableStateOf(false) }
-            IconButton(onClick = { layerMenuExpanded = true }) {
+            var showLayerReorderSheet by remember { mutableStateOf(false) }
+
+            IconButton(
+                onClick = { layerMenuExpanded = true },
+                modifier = Modifier.pointerInput(Unit) {
+                    detectTapGestures(
+                        onLongPress = { showLayerReorderSheet = true },
+                        onTap = { layerMenuExpanded = true }
+                    )
+                }
+            ) {
                 Icon(Icons.Default.Layers, contentDescription = "Layers", tint = Color.White)
             }
             IconButton(onClick = onToggleViewOnly) {
@@ -576,11 +592,15 @@ fun EditorTopBar(
                                     onDelete = {
                                         onDeleteLayer(item.id)
                                         layerMenuExpanded = false
+                                    },
+                                    onClick = {
+                                        showLayerReorderSheet = true
+                                        layerMenuExpanded = false
                                     }
                                 )
                             },
                             onClick = {
-                                onSelectLayer(item.id)
+                                showLayerReorderSheet = true
                                 layerMenuExpanded = false
                             }
                         )
@@ -613,6 +633,19 @@ fun EditorTopBar(
                     onClick = {
                         menuExpanded = false
                         onExportPdf()
+                    }
+                )
+            }
+
+            if (showLayerReorderSheet) {
+                LayerReorderBottomSheet(
+                    currentPage = currentPage,
+                    selectedObjectId = selectedObjectId,
+                    onDismiss = { showLayerReorderSheet = false },
+                    onReorder = onReorderLayer,
+                    onSelect = {
+                        onSelectLayer(it)
+                        showLayerReorderSheet = false
                     }
                 )
             }
@@ -944,10 +977,13 @@ private fun OrbitPageFab(
 private fun LayerMenuRow(
     obj: NoteObject,
     isSelected: Boolean,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onClick: () -> Unit
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
@@ -2275,5 +2311,186 @@ private fun estimateFlowEntryHeightPoints(
             }
         }
         ObjectType.IMAGE, ObjectType.DRAWING, ObjectType.TEXT, ObjectType.CHECKLIST -> entry.bounds.height.coerceAtLeast(42f)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun LayerReorderBottomSheet(
+    currentPage: PageData?,
+    selectedObjectId: String?,
+    onDismiss: () -> Unit,
+    onReorder: (Int, Int) -> Unit,
+    onSelect: (String) -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState()
+    val scope = rememberCoroutineScope()
+    val layerItems = remember(currentPage) { 
+        currentPage?.renderableItems?.sortedByDescending { it.layer }.orEmpty() 
+    }
+
+    var draggedItemIndex by remember { mutableStateOf<Int?>(null) }
+    var dragOffset by remember { mutableStateOf(Offset.Zero) }
+    val listState = rememberLazyListState()
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.primary,
+        dragHandle = { BottomSheetDefaults.DragHandle(color = Color.White.copy(alpha = 0.5f)) }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 32.dp)
+        ) {
+            Text(
+                "Reorder Layers",
+                color = Color.White,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)
+            )
+
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 400.dp)
+                    .pointerInput(layerItems) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = { offset ->
+                                val item = listState.layoutInfo.visibleItemsInfo.firstOrNull {
+                                    offset.y >= it.offset && offset.y <= it.offset + it.size
+                                }
+                                if (item != null) {
+                                    draggedItemIndex = item.index
+                                }
+                            },
+                            onDrag = { change, dragAmount ->
+                                change.consume()
+                                dragOffset += Offset(0f, dragAmount.y)
+
+                                val currentDraggedIndex =
+                                    draggedItemIndex ?: return@detectDragGesturesAfterLongPress
+                                val draggedItemInfo =
+                                    listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == currentDraggedIndex }
+                                if (draggedItemInfo != null) {
+                                    val centerY =
+                                        draggedItemInfo.offset + (draggedItemInfo.size / 2f) + dragOffset.y
+                                    val targetItem = listState.layoutInfo.visibleItemsInfo.find {
+                                        centerY >= it.offset && centerY <= it.offset + it.size && it.index != currentDraggedIndex
+                                    }
+
+                                    if (targetItem != null) {
+                                        val oldPos = draggedItemInfo.offset.toFloat()
+                                        val newPos = targetItem.offset.toFloat()
+
+                                        // Reorder in UI state (Note: layers are sortedByDescending, so reorder mapping might be inverted if not careful)
+                                        // But here we reorder the list we derived.
+                                        onReorder(currentDraggedIndex, targetItem.index)
+                                        draggedItemIndex = targetItem.index
+                                        dragOffset += Offset(0f, oldPos - newPos)
+                                    }
+                                }
+                            },
+                            onDragEnd = {
+                                draggedItemIndex = null
+                                dragOffset = Offset.Zero
+                            },
+                            onDragCancel = {
+                                draggedItemIndex = null
+                                dragOffset = Offset.Zero
+                            }
+                        )
+                    }
+            ) {
+                itemsIndexed(layerItems, key = { _, item -> item.id }) { index, item ->
+                    val isDragged = index == draggedItemIndex
+                    val scale by animateFloatAsState(if (isDragged) 1.05f else 1f)
+                    
+                    LayerReorderItem(
+                        obj = item,
+                        isSelected = selectedObjectId == item.id,
+                        isDragged = isDragged,
+                        dragOffset = dragOffset.y,
+                        modifier = Modifier
+                            .animateItem()
+                            .graphicsLayer {
+                                scaleX = scale
+                                scaleY = scale
+                                if (isDragged) {
+                                    translationY = dragOffset.y
+                                }
+                            }
+                            .zIndex(if (isDragged) 10f else 1f),
+                        onSelect = { onSelect(item.id) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun LayerReorderItem(
+    obj: NoteObject,
+    isSelected: Boolean,
+    isDragged: Boolean,
+    dragOffset: Float,
+    modifier: Modifier = Modifier,
+    onSelect: () -> Unit
+) {
+    Surface(
+        onClick = onSelect,
+        color = if (isSelected) Color.White.copy(alpha = 0.15f) else Color.Transparent,
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = when (obj.type) {
+                    ObjectType.DRAWING -> Icons.Default.Brush
+                    ObjectType.IMAGE -> Icons.Default.Image
+                    ObjectType.TEXT -> Icons.Default.TextFields
+                    ObjectType.LIST -> Icons.Default.Checklist
+                    else -> Icons.Default.Category
+                },
+                contentDescription = null,
+                tint = AuraPurple,
+                modifier = Modifier.size(24.dp)
+            )
+            
+            Spacer(modifier = Modifier.width(16.dp))
+            
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = when (obj.type) {
+                        ObjectType.DRAWING -> "Drawing Layer"
+                        ObjectType.IMAGE -> "Image Layer"
+                        ObjectType.TEXT -> "Text Block"
+                        ObjectType.LIST -> "List Object"
+                        else -> "Object"
+                    },
+                    color = Color.White,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = "Layer ${obj.layer}",
+                    color = Color.White.copy(alpha = 0.6f),
+                    fontSize = 12.sp
+                )
+            }
+
+            Icon(
+                imageVector = Icons.Default.DragHandle,
+                contentDescription = "Reorder",
+                tint = Color.White.copy(alpha = 0.3f)
+            )
+        }
     }
 }
