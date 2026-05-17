@@ -1051,42 +1051,41 @@ class NoteEditorViewModel @Inject constructor(
         pageWidth: Float,
         pageHeight: Float
     ) {
-        val content = _uiState.value.content
-        val currentPage = content.pages.getOrNull(pageIndex) ?: return
-        val obj = currentPage.items.find { it.id == objectId } ?: return
-        val page = currentPage
+        mutateContent { content ->
+            val currentPage = content.pages.getOrNull(pageIndex) ?: return@mutateContent
+            val obj = currentPage.items.find { it.id == objectId } ?: return@mutateContent
+            val page = currentPage
 
-        val newX = obj.transform.x + deltaX
-        val newY = obj.transform.y + deltaY
+            val newX = obj.transform.x + deltaX
+            val newY = obj.transform.y + deltaY
 
-        // --- CROSS-PAGE LOGIC ---
+            // --- CROSS-PAGE LOGIC ---
 
-        // 1. Move to Previous Page
-        if (newY < -20f && pageIndex > 0) {
-            moveObjectToPage(fromPage = pageIndex, toPage = pageIndex - 1, objectId = objectId, newY = pageHeight + newY)
-            return
+            // 1. Move to Previous Page
+            if (newY < -20f && pageIndex > 0) {
+                moveObjectToPage(fromPage = pageIndex, toPage = pageIndex - 1, objectId = objectId, newY = pageHeight + newY)
+                return@mutateContent
+            }
+
+            // 2. Move to Next Page
+            if (newY > pageHeight + 20f && pageIndex < content.pages.lastIndex) {
+                moveObjectToPage(fromPage = pageIndex, toPage = pageIndex + 1, objectId = objectId, newY = newY - pageHeight)
+                return@mutateContent
+            }
+
+            // --- INTERNAL CLAMPING (if not switching pages) ---
+            val minX = page.pagePadding.startPoints
+            val maxX = (page.widthPoints - page.pagePadding.endPoints - obj.bounds.width).coerceAtLeast(minX)
+            val minY = page.pagePadding.topPoints
+            val maxY = (page.heightPoints - page.pagePadding.bottomPoints - obj.bounds.height).coerceAtLeast(minY)
+
+            obj.transform.x = newX.coerceIn(minX, maxX)
+            obj.transform.y = newY.coerceIn(minY, maxY)
+            currentPage.updateLinearEntry(
+                objectId = objectId,
+                transform = obj.transform.copy()
+            )
         }
-
-        // 2. Move to Next Page
-        if (newY > pageHeight + 20f && pageIndex < content.pages.lastIndex) {
-            moveObjectToPage(fromPage = pageIndex, toPage = pageIndex + 1, objectId = objectId, newY = newY - pageHeight)
-            return
-        }
-
-        // --- INTERNAL CLAMPING (if not switching pages) ---
-        val minX = page.pagePadding.startPoints
-        val maxX = (page.widthPoints - page.pagePadding.endPoints - obj.bounds.width).coerceAtLeast(minX)
-        val minY = page.pagePadding.topPoints
-        val maxY = (page.heightPoints - page.pagePadding.bottomPoints - obj.bounds.height).coerceAtLeast(minY)
-
-        obj.transform.x = newX.coerceIn(minX, maxX)
-        obj.transform.y = newY.coerceIn(minY, maxY)
-        currentPage.updateLinearEntry(
-            objectId = objectId,
-            transform = obj.transform.copy()
-        )
-
-        _uiState.update { it.copy(content = content) }
     }
 
     fun finalizeObjectMove() {
@@ -1161,23 +1160,22 @@ class NoteEditorViewModel @Inject constructor(
         pageWidth: Float,
         pageHeight: Float
     ) {
-        val content = _uiState.value.content
-        val page = content.pages[pageIndex]
-        val obj = page.items.find { it.id == objectId } ?: return
+        mutateContent { content ->
+            val page = content.pages.getOrNull(pageIndex) ?: return@mutateContent
+            val obj = page.items.find { it.id == objectId } ?: return@mutateContent
 
-        val maxWidth = (page.widthPoints - page.pagePadding.endPoints - obj.transform.x).coerceAtLeast(80f)
-        val maxHeight = (page.heightPoints - page.pagePadding.bottomPoints - obj.transform.y).coerceAtLeast(40f)
-        val newWidth = (obj.bounds.width + dx).coerceIn(80f, maxWidth)
-        val newHeight = (obj.bounds.height + dy).coerceIn(40f, maxHeight)
+            val maxWidth = (page.widthPoints - page.pagePadding.endPoints - obj.transform.x).coerceAtLeast(80f)
+            val maxHeight = (page.heightPoints - page.pagePadding.bottomPoints - obj.transform.y).coerceAtLeast(40f)
+            val newWidth = (obj.bounds.width + dx).coerceIn(80f, maxWidth)
+            val newHeight = (obj.bounds.height + dy).coerceIn(40f, maxHeight)
 
-        obj.bounds.width = newWidth
-        obj.bounds.height = newHeight
-        page.updateLinearEntry(
-            objectId = objectId,
-            bounds = obj.bounds.copy()
-        )
-
-        _uiState.update { it.copy(content = content) }
+            obj.bounds.width = newWidth
+            obj.bounds.height = newHeight
+            page.updateLinearEntry(
+                objectId = objectId,
+                bounds = obj.bounds.copy()
+            )
+        }
     }
 
     fun selectObjectsInRegion(pageIndex: Int, path: List<Point>) {
@@ -2260,6 +2258,28 @@ class NoteEditorViewModel @Inject constructor(
         scheduleAutoSave() // persistToDisk is already debounced
     }
 
+    fun reorderLayers(pageIndex: Int, fromIndex: Int, toIndex: Int) {
+        mutateContent { content ->
+            val page = content.pages.getOrNull(pageIndex) ?: return@mutateContent
+            // Get all items that have a layer (including NoteObjects and LinearContentEntry with objects)
+            // For simplicity, we reorder the renderableItems which are NoteObjects.
+            val items = page.renderableItems.sortedByDescending { it.layer }.toMutableList()
+            
+            if (fromIndex !in items.indices || toIndex !in items.indices || fromIndex == toIndex) return@mutateContent
+
+            val movedItem = items.removeAt(fromIndex)
+            items.add(toIndex, movedItem)
+
+            // Reassign layers in descending order: index 0 gets highest layer
+            val total = items.size
+            items.forEachIndexed { index, obj ->
+                obj.layer = total - index
+            }
+
+            normalizePageLayers(page)
+        }
+    }
+
     fun mergeListWithPreviousBlock(pageIndex: Int, listObjectId: String, itemToMerge: ListItem) {
         mutateContent { content ->
             val page = content.pages.getOrNull(pageIndex) ?: return@mutateContent
@@ -2592,6 +2612,7 @@ class NoteEditorViewModel @Inject constructor(
                 val payload = page.items.find { it.id == entry.objectId }?.payload as? ListPayload
                 if (payload != null) estimateListHeight(payload, contentWidth) else entry.bounds.height.coerceAtLeast(42f)
             }
+            ObjectType.DRAWING -> 0f // Drawings are free-form and stacked; they shouldn't push content or cause page breaks
             else -> entry.bounds.height.coerceAtLeast(42f)
         }
     }
