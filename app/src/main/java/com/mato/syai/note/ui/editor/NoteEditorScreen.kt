@@ -92,9 +92,26 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlin.math.roundToInt
+import java.io.File
 
 private val SecondaryCream = Color(0xFFF8E0C3)
 val AuraPurple = Color(0xFF3F2A7A)
+
+private fun getLocalImageModel(context: Context, uriString: String?): Any? {
+    if (uriString == null) return null
+    if (uriString.startsWith("file:///")) {
+        val fileName = uriString.substringAfterLast("/")
+        val file = if (uriString.contains("/generated-images/")) {
+            File(File(context.filesDir, "generated-images"), fileName)
+        } else {
+            File(context.filesDir, fileName)
+        }
+        if (file.exists()) {
+            return file
+        }
+    }
+    return uriString
+}
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
@@ -1005,8 +1022,10 @@ private fun LayerMenuRow(
         ) {
             when (val payload = obj.payload) {
                 is ImagePayload -> {
+                    val context = LocalContext.current
+                    val imageModel = remember(payload.uri) { getLocalImageModel(context, payload.uri) }
                     AsyncImage(
-                        model = payload.uri,
+                        model = imageModel,
                         contentDescription = null,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
@@ -1309,39 +1328,7 @@ fun NotePage(
         if (viewport.scale > 1.01f) {
             ZoomedPageOverlay()
         }
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            page.renderableItems
-                .filter { it.type == ObjectType.DRAWING }
-                .sortedBy { it.layer }
-                .forEach { obj ->
-                    val payload = obj.payload as? DrawingPayload ?: return@forEach
-                    payload.strokes.forEach { stroke ->
-                        if (stroke.points.size >= 2) {
-                            for (i in 0 until stroke.points.lastIndex) {
-                                drawLine(
-                                    color = when (stroke.brushStyle) {
-                                        BrushStyle.PENCIL -> Color(stroke.color).copy(alpha = 0.65f)
-                                        BrushStyle.MARKER -> Color(stroke.color).copy(alpha = 0.9f)
-                                        BrushStyle.HIGHLIGHTER -> Color(stroke.color).copy(alpha = 0.35f)
-                                        BrushStyle.PEN -> Color(stroke.color)
-                                        BrushStyle.ERASER -> Color(stroke.color)
-                                    },
-                                    start = Offset(stroke.points[i].x * pageScaleX, stroke.points[i].y * pageScaleY),
-                                    end = Offset(stroke.points[i + 1].x * pageScaleX, stroke.points[i + 1].y * pageScaleY),
-                                    strokeWidth = when (stroke.brushStyle) {
-                                        BrushStyle.PENCIL -> stroke.width * pageScaleX * 0.8f
-                                        BrushStyle.MARKER -> stroke.width * pageScaleX * 1.2f
-                                        BrushStyle.HIGHLIGHTER -> stroke.width * pageScaleX * 1.5f
-                                        BrushStyle.PEN -> stroke.width * pageScaleX
-                                        BrushStyle.ERASER -> stroke.width * pageScaleX
-                                    },
-                                    cap = StrokeCap.Round
-                                )
-                            }
-                        }
-                    }
-                }
-        }
+        // Drawings will be rendered inline in the renderableItems loop to respect Z-index relative to other objects.
 
         Column(
             modifier = Modifier
@@ -1514,21 +1501,61 @@ fun NotePage(
                 obj.type == ObjectType.LIST &&
                     page.linearContent.any { it.objectId == obj.id && it.type == ObjectType.LIST }
             }
-            .sortedBy { it.layer }
+            .sortedBy { obj ->
+                page.linearContent.find { it.objectId == obj.id }?.layer ?: obj.layer
+            }
             .forEach { obj ->
-                RenderObject(
-                    pageIndex = pageIndex,
-                    obj = obj,
-                    isSelected = state.selectedObjectId == obj.id,
-                    activeTool = state.activeTool,
-                    isViewOnly = state.isViewOnly,
-                    viewModel = viewModel,
-                    onAnyInteraction = onAnyInteraction,
-                    pageWidth = pageWidthPx.toFloat(),
-                    pageHeight = pageHeightPx.toFloat(),
-                    pageScaleX = pageScaleX,
-                    pageScaleY = pageScaleY
-                )
+                if (obj.type == ObjectType.DRAWING) {
+                    val effectiveLayer = page.linearContent.find { it.objectId == obj.id }?.layer ?: obj.layer
+                    Canvas(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .zIndex(effectiveLayer.toFloat())
+                    ) {
+                        val payload = obj.payload as? DrawingPayload ?: return@Canvas
+                        payload.strokes.forEach { stroke ->
+                            if (stroke.points.size >= 2) {
+                                for (i in 0 until stroke.points.lastIndex) {
+                                    drawLine(
+                                        color = when (stroke.brushStyle) {
+                                            BrushStyle.PENCIL -> Color(stroke.color).copy(alpha = 0.65f)
+                                            BrushStyle.MARKER -> Color(stroke.color).copy(alpha = 0.9f)
+                                            BrushStyle.HIGHLIGHTER -> Color(stroke.color).copy(alpha = 0.35f)
+                                            BrushStyle.PEN -> Color(stroke.color)
+                                            BrushStyle.ERASER -> Color(stroke.color)
+                                        },
+                                        start = Offset(stroke.points[i].x * pageScaleX, stroke.points[i].y * pageScaleY),
+                                        end = Offset(stroke.points[i + 1].x * pageScaleX, stroke.points[i + 1].y * pageScaleY),
+                                        strokeWidth = when (stroke.brushStyle) {
+                                            BrushStyle.PENCIL -> stroke.width * pageScaleX * 0.8f
+                                            BrushStyle.MARKER -> stroke.width * pageScaleX * 1.2f
+                                            BrushStyle.HIGHLIGHTER -> stroke.width * pageScaleX * 1.5f
+                                            BrushStyle.PEN -> stroke.width * pageScaleX
+                                            BrushStyle.ERASER -> stroke.width * pageScaleX
+                                        },
+                                        cap = StrokeCap.Round
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    val effectiveLayer = page.linearContent.find { it.objectId == obj.id }?.layer ?: obj.layer
+                    RenderObject(
+                        pageIndex = pageIndex,
+                        obj = obj,
+                        effectiveLayer = effectiveLayer,
+                        isSelected = state.selectedObjectId == obj.id,
+                        activeTool = state.activeTool,
+                        isViewOnly = state.isViewOnly,
+                        viewModel = viewModel,
+                        onAnyInteraction = onAnyInteraction,
+                        pageWidth = pageWidthPx.toFloat(),
+                        pageHeight = pageHeightPx.toFloat(),
+                        pageScaleX = pageScaleX,
+                        pageScaleY = pageScaleY
+                    )
+                }
             }
 
         // Layer 2 - Live drawing (moved to top to intercept touches)
@@ -1653,6 +1680,7 @@ fun DrawingCanvas(
 fun RenderObject(
     pageIndex: Int,
     obj: NoteObject,
+    effectiveLayer: Int,
     isSelected: Boolean,
     activeTool: ActiveTool,
     isViewOnly: Boolean,
@@ -1682,7 +1710,7 @@ fun RenderObject(
             .width(frameWidthDp)
             .height(frameHeightDp)
             .clip(RoundedCornerShape(12.dp))
-            .zIndex(obj.layer.toFloat())
+            .zIndex(effectiveLayer.toFloat())
 
             // 🔥 DRAG SYSTEM
             .pointerInput(isDraggable) {
@@ -1803,9 +1831,11 @@ fun RenderObject(
 
             ObjectType.IMAGE -> {
                 val payload = obj.payload as? ImagePayload
+                val context = LocalContext.current
+                val imageModel = remember(payload?.uri) { getLocalImageModel(context, payload?.uri) }
 
                 AsyncImage(
-                    model = payload?.uri,
+                    model = imageModel,
                     contentDescription = null,
                     modifier = Modifier
                         .fillMaxSize()
@@ -2336,6 +2366,8 @@ fun LayerReorderBottomSheet(
         }.orEmpty() 
     }
 
+    val currentOnReorder by rememberUpdatedState(onReorder)
+
     var draggedItemIndex by remember { mutableStateOf<Int?>(null) }
     var dragOffset by remember { mutableStateOf(Offset.Zero) }
     val listState = rememberLazyListState()
@@ -2364,7 +2396,7 @@ fun LayerReorderBottomSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(max = 400.dp)
-                    .pointerInput(layerItems) {
+                    .pointerInput(Unit) {
                         detectDragGesturesAfterLongPress(
                             onDragStart = { offset ->
                                 val item = listState.layoutInfo.visibleItemsInfo.firstOrNull {
@@ -2395,7 +2427,7 @@ fun LayerReorderBottomSheet(
 
                                         // Reorder in UI state (Note: layers are sortedByDescending, so reorder mapping might be inverted if not careful)
                                         // But here we reorder the list we derived.
-                                        onReorder(currentDraggedIndex, targetItem.index)
+                                        currentOnReorder(currentDraggedIndex, targetItem.index)
                                         draggedItemIndex = targetItem.index
                                         dragOffset += Offset(0f, oldPos - newPos)
                                     }
@@ -2470,8 +2502,10 @@ fun LayerReorderItem(
             ) {
                 when (val payload = obj.payload) {
                     is ImagePayload -> {
+                        val context = LocalContext.current
+                        val imageModel = remember(payload.uri) { getLocalImageModel(context, payload.uri) }
                         AsyncImage(
-                            model = payload.uri,
+                            model = imageModel,
                             contentDescription = null,
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop
