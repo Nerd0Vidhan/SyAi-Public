@@ -2261,9 +2261,10 @@ class NoteEditorViewModel @Inject constructor(
     fun reorderLayers(pageIndex: Int, fromIndex: Int, toIndex: Int) {
         mutateContent { content ->
             val page = content.pages.getOrNull(pageIndex) ?: return@mutateContent
-            // Get all items that have a layer (including NoteObjects and LinearContentEntry with objects)
-            // For simplicity, we reorder the renderableItems which are NoteObjects.
-            val items = page.renderableItems.sortedByDescending { it.layer }.toMutableList()
+            // Get all items sorted by their effective layer (which determines actual visual layering)
+            val items = page.renderableItems.sortedByDescending { obj ->
+                page.linearContent.find { it.objectId == obj.id }?.layer ?: obj.layer
+            }.toMutableList()
             
             if (fromIndex !in items.indices || toIndex !in items.indices || fromIndex == toIndex) return@mutateContent
 
@@ -2273,7 +2274,14 @@ class NoteEditorViewModel @Inject constructor(
             // Reassign layers in descending order: index 0 gets highest layer
             val total = items.size
             items.forEachIndexed { index, obj ->
-                obj.layer = total - index
+                val newLayer = total - index
+                obj.layer = newLayer
+                
+                // Also update the layer in linearContent if it is a linear item
+                val linearEntryIndex = page.linearContent.indexOfFirst { it.objectId == obj.id }
+                if (linearEntryIndex >= 0) {
+                    page.linearContent[linearEntryIndex] = page.linearContent[linearEntryIndex].copy(layer = newLayer)
+                }
             }
 
             normalizePageLayers(page)
@@ -2707,36 +2715,48 @@ class NoteEditorViewModel @Inject constructor(
     }
 
     private fun normalizePageLayers(page: PageData) {
-        val sortedEntries = page.linearContent.sortedBy { it.layer }
-        val normalizedEntries = mutableListOf<LinearContentEntry>()
-
-        sortedEntries.forEachIndexed { index, entry ->
-            val normalizedLayer =
-                if (entry.type == ObjectType.LINEAR_TEXT &&
-                    entry.objectId == null &&
-                    normalizedEntries.none { it.type == ObjectType.LINEAR_TEXT && it.objectId == null }
-                ) 0 else maxOf(1, index)
-
-            normalizedEntries.add(entry.copy(layer = normalizedLayer))
-        }
-
-        page.linearContent = normalizedEntries.toMutableList()
-
         val referencedIds = page.linearContent.mapNotNull { it.objectId }.toSet()
+        
+        class LayerHolder(
+            val linearEntry: LinearContentEntry?,
+            val noteObject: NoteObject?,
+            val currentLayer: Int
+        )
+        
+        val holders = mutableListOf<LayerHolder>()
+        
         page.linearContent.forEach { entry ->
-            entry.objectId?.let { objectId ->
-                page.items.find { it.id == objectId }?.layer = entry.layer
+            val obj = entry.objectId?.let { id -> page.items.find { it.id == id } }
+            holders.add(LayerHolder(entry, obj, entry.layer))
+        }
+        
+        page.items.filter { it.id !in referencedIds }.forEach { obj ->
+            holders.add(LayerHolder(null, obj, obj.layer))
+        }
+        
+        holders.sortBy { it.currentLayer }
+        
+        var nextLayer = 0
+        holders.forEach { holder ->
+            val assignedLayer = if (holder.linearEntry?.type == ObjectType.LINEAR_TEXT && holder.linearEntry.objectId == null && nextLayer == 0) {
+                0
+            } else {
+                if (nextLayer == 0) nextLayer = 1
+                nextLayer++
+            }
+            
+            if (holder.linearEntry != null) {
+                val index = page.linearContent.indexOf(holder.linearEntry)
+                if (index >= 0) {
+                    page.linearContent[index] = holder.linearEntry.copy(layer = assignedLayer)
+                }
+            }
+            
+            if (holder.noteObject != null) {
+                holder.noteObject.layer = assignedLayer
             }
         }
-
-        var nextLayer = (page.linearContent.maxOfOrNull { it.layer } ?: 0) + 1
-        page.items
-            .filter { it.id !in referencedIds }
-            .sortedBy { it.layer }
-            .forEach { item ->
-                item.layer = nextLayer++
-            }
-
+        
         page.refreshLinearTextPaste()
     }
 

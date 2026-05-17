@@ -576,7 +576,9 @@ fun EditorTopBar(
                     .background(MaterialTheme.colorScheme.primary)
                     .border(1.dp, Color.White.copy(0.1f))
             ) {
-                val layerItems = currentPage?.renderableItems?.sortedByDescending { it.layer }.orEmpty()
+                val layerItems = currentPage?.renderableItems?.sortedByDescending { obj ->
+                    currentPage.linearContent.find { it.objectId == obj.id }?.layer ?: obj.layer
+                }.orEmpty()
                 if (layerItems.isEmpty()) {
                     DropdownMenuItem(
                         text = { Text("No layers", color = Color.White) },
@@ -586,8 +588,10 @@ fun EditorTopBar(
                     layerItems.forEach { item ->
                         DropdownMenuItem(
                             text = {
+                                val effectiveLayer = currentPage?.linearContent?.find { it.objectId == item.id }?.layer ?: item.layer
                                 LayerMenuRow(
                                     obj = item,
+                                    effectiveLayer = effectiveLayer,
                                     isSelected = selectedObjectId == item.id,
                                     onDelete = {
                                         onDeleteLayer(item.id)
@@ -976,6 +980,7 @@ private fun OrbitPageFab(
 @Composable
 private fun LayerMenuRow(
     obj: NoteObject,
+    effectiveLayer: Int,
     isSelected: Boolean,
     onDelete: () -> Unit,
     onClick: () -> Unit
@@ -1029,7 +1034,7 @@ private fun LayerMenuRow(
             }
         }
         Text(
-            text = "Layer ${obj.layer}",
+            text = "Layer $effectiveLayer",
             color = Color.White,
             modifier = Modifier.weight(1f)
         )
@@ -2326,7 +2331,9 @@ fun LayerReorderBottomSheet(
     val sheetState = rememberModalBottomSheetState()
     val scope = rememberCoroutineScope()
     val layerItems = remember(currentPage) { 
-        currentPage?.renderableItems?.sortedByDescending { it.layer }.orEmpty() 
+        currentPage?.renderableItems?.sortedByDescending { obj ->
+            currentPage.linearContent.find { it.objectId == obj.id }?.layer ?: obj.layer
+        }.orEmpty() 
     }
 
     var draggedItemIndex by remember { mutableStateOf<Int?>(null) }
@@ -2409,8 +2416,10 @@ fun LayerReorderBottomSheet(
                     val isDragged = index == draggedItemIndex
                     val scale by animateFloatAsState(if (isDragged) 1.05f else 1f)
                     
+                    val effectiveLayer = currentPage?.linearContent?.find { it.objectId == item.id }?.layer ?: item.layer
                     LayerReorderItem(
                         obj = item,
+                        effectiveLayer = effectiveLayer,
                         isSelected = selectedObjectId == item.id,
                         isDragged = isDragged,
                         dragOffset = dragOffset.y,
@@ -2435,6 +2444,7 @@ fun LayerReorderBottomSheet(
 @Composable
 fun LayerReorderItem(
     obj: NoteObject,
+    effectiveLayer: Int,
     isSelected: Boolean,
     isDragged: Boolean,
     dragOffset: Float,
@@ -2451,18 +2461,43 @@ fun LayerReorderItem(
                 .padding(horizontal = 20.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = when (obj.type) {
-                    ObjectType.DRAWING -> Icons.Default.Brush
-                    ObjectType.IMAGE -> Icons.Default.Image
-                    ObjectType.TEXT -> Icons.Default.TextFields
-                    ObjectType.LIST -> Icons.Default.Checklist
-                    else -> Icons.Default.Category
-                },
-                contentDescription = null,
-                tint = AuraPurple,
-                modifier = Modifier.size(24.dp)
-            )
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color.White.copy(alpha = 0.08f)),
+                contentAlignment = Alignment.Center
+            ) {
+                when (val payload = obj.payload) {
+                    is ImagePayload -> {
+                        AsyncImage(
+                            model = payload.uri,
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
+                    is DrawingPayload -> {
+                        MiniDrawingThumbnail(payload = payload, modifier = Modifier
+                            .fillMaxSize()
+                            .padding(2.dp))
+                    }
+                    else -> {
+                        Icon(
+                            imageVector = when (obj.type) {
+                                ObjectType.TEXT -> Icons.Default.TextFields
+                                ObjectType.IMAGE -> Icons.Default.Image
+                                ObjectType.DRAWING -> Icons.Default.Brush
+                                ObjectType.LIST -> Icons.Default.Checklist
+                                ObjectType.CHECKLIST -> Icons.Default.CheckBox
+                                ObjectType.LINEAR_TEXT -> Icons.Default.EditNote
+                            },
+                            contentDescription = null,
+                            tint = Color.White
+                        )
+                    }
+                }
+            }
             
             Spacer(modifier = Modifier.width(16.dp))
             
@@ -2480,7 +2515,7 @@ fun LayerReorderItem(
                     fontWeight = FontWeight.Medium
                 )
                 Text(
-                    text = "Layer ${obj.layer}",
+                    text = "Layer $effectiveLayer",
                     color = Color.White.copy(alpha = 0.6f),
                     fontSize = 12.sp
                 )
