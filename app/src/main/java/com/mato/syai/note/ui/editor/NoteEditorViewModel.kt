@@ -2803,6 +2803,7 @@ class NoteEditorViewModel @Inject constructor(
                     try {
                         applyAIObjects(pageIndex, org.json.JSONObject(opsJson))
                         generatePagePreview(pageSnapshot.pageId, context)
+                        persistToDisk()
                     } catch (e: Exception) {
                         e.printStackTrace()
                     }
@@ -2811,7 +2812,7 @@ class NoteEditorViewModel @Inject constructor(
 
             AIOptimizerOrchestrator.onVerifyRequested = {
                 viewModelScope.launch(Dispatchers.Default) {
-                    val freshContent = repository.loadNoteContent(_uiState.value.noteId)
+                    val freshContent = _uiState.value.content
                     val freshPage = freshContent.pages.getOrNull(pageIndex)
                     if (freshPage != null) {
                         val exporterInstance = PdfExporter(context)
@@ -2824,6 +2825,19 @@ class NoteEditorViewModel @Inject constructor(
                             )
                             AIOptimizerOrchestrator.sendVisualFeedback(bitmap, freshPageMap)
                         }
+                    }
+                }
+            }
+
+            AIOptimizerOrchestrator.onSessionFinished = { msg, onComplete ->
+                viewModelScope.launch(Dispatchers.IO) {
+                    try {
+                        repository.saveNoteContent(_uiState.value.noteId, _uiState.value.content)
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                    withContext(Dispatchers.Main) {
+                        onComplete()
                     }
                 }
             }

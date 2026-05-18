@@ -39,6 +39,8 @@ object AIOptimizerOrchestrator {
     var onOperationsReceived: ((String) -> Unit)? = null
     // Callback to trigger capturing page bitmap
     var onVerifyRequested: (() -> Unit)? = null
+    // Callback when session is finished to trigger save before closing
+    var onSessionFinished: ((String, () -> Unit) -> Unit)? = null
 
     fun startSession(
         context: Context,
@@ -112,7 +114,25 @@ object AIOptimizerOrchestrator {
                         "FINISHED" -> {
                             val msg = map["message"] as? String ?: "Visual optimization complete!"
                             _state.value = AIState.Success(msg)
-                            stopSession(context, msg)
+                            
+                            val onFinishedCallback = onSessionFinished
+                            if (onFinishedCallback != null) {
+                                onFinishedCallback.invoke(msg) {
+                                    try {
+                                        webSocket.send(gson.toJson(mapOf("type" to "ACK_FINISHED")))
+                                    } catch (e: Exception) {
+                                        e.printStackTrace()
+                                    }
+                                    stopSession(context, msg)
+                                }
+                            } else {
+                                try {
+                                    webSocket.send(gson.toJson(mapOf("type" to "ACK_FINISHED")))
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                }
+                                stopSession(context, msg)
+                            }
                         }
                         "ERROR" -> {
                             val msg = map["message"] as? String ?: "AI generation error occurred"
