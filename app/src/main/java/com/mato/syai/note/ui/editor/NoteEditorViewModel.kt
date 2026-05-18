@@ -46,12 +46,16 @@ import com.mato.syai.note.ai.image.ImageGenerationEvent
 import com.mato.syai.note.ai.image.ImageGenerationEventBus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.tasks.await
+import com.mato.syai.note.ai.AIOptimizerOrchestrator
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.RequestBody.Companion.asRequestBody
 
 @HiltViewModel
 class NoteEditorViewModel @Inject constructor(
     private val repository: NoteRepository,
     private val localImageGeneratorRepository: LocalImageGeneratorRepository,
     private val eventBus: ImageGenerationEventBus,
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context,
     gson: Gson
 ) : ViewModel() {
 
@@ -2777,6 +2781,120 @@ class NoteEditorViewModel @Inject constructor(
         _pagePreviews.update { emptyMap() }
         _uiState.value.content.pages.forEach { page ->
             generatePagePreview(page.pageId, context)
+        }
+    }
+
+    val aiOptimizerState = AIOptimizerOrchestrator.state
+
+    fun startAIOptimization(pageIndex: Int, prompt: String, attachedImages: List<String>) {
+        viewModelScope.launch {
+            val contentSnapshot = _uiState.value.content
+            val pageSnapshot = contentSnapshot.pages.getOrNull(pageIndex) ?: return@launch
+            val serverBaseUrl = localImageGeneratorRepository.fixedBaseUrl()
+
+            val pageJson = gson.toJson(pageSnapshot)
+            val pageMap = gson.fromJson<Map<String, Any>>(
+                pageJson,
+                object : com.google.gson.reflect.TypeToken<Map<String, Any>>() {}.type
+            )
+
+            AIOptimizerOrchestrator.onOperationsReceived = { opsJson ->
+                viewModelScope.launch(Dispatchers.Main) {
+                    try {
+                        applyAIObjects(pageIndex, org.json.JSONObject(opsJson))
+                        generatePagePreview(pageSnapshot.pageId, context)
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+            }
+
+            AIOptimizerOrchestrator.onVerifyRequested = {
+                viewModelScope.launch(Dispatchers.Default) {
+                    val freshContent = repository.loadNoteContent(_uiState.value.noteId)
+                    val freshPage = freshContent.pages.getOrNull(pageIndex)
+                    if (freshPage != null) {
+                        val exporterInstance = PdfExporter(context)
+                        val bitmap = exporterInstance.renderPageToBitmap(freshPage)
+                        if (bitmap != null) {
+                            val freshPageJson = gson.toJson(freshPage)
+                            val freshPageMap = gson.fromJson<Map<String, Any>>(
+                                freshPageJson,
+                                object : com.google.gson.reflect.TypeToken<Map<String, Any>>() {}.type
+                            )
+                            AIOptimizerOrchestrator.sendVisualFeedback(bitmap, freshPageMap)
+                        }
+                    }
+                }
+            }
+
+            AIOptimizerOrchestrator.startSession(
+                context = context,
+                serverBaseUrl = serverBaseUrl,
+                prompt = prompt,
+                attachedImages = attachedImages,
+                pageData = pageMap
+            )
+        }
+    }
+
+    fun stopAIOptimization() {
+        AIOptimizerOrchestrator.stopSession(context)
+    }
+
+    fun transcribeSpeech(audioFile: File, onComplete: (String) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val client = okhttp3.OkHttpClient()
+                val mediaType = "audio/wav".toMediaTypeOrNull()
+                val requestBody = okhttp3.MultipartBody.Builder()
+                    .setType(okhttp3.MultipartBody.FORM)
+                    .addFormDataPart("audio", audioFile.name, audioFile.asRequestBody(mediaType))
+                    .build()
+                
+                val baseUrl = localImageGeneratorRepository.fixedBaseUrl().removeSuffix("/")
+                val request = okhttp3.Request.Builder()
+                    .url("$baseUrl/api/v1/ai/transcribe")
+                    .post(requestBody)
+                    .build()
+
+                val response = client.newCall(request).execute()
+                if (response.isSuccessful) {
+                    val json = org.json.JSONObject(response.body?.string().orEmpty())
+                    val text = json.optString("text", "")
+                    withContext(Dispatchers.Main) {
+                        onComplete(text)
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        onComplete("")
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                withContext(Dispatchers.Main) {
+                    onComplete("")
+                }
+            }
+        }
+    }
+
+    fun markAIUpdateSeen(updateId: String) {
+        viewModelScope.launch {
+            repository.insertOrUpdateAIUpdate(
+                com.mato.syai.note.data.local.database.AIUpdateEntity(
+                    updateId = updateId,
+                    noteId = _uiState.value.noteId,
+                    isSeen = true
+                )
+            )
+        }
+    }
+
+    fun checkIsAIUpdateSeen(updateId: String, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val seen = repository.isAIUpdateSeen(updateId)
+            onResult(seen)
         }
     }
 }

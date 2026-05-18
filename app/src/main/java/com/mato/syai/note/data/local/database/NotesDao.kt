@@ -78,4 +78,10 @@ interface NoteDao {
 
     @Query("DELETE FROM saved_colors WHERE id NOT IN (SELECT id FROM saved_colors ORDER BY timestamp DESC LIMIT 15)")
     suspend fun deleteOldSavedColors()
+
+    @Query("SELECT isSeen FROM ai_seen_updates WHERE updateId = :updateId LIMIT 1")
+    suspend fun isAIUpdateSeen(updateId: String): Boolean?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertOrUpdateAIUpdate(aiUpdate: AIUpdateEntity)
 }

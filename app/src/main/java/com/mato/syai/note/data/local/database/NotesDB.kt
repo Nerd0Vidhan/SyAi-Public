@@ -53,3 +53,10 @@ data class SavedColorEntity(
     val colorHex: Int,
     val timestamp: Long = System.currentTimeMillis()
 )
+
+@Entity(tableName = "ai_seen_updates")
+data class AIUpdateEntity(
+    @PrimaryKey val updateId: String,
+    val noteId: Long,
+    val isSeen: Boolean = false
+)

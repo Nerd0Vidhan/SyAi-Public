@@ -292,4 +292,12 @@ class NoteRepository @Inject constructor(
     suspend fun deleteSavedColor(id: Long) = withContext(Dispatchers.IO) {
         dao.deleteSavedColorById(id)
     }
+
+    suspend fun isAIUpdateSeen(updateId: String): Boolean = withContext(Dispatchers.IO) {
+        dao.isAIUpdateSeen(updateId) ?: false
+    }
+
+    suspend fun insertOrUpdateAIUpdate(aiUpdate: AIUpdateEntity) = withContext(Dispatchers.IO) {
+        dao.insertOrUpdateAIUpdate(aiUpdate)
+    }
 }

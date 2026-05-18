@@ -1,43 +1,60 @@
 package com.mato.syai.note.ui.editor
 
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.Arrangement.Absolute.spacedBy
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
-
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import com.mato.syai.note.ai.AudioRecorder
 import com.mato.syai.note.utils.OutlinedTextFieldStyled
+import java.io.File
 
 @Composable
 fun AIToolSheet(
     onGenerate: (String) -> Unit,
-    onGenerateImage: (String) -> Unit
+    onGenerateImage: (String) -> Unit,
+    onTranscribe: (File, (String) -> Unit) -> Unit
 ) {
+    val context = LocalContext.current
     var text by remember { mutableStateOf("") }
     var selectedTabIndex by remember { mutableStateOf(0) }
-    val tabs = listOf("AI Text/Drawing", "Image Generation")
+    val tabs = listOf("AI Auto Stream (Local)", "Local Image Gen")
+
+    var isRecording by remember { mutableStateOf(false) }
+    var isTranscribing by remember { mutableStateOf(false) }
+    val audioRecorder = remember { AudioRecorder(context) }
+    var recordedFile by remember { mutableStateOf<File?>(null) }
 
     Column(
-        modifier = Modifier.padding(16.dp),
-        verticalArrangement = spacedBy(12.dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(24.dp),
+        verticalArrangement = spacedBy(16.dp)
     ) {
-        Text("Ask AI", color = Color.White)
+        Text(
+            "Ask local AI Stack",
+            color = Color.White,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold
+        )
         
         TabRow(
             selectedTabIndex = selectedTabIndex,
@@ -48,7 +65,7 @@ fun AIToolSheet(
                 Tab(
                     selected = selectedTabIndex == index,
                     onClick = { selectedTabIndex = index },
-                    text = { Text(title, color = Color.White) }
+                    text = { Text(title, color = Color.White, fontWeight = FontWeight.SemiBold) }
                 )
             }
         }
@@ -57,7 +74,26 @@ fun AIToolSheet(
             value = text,
             onValueChange = { text = it },
             keyboardType = KeyboardType.Unspecified,
-            placeholder = "Your Imagination ..."
+            placeholder = "Describe your desired note design or visual contents...",
+            suffix = {
+                IconButton(
+                    onClick = {
+                        try {
+                            val file = audioRecorder.startRecording()
+                            recordedFile = file
+                            isRecording = true
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Mic,
+                        contentDescription = "Voice Input",
+                        tint = MaterialTheme.colorScheme.primaryContainer
+                    )
+                }
+            }
         )
 
         Button(
@@ -68,9 +104,130 @@ fun AIToolSheet(
                     onGenerateImage(text)
                 }
             },
-            modifier = Modifier.fillMaxWidth()
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            ),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth().height(48.dp)
         ) {
-            Text(if (selectedTabIndex == 0) "Generate" else "Generate Image")
+            Text(
+                if (selectedTabIndex == 0) "Continuous Stream Optimization" else "Generate Stable Diffusion Image",
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+
+    if (isRecording) {
+        Dialog(onDismissRequest = { isRecording = false }) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E))
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = spacedBy(16.dp)
+                ) {
+                    Text(
+                        "Listening...",
+                        color = Color.White,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "Speak now to transcribe with local Whisper model.",
+                        color = Color.LightGray,
+                        fontSize = 14.sp
+                    )
+
+                    // Blinking microphone pulse animation
+                    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+                    val scale by infiniteTransition.animateFloat(
+                        initialValue = 1f,
+                        targetValue = 1.3f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(800, easing = LinearEasing),
+                            repeatMode = RepeatMode.Reverse
+                        ),
+                        label = "scale"
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .size(80.dp)
+                            .scale(scale)
+                            .clip(CircleShape)
+                            .background(
+                                Brush.radialGradient(
+                                    colors = listOf(Color(0xFFFF5252), Color(0xFFD32F2F))
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Mic,
+                            contentDescription = "Recording",
+                            tint = Color.White,
+                            modifier = Modifier.size(36.dp)
+                        )
+                    }
+
+                    Button(
+                        onClick = {
+                            isRecording = false
+                            isTranscribing = true
+                            val file = audioRecorder.stopRecording()
+                            if (file != null) {
+                                onTranscribe(file) { result ->
+                                    isTranscribing = false
+                                    if (result.isNotEmpty()) {
+                                        text = result
+                                    }
+                                }
+                            } else {
+                                isTranscribing = false
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Red),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                    ) {
+                        Icon(Icons.Filled.Stop, contentDescription = "Stop", tint = Color.White)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Stop & Transcribe", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+
+    if (isTranscribing) {
+        Dialog(onDismissRequest = {}) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E))
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = spacedBy(16.dp)
+                ) {
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primaryContainer)
+                    Text(
+                        "Processing voice input...",
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
         }
     }
 }

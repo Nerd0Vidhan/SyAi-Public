@@ -13,6 +13,10 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -222,6 +226,8 @@ fun NoteEditorScreen(
 
     Scaffold(
         topBar = {
+            val aiState by viewModel.aiOptimizerState.collectAsState()
+            val isAiRunning = aiState is com.mato.syai.note.ai.AIState.Loading || aiState is com.mato.syai.note.ai.AIState.EnhancedPrompt
             EditorTopBar(
                 titleField = titleField,
                 onTitleChange = {
@@ -240,7 +246,9 @@ fun NoteEditorScreen(
                 onPagePreview = { parentNavController?.navigate("page_preview/$noteId") },
                 onReorderLayer = { from, to ->
                     viewModel.reorderLayers(state.currentPageIndex, from, to)
-                }
+                },
+                isAiRunning = isAiRunning,
+                onCancelAi = { viewModel.stopAIOptimization() }
             )
         },
         containerColor = MaterialTheme.colorScheme.primary
@@ -499,9 +507,10 @@ fun NoteEditorScreen(
             GlassEffect{
                 AIToolSheet(
                     onGenerate = { prompt ->
-                        viewModel.generateAIContent(
+                        viewModel.startAIOptimization(
                             state.currentPageIndex,
-                            prompt
+                            prompt,
+                            emptyList()
                         )
                         showAI = false
                         viewModel.setTool(ActiveTool.SELECT)
@@ -510,6 +519,9 @@ fun NoteEditorScreen(
                         viewModel.requestAiImageGeneration(prompt)
                         showAI = false
                         viewModel.setTool(ActiveTool.SELECT)
+                    },
+                    onTranscribe = { audioFile, onComplete ->
+                        viewModel.transcribeSpeech(audioFile, onComplete)
                     }
                 )
             }
@@ -532,7 +544,9 @@ fun EditorTopBar(
     onExportPdf: () -> Unit,
     onPageSettings: () -> Unit,
     onPagePreview: () -> Unit,
-    onReorderLayer: (Int, Int) -> Unit
+    onReorderLayer: (Int, Int) -> Unit,
+    isAiRunning: Boolean = false,
+    onCancelAi: (() -> Unit)? = null
 ) {
     TopAppBar(
         title = {
@@ -564,6 +578,26 @@ fun EditorTopBar(
             var menuExpanded by remember { mutableStateOf(false) }
             var layerMenuExpanded by remember { mutableStateOf(false) }
             var showLayerReorderSheet by remember { mutableStateOf(false) }
+
+            if (isAiRunning) {
+                val infiniteTransition = rememberInfiniteTransition(label = "pulse_ai")
+                val alpha by infiniteTransition.animateFloat(
+                    initialValue = 0.3f,
+                    targetValue = 1f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(800, easing = LinearEasing),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "alpha"
+                )
+                IconButton(onClick = { onCancelAi?.invoke() }) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = "AI Streaming - Tap to cancel",
+                        tint = Color(0xFF64FFDA).copy(alpha = alpha)
+                    )
+                }
+            }
 
             IconButton(
                 onClick = { layerMenuExpanded = true },

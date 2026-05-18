@@ -77,10 +77,11 @@
                 android:resource="@color/lightbrown" />
 
         <service
-            android:name=".MainActivity"
+            android:name=".note.ai.AIOptimizerService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="microphone" />
+            android:foregroundServiceType="specialUse"
+            tools:ignore="ForegroundServicePermission" />
 
     </application>
 
