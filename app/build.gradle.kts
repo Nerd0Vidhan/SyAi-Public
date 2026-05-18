@@ -34,7 +34,7 @@ android {
 
         val apiKey = localProperties.getProperty("GEMINI_API") ?: ""
         val localImageHost = localProperties.getProperty("LOCAL_IMAGE_GENERATOR_BASE_URL")
-            ?: "http://192.168.2.75:8088/"
+            ?: "http://192.168.1.8:8088/"
         buildConfigField("String", "GEMINI_API", "\"$apiKey\"")
         buildConfigField("String", "LOCAL_IMAGE_GENERATOR_BASE_URL", "\"$localImageHost\"")
     }
