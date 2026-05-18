@@ -32,7 +32,7 @@ class AIController(
 
             // Construct multipart body bytes for HttpClient
             val boundary = "Boundary-${UUID.randomUUID()}"
-            val boundaryBytes = "\r\n--$boundary\r\n".toByteArray()
+            val boundaryBytes = "--$boundary\r\n".toByteArray()
             val endBoundaryBytes = "\r\n--$boundary--\r\n".toByteArray()
 
             val headerBytes = (

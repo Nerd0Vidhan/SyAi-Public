@@ -16,6 +16,7 @@ class AIOptimizerService : Service() {
         const val NOTIFICATION_ID = 9876
         const val CHANNEL_ID = "ai_optimization_service_channel"
         const val ACTION_STOP = "com.mato.syai.ACTION_STOP"
+        const val ACTION_STOP_FROM_USER = "com.mato.syai.ACTION_STOP_FROM_USER"
 
         fun updateNotification(context: Context, status: String, progress: Int) {
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -25,6 +26,16 @@ class AIOptimizerService : Service() {
 
         private fun createNotification(context: Context, status: String, progress: Int): Notification {
             createNotificationChannel(context)
+            val stopIntent = Intent(context, AIOptimizerService::class.java).apply {
+                action = ACTION_STOP_FROM_USER
+            }
+            val stopPendingIntent = android.app.PendingIntent.getService(
+                context,
+                1,
+                stopIntent,
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+            )
+
             return NotificationCompat.Builder(context, CHANNEL_ID)
                 .setContentTitle("SyAi Local Optimizer")
                 .setContentText(status)
@@ -33,6 +44,7 @@ class AIOptimizerService : Service() {
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
+                .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop Optimization", stopPendingIntent)
                 .build()
         }
 
@@ -53,6 +65,11 @@ class AIOptimizerService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_STOP_FROM_USER) {
+            AIOptimizerOrchestrator.stopSession(this, "Stopped by user")
+            return START_NOT_STICKY
+        }
+
         if (intent?.action == ACTION_STOP) {
             val status = intent.getStringExtra("status") ?: "Finished"
             stopForeground(STOP_FOREGROUND_REMOVE)

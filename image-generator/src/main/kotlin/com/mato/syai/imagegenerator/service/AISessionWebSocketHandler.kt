@@ -162,9 +162,15 @@ class AISessionWebSocketHandler(
                     Provide at least 60-100 points for a smooth and highly detailed drawing.
                 """.trimIndent()
 
-                val drawingOllamaResponse = callOllamaGenerate("phi3", drawingSystemPrompt)
-                val operations = parseOperationsResponse(drawingOllamaResponse)
-                sendJson(session, mapOf("type" to "CONTENT", "operations" to operations))
+                var accumulatedJson = ""
+                callOllamaStream("phi3", drawingSystemPrompt) { chunk ->
+                    accumulatedJson += chunk
+                    val completedJson = autoCompleteJson(accumulatedJson)
+                    val operations = parseOperationsResponse(completedJson)
+                    if (operations.isNotEmpty()) {
+                        sendJson(session, mapOf("type" to "CONTENT", "operations" to operations))
+                    }
+                }
             }
             else -> {
                 // TEXT or LINEAR_TEXT / LIST
@@ -198,9 +204,15 @@ class AISessionWebSocketHandler(
                     }
                 """.trimIndent()
 
-                val textOllamaResponse = callOllamaGenerate("phi3", textSystemPrompt)
-                val operations = parseOperationsResponse(textOllamaResponse)
-                sendJson(session, mapOf("type" to "CONTENT", "operations" to operations))
+                var accumulatedJson = ""
+                callOllamaStream("phi3", textSystemPrompt) { chunk ->
+                    accumulatedJson += chunk
+                    val completedJson = autoCompleteJson(accumulatedJson)
+                    val operations = parseOperationsResponse(completedJson)
+                    if (operations.isNotEmpty()) {
+                        sendJson(session, mapOf("type" to "CONTENT", "operations" to operations))
+                    }
+                }
             }
         }
 
@@ -217,6 +229,16 @@ class AISessionWebSocketHandler(
             sendJson(session, mapOf(
                 "type" to "FINISHED",
                 "message" to "Completed successfully!"
+            ))
+            return
+        }
+
+        val iteration = (session.attributes["iterationCount"] as? Int ?: 0) + 1
+        session.attributes["iterationCount"] = iteration
+        if (iteration >= 5) {
+            sendJson(session, mapOf(
+                "type" to "FINISHED",
+                "message" to "Reached maximum iterations of visual correction!"
             ))
             return
         }
@@ -250,7 +272,12 @@ class AISessionWebSocketHandler(
             mapOf("finished" to true, "feedback" to "Visual review completed.")
         }
 
-        val finished = feedbackMap["finished"] as? Boolean ?: true
+        val finishedObj = feedbackMap["finished"]
+        val finished = when (finishedObj) {
+            is Boolean -> finishedObj
+            is String -> finishedObj.toBoolean()
+            else -> false // If not clearly boolean, let it loop!
+        }
         val feedback = feedbackMap["feedback"] as? String ?: ""
         val correction = feedbackMap["correction"] as? String ?: ""
 
@@ -276,9 +303,15 @@ class AISessionWebSocketHandler(
                 }
             """.trimIndent()
             
-            val correctionResponse = callOllamaGenerate("phi3", correctionOllamaPrompt)
-            val operations = parseOperationsResponse(correctionResponse)
-            sendJson(session, mapOf("type" to "CONTENT", "operations" to operations))
+            var accumulatedJson = ""
+            callOllamaStream("phi3", correctionOllamaPrompt) { chunk ->
+                accumulatedJson += chunk
+                val completedJson = autoCompleteJson(accumulatedJson)
+                val operations = parseOperationsResponse(completedJson)
+                if (operations.isNotEmpty()) {
+                    sendJson(session, mapOf("type" to "CONTENT", "operations" to operations))
+                }
+            }
             
             // Re-request verification
             sendJson(session, mapOf("type" to "VERIFY_REQUEST"))
@@ -366,7 +399,7 @@ class AISessionWebSocketHandler(
     private fun callFastApiGenerate(prompt: String, negativePrompt: String): String? {
         return try {
             val boundary = "Boundary-${UUID.randomUUID()}"
-            val boundaryBytes = "\r\n--$boundary\r\n".toByteArray()
+            val boundaryBytes = "--$boundary\r\n".toByteArray()
             val endBoundaryBytes = "\r\n--$boundary--\r\n".toByteArray()
 
             val parts = listOf(
@@ -431,5 +464,98 @@ class AISessionWebSocketHandler(
 
     private fun sendError(session: WebSocketSession, errorMsg: String) {
         sendJson(session, mapOf("type" to "ERROR", "message" to errorMsg))
+    }
+
+    private fun callOllamaStream(model: String, systemPrompt: String, onChunk: (String) -> Unit) {
+        println("Calling Ollama Stream ($model)...")
+        try {
+            val payload = mapOf(
+                "model" to model,
+                "prompt" to systemPrompt,
+                "stream" to true,
+                "format" to "json"
+            )
+            val body = objectMapper.writeValueAsString(payload)
+
+            val httpRequest = HttpRequest.newBuilder()
+                .uri(URI.create("$ollamaUrl/api/generate"))
+                .header("Content-Type", "application/json")
+                .POST(BodyPublishers.ofString(body))
+                .build()
+
+            val response = httpClient.send(httpRequest, BodyHandlers.ofInputStream())
+            if (response.statusCode() == 200) {
+                val reader = java.io.BufferedReader(java.io.InputStreamReader(response.body()))
+                var line: String?
+                while (reader.readLine().also { line = it } != null) {
+                    try {
+                        val json = objectMapper.readValue<Map<String, Any>>(line!!)
+                        val chunk = json["response"] as? String ?: ""
+                        if (chunk.isNotEmpty()) {
+                            onChunk(chunk)
+                        }
+                    } catch (e: Exception) {
+                        // ignore malformed line
+                    }
+                }
+            } else {
+                println("Ollama stream returned non-200: ${response.statusCode()}")
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun autoCompleteJson(partial: String): String {
+        val sb = StringBuilder(partial.trim())
+        if (sb.isEmpty()) return "{}"
+
+        var insideString = false
+        var escaped = false
+        val stack = java.util.Stack<Char>()
+
+        for (i in 0 until sb.length) {
+            val c = sb[i]
+            if (escaped) {
+                escaped = false
+                continue
+            }
+            if (c == '\\') {
+                escaped = true
+                continue
+            }
+            if (c == '"') {
+                insideString = !insideString
+                continue
+            }
+            if (!insideString) {
+                if (c == '{' || c == '[') {
+                    stack.push(c)
+                } else if (c == '}') {
+                    if (stack.isNotEmpty() && stack.peek() == '{') stack.pop()
+                } else if (c == ']') {
+                    if (stack.isNotEmpty() && stack.peek() == '[') stack.pop()
+                }
+            }
+        }
+
+        if (insideString) {
+            sb.append('"')
+        }
+
+        while (stack.isNotEmpty()) {
+            val top = stack.pop()
+            if (top == '{') {
+                val trimmed = sb.toString().trim()
+                if (trimmed.endsWith(":")) {
+                    sb.append("\"\"")
+                }
+                sb.append('}')
+            } else if (top == '[') {
+                sb.append(']')
+            }
+        }
+
+        return sb.toString()
     }
 }

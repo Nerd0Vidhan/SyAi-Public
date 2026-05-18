@@ -338,6 +338,7 @@ class NoteEditorViewModel @Inject constructor(
 
     private val gson = GsonBuilder()
         .registerTypeAdapter(ObjectPayload::class.java, ObjectPayloadAdapter())
+        .serializeSpecialFloatingPointValues()
         .create()
 
     private fun deepCopy(content: NoteContent): NoteContent {
@@ -1685,36 +1686,7 @@ class NoteEditorViewModel @Inject constructor(
     }
 
     fun generateAIContent(pageIndex: Int, prompt: String) {
-        viewModelScope.launch {
-            val contentSnapshot = _uiState.value.content
-            val pageSnapshot = contentSnapshot.pages.getOrNull(pageIndex)
-            val pageId = pageSnapshot?.pageId
-            if (pageId != null) {
-                _uiState.update { it.copy(isLoading = true, generatingPageIds = it.generatingPageIds + pageId) }
-            } else {
-                _uiState.update { it.copy(isLoading = true) }
-            }
-
-            val documentSummary = buildDocumentSummary(contentSnapshot)
-            val json = gemini.generateObjects(
-                prompt = prompt,
-                documentSummary = documentSummary,
-                fetchDetails = { pNo, layer ->
-                    fetchObjectDetails(contentSnapshot, pNo, layer)
-                }
-            )
-            Log.d("Aidata","Aidata: $json")
-            if (json != null) {
-                applyAIObjects(pageIndex, json)
-            }
-
-            val pageIdAfter = _uiState.value.content.pages.getOrNull(pageIndex)?.pageId
-            if (pageIdAfter != null) {
-                _uiState.update { it.copy(isLoading = false, generatingPageIds = it.generatingPageIds - pageIdAfter) }
-            } else {
-                _uiState.update { it.copy(isLoading = false) }
-            }
-        }
+        startAIOptimization(pageIndex, prompt, emptyList())
     }
 
 //    fun requestAiImageGeneration(prompt: String) {
@@ -2790,6 +2762,9 @@ class NoteEditorViewModel @Inject constructor(
         viewModelScope.launch {
             val contentSnapshot = _uiState.value.content
             val pageSnapshot = contentSnapshot.pages.getOrNull(pageIndex) ?: return@launch
+            val pageId = pageSnapshot.pageId
+            _uiState.update { it.copy(isLoading = true, generatingPageIds = it.generatingPageIds + pageId) }
+
             val serverBaseUrl = localImageGeneratorRepository.fixedBaseUrl()
 
             val pageJson = gson.toJson(pageSnapshot)
@@ -2837,6 +2812,7 @@ class NoteEditorViewModel @Inject constructor(
                         e.printStackTrace()
                     }
                     withContext(Dispatchers.Main) {
+                        _uiState.update { it.copy(isLoading = false, generatingPageIds = it.generatingPageIds - pageId) }
                         onComplete()
                     }
                 }
