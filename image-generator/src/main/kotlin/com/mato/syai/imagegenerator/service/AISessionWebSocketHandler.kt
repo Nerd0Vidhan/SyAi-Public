@@ -79,6 +79,7 @@ class AISessionWebSocketHandler(
 
         val ollamaResponse = callOllamaGenerate("phi3", systemPrompt)
         if (ollamaResponse == null) {
+            println("ERROR: Ollama (phi3) returned a null response. Please check that Ollama is running and that the model 'phi3' has been pulled (run: ollama pull phi3).")
             sendError(session, "Failed to connect to Ollama (phi3). Make sure Ollama is running.")
             return
         }
@@ -277,6 +278,7 @@ class AISessionWebSocketHandler(
     }
 
     private fun callOllamaGenerate(model: String, systemPrompt: String): String? {
+        println("Calling Ollama ($model) with prompt...")
         return try {
             val payload = mapOf(
                 "model" to model,
@@ -297,9 +299,12 @@ class AISessionWebSocketHandler(
                 val json = objectMapper.readValue<Map<String, Any>>(response.body())
                 json["response"] as? String
             } else {
+                println("Ollama returned non-200 status code: ${response.statusCode()}")
+                println("Error body: ${response.body()}")
                 null
             }
         } catch (e: Exception) {
+            println("Exception while calling Ollama: ${e.message}")
             e.printStackTrace()
             null
         }
@@ -404,7 +409,7 @@ class AISessionWebSocketHandler(
         }
     }
 
-    private fun sendJson(session: WebSocketSession, payload: Map<String, Any>) {
+    private fun sendJson(session: WebSocketSession, payload: Map<String, Any?>) {
         if (session.isOpen) {
             session.sendMessage(TextMessage(objectMapper.writeValueAsString(payload)))
         }
