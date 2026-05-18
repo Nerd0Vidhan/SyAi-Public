@@ -49,6 +49,9 @@ class AISessionWebSocketHandler(
                 handleStartPhase(session, requestMap)
             } else if (type == "FEEDBACK") {
                 handleFeedbackPhase(session, requestMap)
+            } else if (type == "ACK_FINISHED") {
+                println("Received ACK_FINISHED from Android client. Safely closing connection.")
+                session.close()
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -68,6 +71,11 @@ class AISessionWebSocketHandler(
             You are a premium Note AI assistant helping to enhance prompts and decide layout actions.
             Analyze the user's prompt: "$prompt"
             Current Page Data: ${objectMapper.writeValueAsString(pageData)}
+            
+            Strict Classification Rules:
+            1. If the user explicitly asks to "draw", "sketch", "outline", "doodle", or "illustrate" something (e.g., "draw a cherry tree", "sketch a cell", "vector sketch of a house"), you MUST classify the purpose as "DRAWING".
+            2. If the user asks for a realistic photo, picture, image generation, or image insertion (e.g., "photo of a dog", "realistic image of a cherry tree", "insert picture of molecular structure"), you MUST classify the purpose as "IMAGE".
+            3. Otherwise, if the user asks to explain, write, summarize, create lists, or write general text content (e.g., "explain photosynthesis", "create a bullet list of plants"), classify the purpose as "TEXT".
             
             You MUST return ONLY a valid JSON object matching this schema:
             {
@@ -311,6 +319,7 @@ class AISessionWebSocketHandler(
     }
 
     private fun callLlavaVision(model: String, prompt: String, base64Image: String): String? {
+        println("Calling Llava Vision ($model)...")
         return try {
             // Clean base64 header if exists
             val cleanBase64 = if (base64Image.contains(",")) base64Image.substringAfter(",") else base64Image
@@ -339,11 +348,16 @@ class AISessionWebSocketHandler(
             if (response.statusCode() == 200) {
                 val json = objectMapper.readValue<Map<String, Any>>(response.body())
                 val message = json["message"] as? Map<String, Any>
-                message?.get("content") as? String
+                val content = message?.get("content") as? String
+                println("Llava Vision Response: $content")
+                content
             } else {
+                println("Llava Vision returned non-200 status code: ${response.statusCode()}")
+                println("Error body: ${response.body()}")
                 null
             }
         } catch (e: Exception) {
+            println("Exception while calling Llava Vision: ${e.message}")
             e.printStackTrace()
             null
         }
