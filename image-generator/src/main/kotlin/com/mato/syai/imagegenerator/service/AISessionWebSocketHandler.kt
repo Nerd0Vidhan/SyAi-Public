@@ -2,6 +2,7 @@ package com.mato.syai.imagegenerator.service
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
+import jakarta.annotation.PreDestroy
 import org.springframework.stereotype.Component
 import org.springframework.web.socket.CloseStatus
 import org.springframework.web.socket.TextMessage
@@ -17,6 +18,8 @@ import java.net.http.HttpResponse.BodyHandlers
 import java.util.Base64
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 @Component
 class AISessionWebSocketHandler(
@@ -24,41 +27,96 @@ class AISessionWebSocketHandler(
 ) : TextWebSocketHandler() {
 
     private val sessions = ConcurrentHashMap<String, WebSocketSession>()
+    private val sessionLastActivity = ConcurrentHashMap<String, Long>()
+    private val aiExecutor = Executors.newCachedThreadPool()
+    private val cleanupExecutor = Executors.newSingleThreadScheduledExecutor()
     private val httpClient = HttpClient.newBuilder().build()
     
     private val ollamaUrl = "http://localhost:11434"
     private val fastapiUrl = "http://localhost:8000"
     private val textModel = "phi3"
     private val preferredVisionModel = "llava:phi3:3.8b"
+    private val maxIdleMillis = TimeUnit.HOURS.toMillis(1)
+
+    init {
+        cleanupExecutor.scheduleAtFixedRate(
+            { closeIdleSessions() },
+            5,
+            5,
+            TimeUnit.MINUTES
+        )
+    }
 
     override fun afterConnectionEstablished(session: WebSocketSession) {
         sessions[session.id] = session
+        touch(session)
         println("WebSocket AI Session established: ${session.id}")
     }
 
     override fun afterConnectionClosed(session: WebSocketSession, status: CloseStatus) {
         sessions.remove(session.id)
+        sessionLastActivity.remove(session.id)
         println("WebSocket AI Session closed: ${session.id}")
     }
 
     override fun handleTextMessage(session: WebSocketSession, message: TextMessage) {
         try {
+            touch(session)
             val payloadString = message.payload
             val requestMap = objectMapper.readValue<Map<String, Any>>(payloadString)
             val type = requestMap["type"] as? String ?: "START"
+            (requestMap["sessionId"] as? String)?.let { session.attributes["clientSessionId"] = it }
 
-            if (type == "START") {
-                handleStartPhase(session, requestMap)
-            } else if (type == "FEEDBACK") {
-                handleFeedbackPhase(session, requestMap)
-            } else if (type == "ACK_FINISHED") {
-                println("Received ACK_FINISHED from Android client. Safely closing connection.")
-                session.close()
+            when (type) {
+                "START" -> aiExecutor.submit { runSafely(session) { handleStartPhase(session, requestMap) } }
+                "FEEDBACK" -> aiExecutor.submit { runSafely(session) { handleFeedbackPhase(session, requestMap) } }
+                "ACK_FINISHED" -> {
+                    println("Received ACK_FINISHED from Android client. Safely closing connection.")
+                    session.close()
+                }
             }
         } catch (e: Exception) {
             e.printStackTrace()
             sendError(session, "Failed to process message: ${e.message}")
         }
+    }
+
+    private fun runSafely(session: WebSocketSession, block: () -> Unit) {
+        try {
+            touch(session)
+            block()
+            touch(session)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            sendError(session, "Failed to process AI task: ${e.message}")
+        }
+    }
+
+    private fun touch(session: WebSocketSession) {
+        sessionLastActivity[session.id] = System.currentTimeMillis()
+    }
+
+    private fun closeIdleSessions() {
+        val now = System.currentTimeMillis()
+        sessions.forEach { (id, session) ->
+            val lastActivity = sessionLastActivity[id] ?: now
+            if (now - lastActivity >= maxIdleMillis) {
+                try {
+                    println("Closing idle AI WebSocket session after 1 hour: $id")
+                    session.close(CloseStatus(1001, "Idle for 1 hour"))
+                } catch (_: Exception) {
+                } finally {
+                    sessions.remove(id)
+                    sessionLastActivity.remove(id)
+                }
+            }
+        }
+    }
+
+    @PreDestroy
+    fun shutdownExecutors() {
+        aiExecutor.shutdownNow()
+        cleanupExecutor.shutdownNow()
     }
 
     private fun handleStartPhase(session: WebSocketSession, request: Map<String, Any>) {
@@ -67,6 +125,7 @@ class AISessionWebSocketHandler(
         val pageData = request["pageData"] as? Map<String, Any> ?: emptyMap()
 
         println("WebSocket START: Prompt = $prompt, AttachedImagesCount = ${attachedImages.size}")
+        sendProgress(session, "Analyzing request and selecting local model...", 25)
         val visionModel = resolveOllamaModel(
             preferred = preferredVisionModel,
             fallbacks = listOf(
@@ -100,8 +159,10 @@ class AISessionWebSocketHandler(
         """.trimIndent()
 
         val ollamaResponse = if (attachedImages.isNotEmpty()) {
+            sendProgress(session, "Running LLaVA vision analysis on attached images...", 35)
             callLlavaVision(visionModel, systemPrompt, attachedImages)
         } else {
+            sendProgress(session, "Running Phi-3 prompt analysis...", 35)
             callOllamaGenerate(textModel, systemPrompt)
         }
         if (ollamaResponse == null) {
@@ -136,6 +197,7 @@ class AISessionWebSocketHandler(
         when (purpose) {
             "IMAGE" -> {
                 // Call FastAPI Stable Diffusion server
+                sendProgress(session, "Generating DreamShaper image...", 60)
                 val imageUrl = callFastApiGenerate(enhancedPrompt, negativePrompt)
                 if (imageUrl == null) {
                     sendError(session, "Failed to generate image from DreamShaper via FastAPI.")
@@ -157,6 +219,7 @@ class AISessionWebSocketHandler(
             }
             "DRAWING" -> {
                 // Generate the full drawing once, then stream point chunks into one object.
+                sendProgress(session, "Generating point-based drawing...", 60)
                 val drawingSystemPrompt = """
                     You are a vector drawing AI. Create a detailed outline sketch based on prompt: "$enhancedPrompt".
                     The coordinate system is points (0 to 600 width, 0 to 800 height).
@@ -190,6 +253,7 @@ class AISessionWebSocketHandler(
             }
             else -> {
                 // TEXT or LINEAR_TEXT / LIST: stream append-only chunks, never replay full content.
+                sendProgress(session, "Streaming Phi-3 note text...", 60)
                 val textSystemPrompt = """
                     You are a note content AI. Generate rich notes based on the prompt: "$enhancedPrompt".
                     
@@ -215,6 +279,7 @@ class AISessionWebSocketHandler(
         }
 
         // Send VERIFY_REQUEST to trigger visual verify feedback image upload from Android
+        sendProgress(session, "Waiting for visual feedback from Android...", 82)
         sendJson(session, mapOf("type" to "VERIFY_REQUEST"))
     }
 
@@ -222,6 +287,7 @@ class AISessionWebSocketHandler(
         val originalPrompt = request["prompt"] as? String ?: ""
         val feedbackImageBase64 = request["feedbackImage"] as? String ?: ""
         val pageData = request["pageData"] as? Map<String, Any> ?: emptyMap()
+        sendProgress(session, "Running visual verification...", 88)
         val visionModel = resolveOllamaModel(
             preferred = preferredVisionModel,
             fallbacks = listOf(
@@ -569,7 +635,13 @@ class AISessionWebSocketHandler(
     private fun sendJson(session: WebSocketSession, payload: Map<String, Any?>) {
         if (!session.isOpen) return
         try {
-            val json = objectMapper.writeValueAsString(payload)
+            val enrichedPayload = if (payload.containsKey("sessionId")) {
+                payload
+            } else {
+                val sessionId = session.attributes["clientSessionId"] as? String
+                if (sessionId != null) payload + ("sessionId" to sessionId) else payload
+            }
+            val json = objectMapper.writeValueAsString(enrichedPayload)
             synchronized(session) {
                 if (session.isOpen) {
                     session.sendMessage(TextMessage(json))
@@ -582,6 +654,14 @@ class AISessionWebSocketHandler(
 
     private fun sendError(session: WebSocketSession, errorMsg: String) {
         sendJson(session, mapOf("type" to "ERROR", "message" to errorMsg))
+    }
+
+    private fun sendProgress(session: WebSocketSession, message: String, progress: Int) {
+        sendJson(session, mapOf(
+            "type" to "PROGRESS",
+            "message" to message,
+            "progress" to progress.coerceIn(0, 100)
+        ))
     }
 
     private fun callOllamaStream(

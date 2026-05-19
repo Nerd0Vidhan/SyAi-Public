@@ -314,6 +314,35 @@ Mic test:
 
 ## 11. Common Fixes
 
+If Android logs this:
+
+```text
+sent ping but didn't receive pong within 20000ms
+```
+
+The model call was taking longer than the old WebSocket heartbeat window. The app now uses a longer ping interval and retries reconnecting every 30 seconds for up to 1 hour. The backend also runs AI work on background threads so WebSocket handling is not blocked by long LLaVA/DreamShaper calls.
+
+The WebSocket protocol also includes a `sessionId` now. Android ignores stale frames from old sessions after reconnecting, and Spring echoes progress events such as:
+
+```json
+{"type":"PROGRESS","message":"Running LLaVA vision analysis on attached images...","progress":35}
+```
+
+If it still happens:
+
+```powershell
+curl http://localhost:11434/api/tags
+curl http://localhost:8000/health
+curl http://localhost:8088/api/v1/images/health
+```
+
+Then fully restart Spring Boot:
+
+```powershell
+cd C:\Users\Vidhan\AndroidStudioProjects\SyAi-Public\image-generator
+.\gradlew.bat bootRun
+```
+
 If Android cannot connect:
 
 ```powershell

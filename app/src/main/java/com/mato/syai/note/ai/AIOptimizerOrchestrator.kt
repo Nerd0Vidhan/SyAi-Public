@@ -6,12 +6,19 @@ import android.graphics.Bitmap
 import android.util.Base64
 import android.util.Log
 import com.google.gson.Gson
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import okhttp3.*
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.TimeUnit
+import java.util.UUID
 
 sealed class AIState {
     object Idle : AIState()
@@ -31,12 +38,22 @@ object AIOptimizerOrchestrator {
     private val client = OkHttpClient.Builder()
         .readTimeout(0, TimeUnit.MILLISECONDS)
         .connectTimeout(15, TimeUnit.SECONDS)
-        .pingInterval(20, TimeUnit.SECONDS)
+        .pingInterval(2, TimeUnit.MINUTES)
         .build()
 
     private val gson = Gson()
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var lastPrompt: String = ""
     private var lastPageData: Map<String, Any>? = null
+    private var lastServerBaseUrl: String = ""
+    private var lastAttachedImages: List<String> = emptyList()
+    private var lastContext: Context? = null
+    private var retryJob: Job? = null
+    private var sessionStartedAtMs: Long = 0L
+    private var activeSessionId: String = ""
+    private var allowReconnect: Boolean = false
+    private const val RETRY_INTERVAL_MS = 30_000L
+    private const val MAX_RETRY_WINDOW_MS = 60 * 60 * 1000L
     
     // Callback when new canvas operations are received
     var onOperationsReceived: ((String) -> Unit)? = null
@@ -54,10 +71,26 @@ object AIOptimizerOrchestrator {
         attachedImages: List<String>,
         pageData: Map<String, Any>
     ) {
+        lastContext = context.applicationContext
+        lastServerBaseUrl = serverBaseUrl
         lastPrompt = prompt
         lastPageData = pageData
+        lastAttachedImages = attachedImages
+        sessionStartedAtMs = System.currentTimeMillis()
+        activeSessionId = UUID.randomUUID().toString()
+        allowReconnect = true
+        retryJob?.cancel()
         _state.value = AIState.Loading("Connecting to local AI router...", 10)
+        connectWebSocket(context.applicationContext, serverBaseUrl, prompt, attachedImages, pageData)
+    }
 
+    private fun connectWebSocket(
+        context: Context,
+        serverBaseUrl: String,
+        prompt: String,
+        attachedImages: List<String>,
+        pageData: Map<String, Any>
+    ) {
         // Resolve WS URL from HTTP URL
         val wsBaseUrl = serverBaseUrl
             .replace("http://", "ws://")
@@ -87,6 +120,7 @@ object AIOptimizerOrchestrator {
                 // Send START payload
                 val payload = mapOf(
                     "type" to "START",
+                    "sessionId" to activeSessionId,
                     "prompt" to prompt,
                     "attachedImages" to attachedImages,
                     "pageData" to pageData
@@ -99,8 +133,19 @@ object AIOptimizerOrchestrator {
                 try {
                     val map = gson.fromJson(text, Map::class.java) as Map<*, *>
                     val type = map["type"] as? String ?: return
+                    val messageSessionId = map["sessionId"] as? String
+                    if (messageSessionId != null && messageSessionId != activeSessionId) {
+                        Log.w("AIOptimizer", "Ignoring stale AI message for session=$messageSessionId active=$activeSessionId")
+                        return
+                    }
 
                     when (type) {
+                        "PROGRESS" -> {
+                            val msg = map["message"] as? String ?: "AI is working..."
+                            val progress = (map["progress"] as? Number)?.toInt() ?: 50
+                            _state.value = AIState.Loading(msg, progress)
+                            AIOptimizerService.updateNotification(context, msg, progress)
+                        }
                         "ENHANCED_PROMPT" -> {
                             val enhancedPrompt = map["prompt"] as? String ?: ""
                             val negativePrompt = map["negativePrompt"] as? String ?: ""
@@ -131,7 +176,7 @@ object AIOptimizerOrchestrator {
                             if (onFinishedCallback != null) {
                                 onFinishedCallback.invoke(msg) {
                                     try {
-                                        sendSafe(gson.toJson(mapOf("type" to "ACK_FINISHED")), "ACK_FINISHED")
+                                        sendSafe(gson.toJson(mapOf("type" to "ACK_FINISHED", "sessionId" to activeSessionId)), "ACK_FINISHED")
                                     } catch (e: Exception) {
                                         e.printStackTrace()
                                     }
@@ -139,7 +184,7 @@ object AIOptimizerOrchestrator {
                                 }
                             } else {
                                 try {
-                                    sendSafe(gson.toJson(mapOf("type" to "ACK_FINISHED")), "ACK_FINISHED")
+                                    sendSafe(gson.toJson(mapOf("type" to "ACK_FINISHED", "sessionId" to activeSessionId)), "ACK_FINISHED")
                                 } catch (e: Exception) {
                                     e.printStackTrace()
                                 }
@@ -160,8 +205,7 @@ object AIOptimizerOrchestrator {
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 Log.e("AIOptimizer", "WebSocket error: ${t.message}", t)
                 isSocketOpen = false
-                _state.value = AIState.Error(t.message ?: "Connection lost")
-                stopSession(context, "Connection lost: ${t.message}")
+                scheduleReconnect(context, "Connection lost: ${t.message ?: "unknown error"}")
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
@@ -171,8 +215,43 @@ object AIOptimizerOrchestrator {
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 isSocketOpen = false
+                if (allowReconnect && code != 1000) {
+                    scheduleReconnect(context, "Socket closed: $reason")
+                }
             }
         })
+    }
+
+    private fun scheduleReconnect(context: Context, reason: String) {
+        if (!allowReconnect) return
+        val elapsed = System.currentTimeMillis() - sessionStartedAtMs
+        if (elapsed >= MAX_RETRY_WINDOW_MS) {
+            allowReconnect = false
+            _state.value = AIState.Error("AI connection inactive for 1 hour. Stopped retrying.")
+            stopSession(context, "Connection inactive for 1 hour")
+            return
+        }
+        if (retryJob?.isActive == true) return
+
+        _state.value = AIState.Loading("$reason. Retrying in 30 seconds...", 15)
+        AIOptimizerService.updateNotification(context, "Network issue. Retrying AI connection in 30 seconds...", 15)
+
+        retryJob = scope.launch {
+            while (allowReconnect && System.currentTimeMillis() - sessionStartedAtMs < MAX_RETRY_WINDOW_MS) {
+                delay(RETRY_INTERVAL_MS)
+                val pageData = lastPageData ?: break
+                _state.value = AIState.Loading("Reconnecting to local AI router...", 20)
+                AIOptimizerService.updateNotification(context, "Reconnecting to local AI router...", 20)
+                connectWebSocket(
+                    context = context,
+                    serverBaseUrl = lastServerBaseUrl,
+                    prompt = lastPrompt,
+                    attachedImages = lastAttachedImages,
+                    pageData = pageData
+                )
+                break
+            }
+        }
     }
 
     fun sendVisualFeedback(
@@ -192,6 +271,7 @@ object AIOptimizerOrchestrator {
 
             val payload = mapOf(
                 "type" to "FEEDBACK",
+                "sessionId" to activeSessionId,
                 "prompt" to lastPrompt,
                 "feedbackImage" to "data:image/jpeg;base64,$base64",
                 "pageData" to pageData
@@ -205,6 +285,9 @@ object AIOptimizerOrchestrator {
     }
 
     fun stopSession(context: Context, statusMessage: String = "Finished") {
+        allowReconnect = false
+        retryJob?.cancel()
+        retryJob = null
         webSocket?.close(1000, "Normal closure")
         webSocket = null
         isSocketOpen = false
