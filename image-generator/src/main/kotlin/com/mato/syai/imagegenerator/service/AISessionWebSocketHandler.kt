@@ -504,8 +504,16 @@ class AISessionWebSocketHandler(
     }
 
     private fun sendJson(session: WebSocketSession, payload: Map<String, Any?>) {
-        if (session.isOpen) {
-            session.sendMessage(TextMessage(objectMapper.writeValueAsString(payload)))
+        if (!session.isOpen) return
+        try {
+            val json = objectMapper.writeValueAsString(payload)
+            synchronized(session) {
+                if (session.isOpen) {
+                    session.sendMessage(TextMessage(json))
+                }
+            }
+        } catch (e: Exception) {
+            println("Failed to send WebSocket payload to ${session.id}: ${e.message}")
         }
     }
 

@@ -2,6 +2,8 @@ package com.mato.syai.note.ui.editor
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.Base64
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -33,6 +35,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
 import com.mato.syai.note.ai.AudioRecorder
 import com.mato.syai.note.utils.OutlinedTextFieldStyled
+import java.io.ByteArrayOutputStream
 import java.io.File
 
 @Composable
@@ -289,8 +292,20 @@ fun AIToolSheet(
 private fun Uri.toBase64Image(context: android.content.Context): String? {
     return runCatching {
         context.contentResolver.openInputStream(this)?.use { input ->
-            val bytes = input.readBytes()
-            Base64.encodeToString(bytes, Base64.NO_WRAP)
+            val original = BitmapFactory.decodeStream(input) ?: return@use null
+            val scaled = original.scaleDown(maxSide = 1024)
+            val output = ByteArrayOutputStream()
+            scaled.compress(Bitmap.CompressFormat.JPEG, 70, output)
+            Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP)
         }
     }.getOrNull()
+}
+
+private fun Bitmap.scaleDown(maxSide: Int): Bitmap {
+    val largestSide = maxOf(width, height)
+    if (largestSide <= maxSide) return this
+    val scale = maxSide.toFloat() / largestSide.toFloat()
+    val targetWidth = (width * scale).toInt().coerceAtLeast(1)
+    val targetHeight = (height * scale).toInt().coerceAtLeast(1)
+    return Bitmap.createScaledBitmap(this, targetWidth, targetHeight, true)
 }

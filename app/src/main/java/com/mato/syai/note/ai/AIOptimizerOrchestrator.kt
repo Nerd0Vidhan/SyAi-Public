@@ -26,9 +26,12 @@ object AIOptimizerOrchestrator {
     val state: StateFlow<AIState> = _state.asStateFlow()
 
     private var webSocket: WebSocket? = null
+    @Volatile
+    private var isSocketOpen: Boolean = false
     private val client = OkHttpClient.Builder()
         .readTimeout(0, TimeUnit.MILLISECONDS)
         .connectTimeout(15, TimeUnit.SECONDS)
+        .pingInterval(20, TimeUnit.SECONDS)
         .build()
 
     private val gson = Gson()
@@ -76,6 +79,8 @@ object AIOptimizerOrchestrator {
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 Log.d("AIOptimizer", "WebSocket opened successfully.")
+                AIOptimizerOrchestrator.webSocket = webSocket
+                isSocketOpen = true
                 _state.value = AIState.Loading("Connected. Optimizing prompt details...", 30)
                 AIOptimizerService.updateNotification(context, "Optimizing prompt details...", 30)
 
@@ -86,7 +91,7 @@ object AIOptimizerOrchestrator {
                     "attachedImages" to attachedImages,
                     "pageData" to pageData
                 )
-                webSocket.send(gson.toJson(payload))
+                sendSafe(gson.toJson(payload), "START")
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -126,7 +131,7 @@ object AIOptimizerOrchestrator {
                             if (onFinishedCallback != null) {
                                 onFinishedCallback.invoke(msg) {
                                     try {
-                                        webSocket.send(gson.toJson(mapOf("type" to "ACK_FINISHED")))
+                                        sendSafe(gson.toJson(mapOf("type" to "ACK_FINISHED")), "ACK_FINISHED")
                                     } catch (e: Exception) {
                                         e.printStackTrace()
                                     }
@@ -134,7 +139,7 @@ object AIOptimizerOrchestrator {
                                 }
                             } else {
                                 try {
-                                    webSocket.send(gson.toJson(mapOf("type" to "ACK_FINISHED")))
+                                    sendSafe(gson.toJson(mapOf("type" to "ACK_FINISHED")), "ACK_FINISHED")
                                 } catch (e: Exception) {
                                     e.printStackTrace()
                                 }
@@ -154,12 +159,18 @@ object AIOptimizerOrchestrator {
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 Log.e("AIOptimizer", "WebSocket error: ${t.message}", t)
+                isSocketOpen = false
                 _state.value = AIState.Error(t.message ?: "Connection lost")
                 stopSession(context, "Connection lost: ${t.message}")
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                isSocketOpen = false
                 webSocket.close(1000, null)
+            }
+
+            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                isSocketOpen = false
             }
         })
     }
@@ -169,18 +180,25 @@ object AIOptimizerOrchestrator {
         pageData: Map<String, Any>
     ) {
         try {
+            if (!isSocketOpen || webSocket == null) {
+                Log.w("AIOptimizer", "Skipping feedback because WebSocket is not open.")
+                return
+            }
+
+            val scaledBitmap = bitmap.scaleDown(maxSide = 1080)
             val stream = ByteArrayOutputStream()
-            bitmap.compress(Bitmap.CompressFormat.PNG, 80, stream)
+            scaledBitmap.compress(Bitmap.CompressFormat.JPEG, 55, stream)
             val base64 = Base64.encodeToString(stream.toByteArray(), Base64.NO_WRAP)
 
             val payload = mapOf(
                 "type" to "FEEDBACK",
                 "prompt" to lastPrompt,
-                "feedbackImage" to "data:image/png;base64,$base64",
+                "feedbackImage" to "data:image/jpeg;base64,$base64",
                 "pageData" to pageData
             )
-            webSocket?.send(gson.toJson(payload))
-            _state.value = AIState.Loading("Streaming feedback bitmap back to server...", 90)
+            if (sendSafe(gson.toJson(payload), "FEEDBACK")) {
+                _state.value = AIState.Loading("Streaming feedback bitmap back to server...", 90)
+            }
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -189,6 +207,7 @@ object AIOptimizerOrchestrator {
     fun stopSession(context: Context, statusMessage: String = "Finished") {
         webSocket?.close(1000, "Normal closure")
         webSocket = null
+        isSocketOpen = false
         
         val serviceIntent = Intent(context, AIOptimizerService::class.java).apply {
             action = AIOptimizerService.ACTION_STOP
@@ -199,5 +218,33 @@ object AIOptimizerOrchestrator {
 
     fun reset() {
         _state.value = AIState.Idle
+    }
+
+    private fun sendSafe(payload: String, label: String): Boolean {
+        val socket = webSocket
+        if (!isSocketOpen || socket == null) {
+            Log.w("AIOptimizer", "Skipped $label send because WebSocket is closed.")
+            return false
+        }
+        val accepted = try {
+            socket.send(payload)
+        } catch (e: Exception) {
+            isSocketOpen = false
+            Log.e("AIOptimizer", "Failed to enqueue $label WebSocket frame. size=${payload.length}", e)
+            false
+        }
+        if (!accepted) {
+            Log.w("AIOptimizer", "OkHttp rejected $label WebSocket frame. size=${payload.length}")
+        }
+        return accepted
+    }
+
+    private fun Bitmap.scaleDown(maxSide: Int): Bitmap {
+        val largestSide = maxOf(width, height)
+        if (largestSide <= maxSide) return this
+        val scale = maxSide.toFloat() / largestSide.toFloat()
+        val targetWidth = (width * scale).toInt().coerceAtLeast(1)
+        val targetHeight = (height * scale).toInt().coerceAtLeast(1)
+        return Bitmap.createScaledBitmap(this, targetWidth, targetHeight, true)
     }
 }
