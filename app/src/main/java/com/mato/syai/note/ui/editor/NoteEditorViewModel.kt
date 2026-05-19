@@ -1513,7 +1513,17 @@ class NoteEditorViewModel @Inject constructor(
 
             for (i in 0 until operations.length()) {
                 val op = operations.optJSONObject(i) ?: continue
-                val action = op.optString("action")
+                var action = op.optString("action")
+                if (action != "CREATE" && action != "UPDATE" && action != "DELETE") {
+                    val keys = op.keys()
+                    while (keys.hasNext()) {
+                        val key = keys.next()
+                        if (key.startsWith("action")) {
+                            action = op.optString(key)
+                            break
+                        }
+                    }
+                }
                 val targetPageNo = op.optInt("pageNo", pageIndex)
                 if (targetPageNo < 0 || targetPageNo > 100) continue // Prevent absurd memory allocation
 
@@ -1535,12 +1545,12 @@ class NoteEditorViewModel @Inject constructor(
                 when (action) {
                     "CREATE" -> {
                         val typeStr = op.optString("type")
-                        val payloadJson = op.optJSONObject("payload") ?: continue
+                        val payloadJson = op.optJSONObject("payload") ?: op
                         val x = op.optDouble("x", page.pagePadding.startPoints.toDouble()).toFloat()
                         val y = op.optDouble("y", page.pagePadding.topPoints.toDouble()).toFloat()
 
-                        when (typeStr) {
-                            "TEXT" -> {
+                        when {
+                            typeStr == "TEXT" -> {
                                 val noteObject = NoteObject(
                                     layer = (page.items.maxOfOrNull { it.layer } ?: 0) + 1,
                                     type = ObjectType.TEXT,
@@ -1551,33 +1561,34 @@ class NoteEditorViewModel @Inject constructor(
                                 clampObjectWithinPage(page, noteObject)
                                 page.upsertObject(noteObject)
                             }
-                            "DRAWING" -> {
+                            typeStr == "DRAWING" || typeStr == "DRAWING_LINE" || typeStr.startsWith("DRAWING") -> {
                                 val points = parseAiPoints(payloadJson.optJSONArray("points"))
-                                if (points.isEmpty()) continue
-                                val minX = points.minOfOrNull { it.x } ?: 0f
-                                val minY = points.minOfOrNull { it.y } ?: 0f
-                                val maxX = points.maxOfOrNull { it.x } ?: 0f
-                                val maxY = points.maxOfOrNull { it.y } ?: 0f
+                                if (points.isNotEmpty()) {
+                                    val minX = points.minOfOrNull { it.x } ?: 0f
+                                    val minY = points.minOfOrNull { it.y } ?: 0f
+                                    val maxX = points.maxOfOrNull { it.x } ?: 0f
+                                    val maxY = points.maxOfOrNull { it.y } ?: 0f
 
-                                val noteObject = NoteObject(
-                                    layer = (page.items.maxOfOrNull { it.layer } ?: 0) + 1,
-                                    type = ObjectType.DRAWING,
-                                    transform = Transform(x = minX, y = minY),
-                                    bounds = Bounds(width = (maxX - minX).coerceAtLeast(80f), height = (maxY - minY).coerceAtLeast(80f)),
-                                    payload = DrawingPayload(
-                                        strokes = mutableListOf(
-                                            Stroke(
-                                                color = parseAiColor(payloadJson.opt("color")),
-                                                width = payloadJson.optDouble("width", 5.0).toFloat(),
-                                                points = points,
+                                    val noteObject = NoteObject(
+                                        layer = (page.items.maxOfOrNull { it.layer } ?: 0) + 1,
+                                        type = ObjectType.DRAWING,
+                                        transform = Transform(x = minX, y = minY),
+                                        bounds = Bounds(width = (maxX - minX).coerceAtLeast(80f), height = (maxY - minY).coerceAtLeast(80f)),
+                                        payload = DrawingPayload(
+                                            strokes = mutableListOf(
+                                                Stroke(
+                                                    color = parseAiColor(payloadJson.opt("color")),
+                                                    width = payloadJson.optDouble("width", 5.0).toFloat(),
+                                                    points = points,
+                                                )
                                             )
                                         )
                                     )
-                                )
-                                clampObjectWithinPage(page, noteObject)
-                                page.upsertObject(noteObject)
+                                    clampObjectWithinPage(page, noteObject)
+                                    page.upsertObject(noteObject)
+                                }
                             }
-                            "LINEAR_TEXT" -> {
+                            typeStr == "LINEAR_TEXT" -> {
                                 val aiText = payloadJson.optString("text")
                                 page.updatePrimaryLinearText(
                                     text = listOf(page.primaryLinearEntry?.value.orEmpty(), aiText)
@@ -1585,7 +1596,7 @@ class NoteEditorViewModel @Inject constructor(
                                         .joinToString(separator = "\n")
                                 )
                             }
-                            "LIST" -> {
+                            typeStr == "LIST" -> {
                                 val listItems = mutableListOf<ListItem>()
                                 val itemsJson = payloadJson.optJSONArray("items")
                                 if (itemsJson != null) {
@@ -1608,7 +1619,7 @@ class NoteEditorViewModel @Inject constructor(
                                 )
                                 clampObjectWithinPage(page, noteObject)
                                 page.upsertObject(noteObject)
-                                
+
                                 val entry = LinearContentEntry(
                                     objectId = noteObject.id,
                                     type = ObjectType.LIST,
@@ -1622,7 +1633,7 @@ class NoteEditorViewModel @Inject constructor(
                     }
                     "UPDATE" -> {
                         val layer = op.optInt("layer", -1)
-                        val changes = op.optJSONObject("changes") ?: continue
+                        val changes = op.optJSONObject("changes") ?: op
                         val obj = page.items.find { it.layer == layer }
                         val linearEntry = page.linearContent.find { it.layer == layer }
 
@@ -2763,7 +2774,7 @@ class NoteEditorViewModel @Inject constructor(
             val contentSnapshot = _uiState.value.content
             val pageSnapshot = contentSnapshot.pages.getOrNull(pageIndex) ?: return@launch
             val pageId = pageSnapshot.pageId
-            _uiState.update { it.copy(isLoading = true, generatingPageIds = it.generatingPageIds + pageId) }
+            _uiState.update { it.copy(generatingPageIds = it.generatingPageIds + pageId) }
 
             val serverBaseUrl = localImageGeneratorRepository.fixedBaseUrl()
 
@@ -2812,7 +2823,7 @@ class NoteEditorViewModel @Inject constructor(
                         e.printStackTrace()
                     }
                     withContext(Dispatchers.Main) {
-                        _uiState.update { it.copy(isLoading = false, generatingPageIds = it.generatingPageIds - pageId) }
+                        _uiState.update { it.copy(generatingPageIds = it.generatingPageIds - pageId) }
                         onComplete()
                     }
                 }

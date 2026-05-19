@@ -146,11 +146,15 @@ class NoteRepository @Inject constructor(
     }
 
     suspend fun saveNoteContent(noteId: Long, content: NoteContent) = withContext(Dispatchers.IO) {
-        val note = dao.getNoteById(noteId) ?: return@withContext
-        val json = gson.toJson(content)
-        val (iv, encrypted) = cryptoManager.encrypt(json.toByteArray())
-        File(note.filePath).writeBytes(iv + encrypted)
-        dao.updateLastModified(noteId, System.currentTimeMillis())
+        try {
+            val note = dao.getNoteById(noteId) ?: return@withContext
+            val json = gson.toJson(content)
+            val (iv, encrypted) = cryptoManager.encrypt(json.toByteArray())
+            File(note.filePath).writeBytes(iv + encrypted)
+            dao.updateLastModified(noteId, System.currentTimeMillis())
+        } catch (e: Exception) {
+            Log.e("NoteRepository", "Failed to save note content securely: ", e)
+        }
     }
 
     suspend fun loadNoteContent(noteId: Long): NoteContent = withContext(Dispatchers.IO) {
