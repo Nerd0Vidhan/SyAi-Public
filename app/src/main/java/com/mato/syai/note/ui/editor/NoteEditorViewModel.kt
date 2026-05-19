@@ -1507,6 +1507,82 @@ class NoteEditorViewModel @Inject constructor(
         return points
     }
 
+    fun applyAIStreamingDelta(pageIndex: Int, deltaJson: JSONObject) {
+        mutateContent(trackUndo = false) { content ->
+            val targetPageNo = deltaJson.optInt("pageNo", pageIndex).coerceIn(0, content.pages.lastIndex.coerceAtLeast(0))
+            val page = content.pages.getOrNull(targetPageNo) ?: return@mutateContent
+
+            when (deltaJson.optString("deltaType")) {
+                "TEXT_APPEND" -> {
+                    val chunk = deltaJson.optString("textDelta")
+                    if (chunk.isBlank()) return@mutateContent
+                    val entry = page.ensurePrimaryLinearEntry()
+                    val separator = if (entry.value.isBlank() || chunk.startsWith("\n") || entry.value.endsWith("\n")) "" else ""
+                    page.updateLinearEntry(
+                        id = entry.id,
+                        textValue = entry.value + separator + chunk
+                    )
+                    rebalanceLinearFlow(content, targetPageNo)
+                }
+
+                "DRAWING_POINTS" -> {
+                    val objectId = deltaJson.optString("objectId").ifBlank { "ai_drawing_${targetPageNo}" }
+                    val points = parseAiPoints(deltaJson.optJSONArray("points"))
+                    if (points.isEmpty()) return@mutateContent
+
+                    val color = parseAiColor(deltaJson.opt("color"))
+                    val width = deltaJson.optDouble("width", 4.0).toFloat()
+                    val existing = page.items.find { it.id == objectId && it.type == ObjectType.DRAWING }
+
+                    if (existing == null) {
+                        val allX = points.map { it.x }
+                        val allY = points.map { it.y }
+                        page.upsertObject(
+                            NoteObject(
+                                id = objectId,
+                                layer = (page.items.maxOfOrNull { it.layer } ?: 0) + 1,
+                                type = ObjectType.DRAWING,
+                                transform = Transform(),
+                                bounds = Bounds(
+                                    width = ((allX.maxOrNull() ?: 80f) - (allX.minOrNull() ?: 0f)).coerceAtLeast(80f),
+                                    height = ((allY.maxOrNull() ?: 80f) - (allY.minOrNull() ?: 0f)).coerceAtLeast(80f)
+                                ),
+                                payload = DrawingPayload(
+                                    strokes = mutableListOf(
+                                        Stroke(
+                                            color = color,
+                                            width = width,
+                                            points = points
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    } else {
+                        val payload = existing.payload as? DrawingPayload ?: return@mutateContent
+                        val stroke = payload.strokes.firstOrNull()
+                        if (stroke == null) {
+                            payload.strokes.add(Stroke(color = color, width = width, points = points))
+                        } else {
+                            stroke.points = stroke.points + points
+                            stroke.color = color
+                            stroke.width = width
+                        }
+                        val allPoints = payload.strokes.flatMap { it.points }
+                        val minX = allPoints.minOfOrNull { it.x } ?: 0f
+                        val minY = allPoints.minOfOrNull { it.y } ?: 0f
+                        val maxX = allPoints.maxOfOrNull { it.x } ?: minX + 80f
+                        val maxY = allPoints.maxOfOrNull { it.y } ?: minY + 80f
+                        existing.bounds = Bounds(
+                            width = (maxX - minX).coerceAtLeast(80f),
+                            height = (maxY - minY).coerceAtLeast(80f)
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     fun applyAIObjects(pageIndex: Int, aiJson: JSONObject) {
         mutateContent { content ->
             val operations = aiJson.optJSONArray("operations") ?: return@mutateContent
@@ -2796,6 +2872,17 @@ class NoteEditorViewModel @Inject constructor(
                 }
             }
 
+            AIOptimizerOrchestrator.onDeltaReceived = { deltaJson ->
+                viewModelScope.launch(Dispatchers.Main) {
+                    try {
+                        applyAIStreamingDelta(pageIndex, org.json.JSONObject(deltaJson))
+                        generatePagePreview(pageSnapshot.pageId, context)
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+            }
+
             AIOptimizerOrchestrator.onVerifyRequested = {
                 viewModelScope.launch(Dispatchers.Default) {
                     val freshContent = _uiState.value.content
@@ -2847,7 +2934,7 @@ class NoteEditorViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val client = okhttp3.OkHttpClient()
-                val mediaType = "audio/wav".toMediaTypeOrNull()
+                val mediaType = "audio/mp4".toMediaTypeOrNull()
                 val requestBody = okhttp3.MultipartBody.Builder()
                     .setType(okhttp3.MultipartBody.FORM)
                     .addFormDataPart("audio", audioFile.name, audioFile.asRequestBody(mediaType))

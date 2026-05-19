@@ -28,6 +28,8 @@ class AISessionWebSocketHandler(
     
     private val ollamaUrl = "http://localhost:11434"
     private val fastapiUrl = "http://localhost:8000"
+    private val textModel = "phi3"
+    private val visionModel = "llava:phi3:3.8b"
 
     override fun afterConnectionEstablished(session: WebSocketSession) {
         sessions[session.id] = session
@@ -66,11 +68,12 @@ class AISessionWebSocketHandler(
 
         println("WebSocket START: Prompt = $prompt, AttachedImagesCount = ${attachedImages.size}")
 
-        // 1. Ask Ollama (phi3) to classify and enhance prompt
+        // 1. Ask Ollama to classify and enhance prompt.
         val systemPrompt = """
             You are a premium Note AI assistant helping to enhance prompts and decide layout actions.
             Analyze the user's prompt: "$prompt"
             Current Page Data: ${objectMapper.writeValueAsString(pageData)}
+            Attached image count: ${attachedImages.size}
             
             Strict Classification Rules:
             1. If the user explicitly asks to "draw", "sketch", "outline", "doodle", or "illustrate" something (e.g., "draw a cherry tree", "sketch a cell", "vector sketch of a house"), you MUST classify the purpose as "DRAWING".
@@ -85,15 +88,19 @@ class AISessionWebSocketHandler(
             }
         """.trimIndent()
 
-        val ollamaResponse = callOllamaGenerate("phi3", systemPrompt)
+        val ollamaResponse = if (attachedImages.isNotEmpty()) {
+            callLlavaVision(visionModel, systemPrompt, attachedImages)
+        } else {
+            callOllamaGenerate(textModel, systemPrompt)
+        }
         if (ollamaResponse == null) {
-            println("ERROR: Ollama (phi3) returned a null response. Please check that Ollama is running and that the model 'phi3' has been pulled (run: ollama pull phi3).")
-            sendError(session, "Failed to connect to Ollama (phi3). Make sure Ollama is running.")
+            println("ERROR: Ollama returned a null response. Please check that Ollama is running and models are pulled.")
+            sendError(session, "Failed to connect to local Ollama. Make sure phi3 and llava:phi3:3.8b are available.")
             return
         }
 
         val classification = try {
-            objectMapper.readValue<Map<String, Any>>(ollamaResponse)
+            objectMapper.readValue<Map<String, Any>>(extractJsonObject(ollamaResponse))
         } catch (e: Exception) {
             mapOf(
                 "purpose" to "TEXT",
@@ -138,7 +145,7 @@ class AISessionWebSocketHandler(
                 sendJson(session, mapOf("type" to "CONTENT", "operations" to operations))
             }
             "DRAWING" -> {
-                // Let Ollama generate drawing points matching standard schema
+                // Generate the full drawing once, then stream point chunks into one object.
                 val drawingSystemPrompt = """
                     You are a vector drawing AI. Create a detailed outline sketch based on prompt: "$enhancedPrompt".
                     The coordinate system is points (0 to 600 width, 0 to 800 height).
@@ -162,56 +169,36 @@ class AISessionWebSocketHandler(
                     Provide at least 60-100 points for a smooth and highly detailed drawing.
                 """.trimIndent()
 
-                var accumulatedJson = ""
-                callOllamaStream("phi3", drawingSystemPrompt) { chunk ->
-                    accumulatedJson += chunk
-                    val completedJson = autoCompleteJson(accumulatedJson)
-                    val operations = parseOperationsResponse(completedJson)
-                    if (operations.isNotEmpty()) {
-                        sendJson(session, mapOf("type" to "CONTENT", "operations" to operations))
-                    }
+                val drawingJson = callOllamaGenerate(textModel, drawingSystemPrompt)
+                val operations = parseOperationsResponse(drawingJson)
+                if (operations.isEmpty()) {
+                    sendError(session, "Drawing model returned no valid points.")
+                    return
                 }
+                sendDrawingOperationsAsDeltas(session, operations)
             }
             else -> {
-                // TEXT or LINEAR_TEXT / LIST
+                // TEXT or LINEAR_TEXT / LIST: stream append-only chunks, never replay full content.
                 val textSystemPrompt = """
                     You are a note content AI. Generate rich notes based on the prompt: "$enhancedPrompt".
                     
-                    Return ONLY a JSON list of operations:
-                    {
-                      "operations": [
-                        {
-                          "action": "CREATE",
-                          "type": "LINEAR_TEXT",
-                          "payload": {
-                            "text": "Detailed content text explaining the topic."
-                          }
-                        },
-                        {
-                          "action": "CREATE",
-                          "type": "LIST",
-                          "x": 50f,
-                          "y": 300f,
-                          "payload": {
-                            "listStyle": "BULLET",
-                            "items": [
-                              {"text": "bullet item 1", "isChecked": false},
-                              {"text": "bullet item 2", "isChecked": false}
-                            ]
-                          }
-                        }
-                      ]
-                    }
+                    Stream ONLY the final note text. Do not return JSON. Do not repeat previous words.
+                    Use SyAi list marker tokens directly when lists are useful:
+                    - #123#0# for bullet
+                    - #124#0# for dash
+                    - #125#0# for star
+                    - #126#0# for numbered
+                    - #220#0# for unchecked checklist
+                    Use #123#1# / #126#1# for nested child items.
+                    Keep content polished, concise, and ready to insert into a notes page.
                 """.trimIndent()
 
-                var accumulatedJson = ""
-                callOllamaStream("phi3", textSystemPrompt) { chunk ->
-                    accumulatedJson += chunk
-                    val completedJson = autoCompleteJson(accumulatedJson)
-                    val operations = parseOperationsResponse(completedJson)
-                    if (operations.isNotEmpty()) {
-                        sendJson(session, mapOf("type" to "CONTENT", "operations" to operations))
-                    }
+                callOllamaStream(textModel, textSystemPrompt, jsonFormat = false) { chunk ->
+                    sendJson(session, mapOf(
+                        "type" to "CONTENT_DELTA",
+                        "deltaType" to "TEXT_APPEND",
+                        "textDelta" to chunk
+                    ))
                 }
             }
         }
@@ -256,7 +243,7 @@ class AISessionWebSocketHandler(
             }
         """.trimIndent()
 
-        val visionResponse = callLlavaVision("llava:phi3", verifyPrompt, feedbackImageBase64)
+        val visionResponse = callLlavaVision(visionModel, verifyPrompt, listOf(feedbackImageBase64))
         if (visionResponse == null) {
             // Fallback to finished
             sendJson(session, mapOf(
@@ -303,14 +290,10 @@ class AISessionWebSocketHandler(
                 }
             """.trimIndent()
             
-            var accumulatedJson = ""
-            callOllamaStream("phi3", correctionOllamaPrompt) { chunk ->
-                accumulatedJson += chunk
-                val completedJson = autoCompleteJson(accumulatedJson)
-                val operations = parseOperationsResponse(completedJson)
-                if (operations.isNotEmpty()) {
-                    sendJson(session, mapOf("type" to "CONTENT", "operations" to operations))
-                }
+            val correctionJson = callOllamaGenerate(textModel, correctionOllamaPrompt)
+            val operations = parseOperationsResponse(correctionJson)
+            if (operations.isNotEmpty()) {
+                sendJson(session, mapOf("type" to "CONTENT", "operations" to operations))
             }
             
             // Re-request verification
@@ -351,11 +334,12 @@ class AISessionWebSocketHandler(
         }
     }
 
-    private fun callLlavaVision(model: String, prompt: String, base64Image: String): String? {
+    private fun callLlavaVision(model: String, prompt: String, base64Images: List<String>): String? {
         println("Calling Llava Vision ($model)...")
         return try {
-            // Clean base64 header if exists
-            val cleanBase64 = if (base64Image.contains(",")) base64Image.substringAfter(",") else base64Image
+            val cleanImages = base64Images
+                .filter { it.isNotBlank() }
+                .map { if (it.contains(",")) it.substringAfter(",") else it }
             
             val payload = mapOf(
                 "model" to model,
@@ -363,7 +347,7 @@ class AISessionWebSocketHandler(
                     mapOf(
                         "role" to "user",
                         "content" to prompt,
-                        "images" to listOf(cleanBase64)
+                        "images" to cleanImages
                     )
                 ),
                 "stream" to false,
@@ -448,12 +432,75 @@ class AISessionWebSocketHandler(
     private fun parseOperationsResponse(response: String?): List<Map<String, Any>> {
         if (response.isNullOrBlank()) return emptyList()
         return try {
-            val json = objectMapper.readValue<Map<String, Any>>(response)
+            val json = objectMapper.readValue<Map<String, Any>>(extractJsonObject(response))
             @Suppress("UNCHECKED_CAST")
             json["operations"] as? List<Map<String, Any>> ?: emptyList()
         } catch (e: Exception) {
             emptyList()
         }
+    }
+
+    private fun sendDrawingOperationsAsDeltas(session: WebSocketSession, operations: List<Map<String, Any>>) {
+        operations.forEach { op ->
+            val type = (op["type"] as? String).orEmpty()
+            if (!type.startsWith("DRAWING")) return@forEach
+
+            @Suppress("UNCHECKED_CAST")
+            val payload = op["payload"] as? Map<String, Any> ?: op
+            val points = normalizePointList(payload["points"])
+            if (points.isEmpty()) return@forEach
+
+            val objectId = "ai_drawing_${UUID.randomUUID()}"
+            val color = payload["color"] ?: "#FF000000"
+            val width = payload["width"] ?: 4.0
+            points.chunked(24).forEach { chunk ->
+                sendJson(session, mapOf(
+                    "type" to "CONTENT_DELTA",
+                    "deltaType" to "DRAWING_POINTS",
+                    "objectId" to objectId,
+                    "color" to color,
+                    "width" to width,
+                    "points" to chunk.flatten()
+                ))
+            }
+        }
+    }
+
+    private fun normalizePointList(raw: Any?): List<List<Double>> {
+        val list = raw as? List<*> ?: return emptyList()
+        if (list.isEmpty()) return emptyList()
+
+        if (list.firstOrNull() is Number) {
+            return list.chunked(2).mapNotNull { pair ->
+                val x = pair.getOrNull(0) as? Number
+                val y = pair.getOrNull(1) as? Number
+                if (x != null && y != null) listOf(x.toDouble(), y.toDouble()) else null
+            }
+        }
+
+        return list.mapNotNull { item ->
+            when (item) {
+                is List<*> -> {
+                    val x = item.getOrNull(0) as? Number
+                    val y = item.getOrNull(1) as? Number
+                    if (x != null && y != null) listOf(x.toDouble(), y.toDouble()) else null
+                }
+                is Map<*, *> -> {
+                    val x = item["x"] as? Number
+                    val y = item["y"] as? Number
+                    if (x != null && y != null) listOf(x.toDouble(), y.toDouble()) else null
+                }
+                else -> null
+            }
+        }
+    }
+
+    private fun extractJsonObject(text: String): String {
+        val trimmed = text.trim()
+        if (trimmed.startsWith("{") && trimmed.endsWith("}")) return trimmed
+        val start = trimmed.indexOf('{')
+        val end = trimmed.lastIndexOf('}')
+        return if (start >= 0 && end > start) trimmed.substring(start, end + 1) else trimmed
     }
 
     private fun sendJson(session: WebSocketSession, payload: Map<String, Any?>) {
@@ -466,15 +513,20 @@ class AISessionWebSocketHandler(
         sendJson(session, mapOf("type" to "ERROR", "message" to errorMsg))
     }
 
-    private fun callOllamaStream(model: String, systemPrompt: String, onChunk: (String) -> Unit) {
+    private fun callOllamaStream(
+        model: String,
+        systemPrompt: String,
+        jsonFormat: Boolean = true,
+        onChunk: (String) -> Unit
+    ) {
         println("Calling Ollama Stream ($model)...")
         try {
-            val payload = mapOf(
+            val payload = mutableMapOf<String, Any>(
                 "model" to model,
                 "prompt" to systemPrompt,
-                "stream" to true,
-                "format" to "json"
+                "stream" to true
             )
+            if (jsonFormat) payload["format"] = "json"
             val body = objectMapper.writeValueAsString(payload)
 
             val httpRequest = HttpRequest.newBuilder()

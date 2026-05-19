@@ -506,11 +506,11 @@ fun NoteEditorScreen(
         ) {
             GlassEffect{
                 AIToolSheet(
-                    onGenerate = { prompt ->
+                    onGenerate = { prompt, attachedImages ->
                         viewModel.startAIOptimization(
                             state.currentPageIndex,
                             prompt,
-                            emptyList()
+                            attachedImages
                         )
                         showAI = false
                         viewModel.setTool(ActiveTool.SELECT)

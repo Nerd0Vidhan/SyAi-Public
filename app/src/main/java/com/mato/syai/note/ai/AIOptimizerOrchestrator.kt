@@ -37,6 +37,8 @@ object AIOptimizerOrchestrator {
     
     // Callback when new canvas operations are received
     var onOperationsReceived: ((String) -> Unit)? = null
+    // Callback when streaming deltas are received. These must be applied once, append-only.
+    var onDeltaReceived: ((String) -> Unit)? = null
     // Callback to trigger capturing page bitmap
     var onVerifyRequested: (() -> Unit)? = null
     // Callback when session is finished to trigger save before closing
@@ -105,6 +107,11 @@ object AIOptimizerOrchestrator {
                             // Forward operations to ViewModel to apply to NotePage
                             val opsJson = gson.toJson(map)
                             onOperationsReceived?.invoke(opsJson)
+                        }
+                        "CONTENT_DELTA" -> {
+                            _state.value = AIState.Loading("Streaming AI changes onto page...", 70)
+                            AIOptimizerService.updateNotification(context, "Streaming AI changes onto page...", 70)
+                            onDeltaReceived?.invoke(gson.toJson(map))
                         }
                         "VERIFY_REQUEST" -> {
                             _state.value = AIState.Loading("Visually inspecting changes...", 80)

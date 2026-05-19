@@ -29,6 +29,7 @@ class AIController(
         try {
             val audioBytes = audio.bytes
             val fileName = audio.originalFilename ?: "audio.wav"
+            val contentType = audio.contentType ?: "audio/mp4"
 
             // Construct multipart body bytes for HttpClient
             val boundary = "Boundary-${UUID.randomUUID()}"
@@ -37,7 +38,7 @@ class AIController(
 
             val headerBytes = (
                 "Content-Disposition: form-data; name=\"audio\"; filename=\"$fileName\"\r\n" +
-                "Content-Type: audio/wav\r\n\r\n"
+                "Content-Type: $contentType\r\n\r\n"
             ).toByteArray()
 
             val outputStream = java.io.ByteArrayOutputStream()

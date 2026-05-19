@@ -93,7 +93,8 @@ async def generate(
 async def transcribe(audio: UploadFile = File(...)):
     try:
         model = get_whisper_model()
-        temp_path = f"temp_{random.randint(1000,9999)}.wav"
+        ext = os.path.splitext(audio.filename or "")[1] or ".m4a"
+        temp_path = f"temp_{random.randint(1000,9999)}{ext}"
         with open(temp_path, "wb") as f:
             f.write(await audio.read())
             

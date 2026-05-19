@@ -10,7 +10,7 @@ class AudioRecorder(private val context: Context) {
     private var audioFile: File? = null
 
     fun startRecording(): File {
-        val file = File(context.cacheDir, "recording_temp.wav")
+        val file = File(context.cacheDir, "recording_temp.m4a")
         audioFile = file
 
         @Suppress("DEPRECATION")
@@ -20,8 +20,10 @@ class AudioRecorder(private val context: Context) {
             MediaRecorder()
         }).apply {
             setAudioSource(MediaRecorder.AudioSource.MIC)
-            setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP)
-            setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB)
+            setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+            setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+            setAudioSamplingRate(16_000)
+            setAudioEncodingBitRate(96_000)
             setOutputFile(file.absolutePath)
             prepare()
             start()

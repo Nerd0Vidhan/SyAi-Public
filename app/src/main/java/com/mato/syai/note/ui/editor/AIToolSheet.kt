@@ -1,5 +1,11 @@
 package com.mato.syai.note.ui.editor
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.util.Base64
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -7,6 +13,7 @@ import androidx.compose.foundation.layout.Arrangement.Absolute.spacedBy
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
@@ -23,13 +30,14 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.core.content.ContextCompat
 import com.mato.syai.note.ai.AudioRecorder
 import com.mato.syai.note.utils.OutlinedTextFieldStyled
 import java.io.File
 
 @Composable
 fun AIToolSheet(
-    onGenerate: (String) -> Unit,
+    onGenerate: (String, List<String>) -> Unit,
     onGenerateImage: (String) -> Unit,
     onTranscribe: (File, (String) -> Unit) -> Unit
 ) {
@@ -42,6 +50,27 @@ fun AIToolSheet(
     var isTranscribing by remember { mutableStateOf(false) }
     val audioRecorder = remember { AudioRecorder(context) }
     var recordedFile by remember { mutableStateOf<File?>(null) }
+    var attachedImages by remember { mutableStateOf<List<String>>(emptyList()) }
+    val imagePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetMultipleContents()
+    ) { uris: List<Uri> ->
+        attachedImages = uris
+            .take(4)
+            .mapNotNull { uri -> uri.toBase64Image(context) }
+    }
+    val audioPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            try {
+                val file = audioRecorder.startRecording()
+                recordedFile = file
+                isRecording = true
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -78,12 +107,16 @@ fun AIToolSheet(
             suffix = {
                 IconButton(
                     onClick = {
-                        try {
-                            val file = audioRecorder.startRecording()
-                            recordedFile = file
-                            isRecording = true
-                        } catch (e: Exception) {
-                            e.printStackTrace()
+                        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                            try {
+                                val file = audioRecorder.startRecording()
+                                recordedFile = file
+                                isRecording = true
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
+                        } else {
+                            audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                         }
                     }
                 ) {
@@ -96,10 +129,31 @@ fun AIToolSheet(
             }
         )
 
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedButton(
+                onClick = { imagePicker.launch("image/*") },
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(Icons.Filled.AttachFile, contentDescription = "Attach images")
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Attach images (${attachedImages.size}/4)")
+            }
+            Text(
+                text = "Used by LLaVA Phi3 for page-aware prompt analysis",
+                color = Color.LightGray,
+                fontSize = 12.sp,
+                modifier = Modifier.weight(1f)
+            )
+        }
+
         Button(
             onClick = {
                 if (selectedTabIndex == 0) {
-                    onGenerate(text)
+                    onGenerate(text, attachedImages)
                 } else {
                     onGenerateImage(text)
                 }
@@ -230,4 +284,13 @@ fun AIToolSheet(
             }
         }
     }
+}
+
+private fun Uri.toBase64Image(context: android.content.Context): String? {
+    return runCatching {
+        context.contentResolver.openInputStream(this)?.use { input ->
+            val bytes = input.readBytes()
+            Base64.encodeToString(bytes, Base64.NO_WRAP)
+        }
+    }.getOrNull()
 }
