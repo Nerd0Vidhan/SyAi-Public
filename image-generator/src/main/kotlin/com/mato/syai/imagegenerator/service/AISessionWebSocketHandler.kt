@@ -29,7 +29,7 @@ class AISessionWebSocketHandler(
     private val ollamaUrl = "http://localhost:11434"
     private val fastapiUrl = "http://localhost:8000"
     private val textModel = "phi3"
-    private val visionModel = "llava:phi3:3.8b"
+    private val preferredVisionModel = "llava:phi3:3.8b"
 
     override fun afterConnectionEstablished(session: WebSocketSession) {
         sessions[session.id] = session
@@ -67,6 +67,17 @@ class AISessionWebSocketHandler(
         val pageData = request["pageData"] as? Map<String, Any> ?: emptyMap()
 
         println("WebSocket START: Prompt = $prompt, AttachedImagesCount = ${attachedImages.size}")
+        val visionModel = resolveOllamaModel(
+            preferred = preferredVisionModel,
+            fallbacks = listOf(
+                "llava-phi3:latest",
+                "llava-phi3",
+                "llava:latest",
+                "llava",
+                "bakllava:latest",
+                "bakllava"
+            )
+        )
 
         // 1. Ask Ollama to classify and enhance prompt.
         val systemPrompt = """
@@ -95,7 +106,7 @@ class AISessionWebSocketHandler(
         }
         if (ollamaResponse == null) {
             println("ERROR: Ollama returned a null response. Please check that Ollama is running and models are pulled.")
-            sendError(session, "Failed to connect to local Ollama. Make sure phi3 and llava:phi3:3.8b are available.")
+            sendError(session, "Failed to connect to local Ollama. Make sure phi3 and a vision model are available. Installed models: ${listOllamaModelNames().joinToString()}")
             return
         }
 
@@ -211,6 +222,17 @@ class AISessionWebSocketHandler(
         val originalPrompt = request["prompt"] as? String ?: ""
         val feedbackImageBase64 = request["feedbackImage"] as? String ?: ""
         val pageData = request["pageData"] as? Map<String, Any> ?: emptyMap()
+        val visionModel = resolveOllamaModel(
+            preferred = preferredVisionModel,
+            fallbacks = listOf(
+                "llava-phi3:latest",
+                "llava-phi3",
+                "llava:latest",
+                "llava",
+                "bakllava:latest",
+                "bakllava"
+            )
+        )
 
         if (feedbackImageBase64.isBlank()) {
             sendJson(session, mapOf(
@@ -331,6 +353,47 @@ class AISessionWebSocketHandler(
             println("Exception while calling Ollama: ${e.message}")
             e.printStackTrace()
             null
+        }
+    }
+
+    private fun resolveOllamaModel(preferred: String, fallbacks: List<String>): String {
+        val installed = listOllamaModelNames()
+        if (installed.isEmpty()) return preferred
+        if (preferred in installed) return preferred
+
+        fallbacks.firstOrNull { it in installed }?.let { return it }
+
+        installed.firstOrNull { name ->
+            name.contains("llava", ignoreCase = true) && name.contains("phi", ignoreCase = true)
+        }?.let { return it }
+
+        installed.firstOrNull { name ->
+            name.contains("llava", ignoreCase = true) ||
+                name.contains("vision", ignoreCase = true) ||
+                name.contains("bakllava", ignoreCase = true)
+        }?.let { return it }
+
+        println("No matching Ollama vision model found. Installed models: ${installed.joinToString()}")
+        return preferred
+    }
+
+    private fun listOllamaModelNames(): List<String> {
+        return try {
+            val request = HttpRequest.newBuilder()
+                .uri(URI.create("$ollamaUrl/api/tags"))
+                .GET()
+                .build()
+
+            val response = httpClient.send(request, BodyHandlers.ofString())
+            if (response.statusCode() != 200) return emptyList()
+
+            val json = objectMapper.readValue<Map<String, Any>>(response.body())
+            @Suppress("UNCHECKED_CAST")
+            val models = json["models"] as? List<Map<String, Any>> ?: return emptyList()
+            models.mapNotNull { it["name"] as? String }
+        } catch (e: Exception) {
+            println("Failed to read Ollama model tags: ${e.message}")
+            emptyList()
         }
     }
 

@@ -94,6 +94,35 @@ Check installed models:
 ollama list
 ```
 
+Important: Ollama model names must match exactly. Some installs expose the Phi-3 LLaVA model as `llava-phi3`, `llava-phi3:latest`, `llava:latest`, or another tag instead of `llava:phi3:3.8b`.
+
+If Spring Boot logs this:
+
+```text
+Llava Vision returned non-200 status code: 400
+{"error":"invalid model name"}
+```
+
+Run:
+
+```powershell
+ollama list
+curl http://localhost:11434/api/tags
+```
+
+Then use one of the exact names shown there. The backend now tries to auto-detect installed vision models in this order:
+
+```text
+llava:phi3:3.8b
+llava-phi3:latest
+llava-phi3
+llava:latest
+llava
+bakllava:latest
+bakllava
+any installed model containing llava/vision/bakllava
+```
+
 Quick text model test:
 
 ```powershell
@@ -367,4 +396,3 @@ cd C:\Users\Vidhan\AndroidStudioProjects\SyAi-Public
 ```
 
 Then open the app and use AI Tool in the editor.
-
