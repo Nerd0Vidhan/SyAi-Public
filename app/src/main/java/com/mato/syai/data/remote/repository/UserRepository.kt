@@ -1,12 +1,25 @@
 package com.mato.syai.data.remote.repository
 
+import android.util.Log
 import com.mato.syai.data.remote.network.RetrofitInstance
 
 class UserRepository {
 
-    suspend fun createUser(token: String) =
-        RetrofitInstance.api.createUser("Bearer $token")
+    suspend fun createUser() {
 
-    suspend fun getUser(token: String) =
-        RetrofitInstance.api.getUser("Bearer $token")
+        try {
+
+            val response = RetrofitInstance.api.createUser()
+
+            Log.d("API", "Code: ${response.code()}")
+            Log.d("API", "Body: ${response.body()}")
+
+        } catch (e: Exception) {
+
+            Log.e("API", "Create User Failed", e)
+        }
+    }
+
+    suspend fun getUser() =
+        RetrofitInstance.api.getUser()
 }

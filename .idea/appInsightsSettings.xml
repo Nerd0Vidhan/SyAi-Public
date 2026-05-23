@@ -8,10 +8,10 @@
             <InsightsFilterSettings>
               <option name="connection">
                 <ConnectionSetting>
-                  <option name="appId" value="com.mato.syai" />
-                  <option name="mobileSdkAppId" value="1:5260556929:android:e40586f685fa81cf1c2b80" />
-                  <option name="projectId" value="syai-33d22" />
-                  <option name="projectNumber" value="5260556929" />
+                  <option name="appId" value="PLACEHOLDER" />
+                  <option name="mobileSdkAppId" value="" />
+                  <option name="projectId" value="" />
+                  <option name="projectNumber" value="" />
                 </ConnectionSetting>
               </option>
               <option name="signal" value="SIGNAL_UNSPECIFIED" />
