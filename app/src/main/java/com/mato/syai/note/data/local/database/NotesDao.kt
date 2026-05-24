@@ -21,6 +21,9 @@ interface NoteDao {
     @Query("DELETE FROM notes_path WHERE filePath = :path")
     suspend fun deleteByPath(path: String)
 
+    @Query("DELETE FROM notes_path WHERE noteId = :noteId")
+    suspend fun deleteById(noteId: Long)
+
     @Query("SELECT filePath FROM notes_path")
     suspend fun getAllStoredPaths(): List<String>
 
@@ -57,4 +60,22 @@ interface NoteDao {
         insertMetadata(metadata.copy(noteId = id))
         return id
     }
+
+    @Query("UPDATE notes_path SET imagePreview = :previewId WHERE noteId = :noteId")
+    suspend fun savePreviewId(noteId: Long, previewId: String?)
+
+    @Query("SELECT imagePreview from notes_path WHERE noteId = :noteId")
+    suspend fun fetchPreviewId(noteId: Long): String?
+
+    @Query("SELECT * FROM saved_colors ORDER BY timestamp DESC LIMIT 15")
+    fun getSavedColors(): Flow<List<SavedColorEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSavedColor(color: SavedColorEntity)
+
+    @Query("DELETE FROM saved_colors WHERE id = :id")
+    suspend fun deleteSavedColorById(id: Long)
+
+    @Query("DELETE FROM saved_colors WHERE id NOT IN (SELECT id FROM saved_colors ORDER BY timestamp DESC LIMIT 15)")
+    suspend fun deleteOldSavedColors()
 }

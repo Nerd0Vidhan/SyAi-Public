@@ -158,27 +158,20 @@ fun LoginScreen(
                 .imePadding(),
             contentAlignment = Alignment.Center
         ) {
-            // Apply the graphicsLayer to the Glass Card wrapper
             GlassEffect(
                 modifier = Modifier
                     .padding(16.dp)
                     .widthIn(max = 480.dp)
                     .wrapContentHeight()
-                    // 3D FLIP MODIFIER
                     .graphicsLayer {
                         rotationY = rotation
-                        cameraDistance = 12f * density // Adds perspective depth
+                        cameraDistance = 12f * density
                     },
                 cornerRadius = 24.dp,
                 glassTintColor = Color(0x11000000).copy(alpha = 0.55f)
             ) {
-                // Content Switcher Logic
-                // If rotation is <= 90, show Front (Email).
-                // If > 90, show Back (Phone).
-                // We must rotate the Back content 180 degrees so it isn't mirrored.
 
                 if (rotation <= 90f) {
-                    // --- FRONT SIDE: EMAIL/PASSWORD ---
                     EmailLoginContent(
                         email = email,
                         onEmailChange = { email = it },
@@ -201,8 +194,6 @@ fun LoginScreen(
                         context = context
                     )
                 } else {
-                    // --- BACK SIDE: PHONE LOGIN ---
-                    // We wrap this in a Box with rotationY = 180f to "un-mirror" the text
                     Box(modifier = Modifier.graphicsLayer { rotationY = 180f }) {
                         PhoneLoginContent(
                             phone = phone,

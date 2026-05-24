@@ -2,7 +2,7 @@ package com.mato.syai.note.domain.local.model
 
 import java.util.UUID
 
-// ---------------------- BASIC NOTE CARD MODEL ----------------------
+const val NOTE_SCHEMA_VERSION = 3
 
 data class Note(
     val id: Long,
@@ -10,25 +10,45 @@ data class Note(
     val title: String,
     val folderName: String,
     val lastModified: Long,
+    val imagePreview: String? = null,
     val isFavorite: Boolean,
     val metadata: NoteMetadata
 )
 
 data class NoteMetadata(
     val textSize: Float = 16f,
-    val colorHex: Int = 0xFF000000.toInt()
+    val colorHex: Int = 0xFF000000.toInt(),
+    val background : String?="0xFFFFFFFF",
+    val defaultTextSize: Float = 12f,
+    val cursorColor: Int = 0xFF0D0127.toInt(),
+    val backgroundType: String = BackGroundType.SOLID.type,
+    val totalPages: Int = 1,
+    val pageSize: PageSize = PageSize.A4
 )
 
-// ---------------------- PAGE SIZE ----------------------
-
-enum class PageSize(val ratio: Float) {
-    A4(1.414f),
-    A3(1.414f),
-    A4_LANDSCAPE(0.707f),
-    CUSTOM(1f)
+enum class BackGroundType(
+    val type:String
+){
+    SOLID("SOLID"),
+    IMAGE("IMAGE");
 }
 
-// ---------------------- TOOLS ----------------------
+enum class PageSize(
+    val widthPoints: Float,
+    val heightPoints: Float,
+    val pointsToDpFactor: Float = 1f,
+    val pointsToSpFactor: Float = 1f
+) {
+    A4(widthPoints = 595f, heightPoints = 842f),
+    A3(widthPoints = 842f, heightPoints = 1191f),
+    A4_LANDSCAPE(widthPoints = 842f, heightPoints = 595f),
+    CUSTOM(widthPoints = 595f, heightPoints = 842f);
+
+    val ratio: Float
+        get() = if (widthPoints == 0f) 1f else heightPoints / widthPoints
+
+    fun defaultDimensions(): PageDimensions = PageDimensions(widthPoints, heightPoints)
+}
 
 enum class ObjectType {
     TEXT,
@@ -50,35 +70,231 @@ enum class ActiveTool {
     LIST
 }
 
-// --- List Markers ---
 enum class ListMarker {
     BULLET,
     NUMBER,
+    DASH,
+    CHECK,
+    STAR,
     ROMAN,
     CHECKBOX
 }
 
-// ---------------------- ROOT CONTENT ----------------------
+enum class OrderedListStyle {
+    DIGITS,
+    LOWER_ALPHA,
+    UPPER_ALPHA,
+    LOWER_ROMAN,
+    UPPER_ROMAN
+}
+
+enum class BulletListStyle {
+    DISC,
+    CIRCLE,
+    SQUARE,
+    DASH
+}
 
 data class NoteContent(
-    val schemaVersion: Int = 1,
+    val schemaVersion: Int = NOTE_SCHEMA_VERSION,
+    val globalPagePadding: PagePadding = PagePadding(),
     val pages: MutableList<PageData> = mutableListOf()
 )
-
-// ---------------------- PAGE ----------------------
 
 data class PageData(
     val pageId: String = UUID.randomUUID().toString(),
     val pageNo: Int,
     val backgroundColor: Int = 0xFFFFFFFF.toInt(),
     val pageSize: PageSize = PageSize.A4,
+    val pageDimensions: PageDimensions = pageSize.defaultDimensions(),
+    val pagePadding: PagePadding = PagePadding(),
+    val borderStyle: PageBorderStyle = PageBorderStyle(),
     val items: MutableList<NoteObject> = mutableListOf(),
-
-    var linearText: String = "",
+    var linearContent: MutableList<LinearContentEntry> = mutableListOf(),
+    var linearTextPaste: String = "",
     var linearTextStyle: TextStyleData = TextStyleData()
-)
+) {
+    val primaryLinearEntry: LinearContentEntry?
+        get() = linearContent
+            .filter { it.type == ObjectType.LINEAR_TEXT && it.objectId == null }
+            .minByOrNull { it.layer }
 
-// ---------------------- OBJECT ----------------------
+    val widthPoints: Float
+        get() = if (pageSize == PageSize.CUSTOM) pageDimensions.widthPoints else pageSize.widthPoints
+
+    val heightPoints: Float
+        get() = if (pageSize == PageSize.CUSTOM) pageDimensions.heightPoints else pageSize.heightPoints
+
+    val ratio: Float
+        get() = if (widthPoints == 0f) 1f else heightPoints / widthPoints
+
+    val renderableItems: List<NoteObject>
+        get() {
+            if (linearContent.isEmpty()) return items.sortedBy { it.layer }
+
+            val linearObjectIds = linearContent
+                .filter { it.type != ObjectType.LINEAR_TEXT }
+                .mapNotNull { it.objectId }
+                .toSet()
+
+            return items
+                .filter { it.id in linearObjectIds || it.type == ObjectType.DRAWING || it.type == ObjectType.TEXT }
+                .sortedBy { obj ->
+                    linearContent.find { it.objectId == obj.id }?.layer ?: obj.layer
+                }
+        }
+
+    fun upsertObject(
+        noteObject: NoteObject,
+        textValue: String? = noteObject.payload.asTextValueOrNull(),
+        styleOverride: TextStyleData? = noteObject.payload.asTextStyleOrNull(),
+        spansOverride: List<TextSpan>? = noteObject.payload.asTextSpansOrNull()
+    ) {
+        val itemIndex = items.indexOfFirst { it.id == noteObject.id }
+        if (itemIndex >= 0) {
+            items[itemIndex] = noteObject
+        } else {
+            items.add(noteObject)
+        }
+
+        val linearIndex = linearContent.indexOfFirst { it.objectId == noteObject.id }
+        val linearEntry = LinearContentEntry(
+            id = linearContent.getOrNull(linearIndex)?.id ?: UUID.randomUUID().toString(),
+            objectId = noteObject.id,
+            layer = noteObject.layer,
+            type = noteObject.type,
+            value = textValue.orEmpty(),
+            transform = noteObject.transform.copy(),
+            bounds = noteObject.bounds.copy(),
+            style = styleOverride ?: linearTextStyle,
+            spans = spansOverride?.toMutableList() ?: mutableListOf()
+        )
+
+        if (linearIndex >= 0) {
+            linearContent[linearIndex] = linearEntry
+        } else {
+            linearContent.add(linearEntry)
+        }
+
+        refreshLinearTextPaste()
+    }
+
+    fun removeObject(objectId: String) {
+        items.removeAll { it.id == objectId }
+        linearContent.removeAll { it.objectId == objectId }
+        refreshLinearTextPaste()
+    }
+
+    fun updateLinearEntry(
+        objectId: String? = null,
+        id: String? = null,
+        textValue: String? = null,
+        transform: Transform? = null,
+        bounds: Bounds? = null,
+        style: TextStyleData? = null,
+        layer: Int? = null,
+        spans: List<TextSpan>? = null
+    ) {
+        val index = if (id != null) {
+            linearContent.indexOfFirst { it.id == id }
+        } else {
+            linearContent.indexOfFirst { it.objectId == objectId }
+        }
+        if (index == -1) return
+
+        val current = linearContent[index]
+        linearContent[index] = current.copy(
+            value = textValue ?: current.value,
+            transform = transform ?: current.transform,
+            bounds = bounds ?: current.bounds,
+            style = style ?: current.style,
+            layer = layer ?: current.layer,
+            spans = spans?.toMutableList() ?: current.spans
+        )
+        refreshLinearTextPaste()
+    }
+
+    fun normalizeFromLegacyItems() {
+        if (linearContent.isNotEmpty()) {
+            ensurePrimaryLinearEntry()
+            refreshLinearTextPaste()
+            return
+        }
+
+        linearContent = items.sortedBy { it.layer }
+            .map { obj ->
+                LinearContentEntry(
+                    objectId = obj.id,
+                    layer = obj.layer,
+                    type = obj.type,
+                    value = obj.payload.asTextValueOrNull().orEmpty(),
+                    transform = obj.transform.copy(),
+                    bounds = obj.bounds.copy(),
+                    style = obj.payload.asTextStyleOrNull() ?: linearTextStyle,
+                    spans = obj.payload.asTextSpansOrNull()?.toMutableList() ?: mutableListOf()
+                )
+            }
+            .toMutableList()
+
+        ensurePrimaryLinearEntry()
+        refreshLinearTextPaste()
+    }
+
+    fun ensurePrimaryLinearEntry(): LinearContentEntry {
+        primaryLinearEntry?.let { return it }
+
+        val entry = LinearContentEntry(
+            objectId = null,
+            layer = 0,
+            type = ObjectType.LINEAR_TEXT,
+            value = "",
+            transform = Transform(
+                x = pagePadding.startPoints,
+                y = pagePadding.topPoints
+            ),
+            bounds = Bounds(
+                width = widthPoints - pagePadding.startPoints - pagePadding.endPoints,
+                height = heightPoints - pagePadding.topPoints - pagePadding.bottomPoints
+            ),
+            style = linearTextStyle
+        )
+        linearContent.add(0, entry)
+        return entry
+    }
+
+    fun updatePrimaryLinearText(
+        text: String? = null,
+        style: TextStyleData? = null,
+        padding: PagePadding? = null
+    ) {
+        val entry = ensurePrimaryLinearEntry()
+        val index = linearContent.indexOfFirst { it.id == entry.id }
+        if (index == -1) return
+
+        val resolvedPadding = padding ?: pagePadding
+        val resolvedStyle = style ?: linearTextStyle
+        linearContent[index] = linearContent[index].copy(
+            value = text ?: linearContent[index].value,
+            transform = Transform(
+                x = resolvedPadding.startPoints,
+                y = resolvedPadding.topPoints
+            ),
+            bounds = Bounds(
+                width = widthPoints - resolvedPadding.startPoints - resolvedPadding.endPoints,
+                height = heightPoints - resolvedPadding.topPoints - resolvedPadding.bottomPoints
+            ),
+            style = resolvedStyle
+        )
+        refreshLinearTextPaste()
+    }
+
+    fun refreshLinearTextPaste() {
+        linearTextPaste = linearContent
+            .sortedBy { it.layer }
+            .joinToString(separator = "\n") { it.value.trim() }
+            .trim()
+    }
+}
 
 data class NoteObject(
     val id: String = UUID.randomUUID().toString(),
@@ -90,8 +306,6 @@ data class NoteObject(
     var isVisible: Boolean = true,
     var payload: ObjectPayload
 )
-
-// ---------------------- TRANSFORM ----------------------
 
 data class Transform(
     var x: Float = 0f,
@@ -107,46 +321,68 @@ data class Bounds(
     var height: Float = 80f
 )
 
-// ---------------------- PAYLOADS ----------------------
+data class PageDimensions(
+    val widthPoints: Float = PageSize.A4.widthPoints,
+    val heightPoints: Float = PageSize.A4.heightPoints
+) {
+    val ratio: Float
+        get() = if (widthPoints == 0f) 1f else heightPoints / widthPoints
+}
+
+data class PagePadding(
+    val startPoints: Float = 36f,
+    val topPoints: Float = 36f,
+    val endPoints: Float = 36f,
+    val bottomPoints: Float = 36f
+)
+
+data class PageBorderStyle(
+    val isVisible: Boolean = true,
+    val color: Int = 0x1A000000,
+    val widthPoints: Float = 1f
+)
 
 sealed interface ObjectPayload
 
 data class TextPayload(
     var text: String = "",
-    var style: TextStyleData = TextStyleData()
+    var style: TextStyleData = TextStyleData(),
+    var spans: MutableList<TextSpan> = mutableListOf()
 ) : ObjectPayload
 
 data class TextSpan(
     val start: Int,
     val end: Int,
     val style: TextStyleData
-): ObjectPayload
+)
+
 data class ImagePayload(
     val uri: String,
-    val fileId: String? = null
+    val fileId: String? = null,
+    val ratio: Float = 1f
 ) : ObjectPayload
 
 data class DrawingPayload(
     val strokes: MutableList<Stroke> = mutableListOf()
 ) : ObjectPayload
 
-// ---------------------- DRAWING ----------------------
-
 data class Stroke(
-    val color: Int,
-    val width: Float,
-    val points: List<Point>
+    val id: String = UUID.randomUUID().toString(),
+    var color: Int,
+    var width: Float,
+    var alpha:Float?=1f,
+    var points: List<Point>,
+    val brushStyle: BrushStyle = BrushStyle.PEN
 )
 
 data class Point(
+    val id: String = UUID.randomUUID().toString(),
     val x: Float,
     val y: Float
 )
 
-// ---------------------- TEXT ----------------------
-
 data class TextStyleData(
-    val fontSize: Float = 16f,
+    val fontSize: Float = 12f,
     val color: Int = 0xFF000000.toInt(),
     val isBold: Boolean = false,
     val isItalic: Boolean = false,
@@ -154,7 +390,17 @@ data class TextStyleData(
     val alignment: String = "LEFT"
 )
 
-//----------------CheckList ------------------------
+data class LinearContentEntry(
+    val id: String = UUID.randomUUID().toString(),
+    val objectId: String? = null,
+    val layer: Int,
+    val type: ObjectType,
+    val value: String = "",
+    val transform: Transform = Transform(),
+    val bounds: Bounds = Bounds(),
+    var style: TextStyleData = TextStyleData(),
+    var spans: MutableList<TextSpan> = mutableListOf()
+)
 
 data class ChecklistItem(
     val id: String = UUID.randomUUID().toString(),
@@ -166,22 +412,122 @@ data class ChecklistPayload(
     val items: MutableList<ChecklistItem>
 ) : ObjectPayload
 
-// -------------------List ------------
-
 data class LinearTextPayload(
     var text: String = "",
-    var style: TextStyleData = TextStyleData()
-    // In a production app, this would hold a list of "Spans" or "Blocks"
+    var style: TextStyleData = TextStyleData(),
+    var spans: MutableList<TextSpan> = mutableListOf()
 ) : ObjectPayload
 
 data class ListPayload(
-    val style: ListMarker = ListMarker.BULLET,
-    val items: MutableList<ListItem> = mutableListOf()
+    var style: ListMarker = ListMarker.BULLET,
+    var orderedStyle: OrderedListStyle = OrderedListStyle.DIGITS,
+    var bulletStyle: BulletListStyle = BulletListStyle.DISC,
+    var items: MutableList<ListItem> = mutableListOf()
 ) : ObjectPayload
 
 data class ListItem(
     val id: String = UUID.randomUUID().toString(),
     var text: String = "",
-    var isChecked: Boolean = false, // Used if parent style is CHECKBOX
-    val nestedList: ListPayload? = null // 🔥 Recursive Nesting
+    var style: TextStyleData = TextStyleData(),
+    var spans: MutableList<TextSpan> = mutableListOf(),
+    var isChecked: Boolean = false,
+    var nestedList: ListPayload? = null
 )
+
+object PageUnitConverter {
+    fun pointsToDp(points: Float, pageSize: PageSize): Float = points * pageSize.pointsToDpFactor
+
+    fun dpToPoints(dp: Float, pageSize: PageSize): Float =
+        if (pageSize.pointsToDpFactor == 0f) dp else dp / pageSize.pointsToDpFactor
+
+    fun pointsToSp(points: Float, pageSize: PageSize): Float = points * pageSize.pointsToSpFactor
+
+    fun spToPoints(sp: Float, pageSize: PageSize): Float =
+        if (pageSize.pointsToSpFactor == 0f) sp else sp / pageSize.pointsToSpFactor
+}
+
+fun NoteContent.normalizeForCurrentSchema(): NoteContent {
+    pages.forEach { it.normalizeFromLegacyItems() }
+    return if (schemaVersion == NOTE_SCHEMA_VERSION) {
+        this
+    } else {
+        copy(schemaVersion = NOTE_SCHEMA_VERSION)
+    }
+}
+
+private fun ObjectPayload.asTextValueOrNull(): String? = when (this) {
+    is TextPayload -> text
+    is LinearTextPayload -> text
+    is ListPayload -> items.joinToString(separator = "\n") { it.text }
+    is ChecklistPayload -> items.joinToString(separator = "\n") { item ->
+        val prefix = if (item.isChecked) "[x]" else "[ ]"
+        "$prefix ${item.text}"
+    }
+    else -> null
+}
+
+private fun ObjectPayload.asTextStyleOrNull(): TextStyleData? = when (this) {
+    is TextPayload -> style
+    is LinearTextPayload -> style
+    else -> null
+}
+
+private fun ObjectPayload.asTextSpansOrNull(): List<TextSpan>? = when (this) {
+    is TextPayload -> spans
+    is LinearTextPayload -> spans
+    else -> null
+}
+
+fun NoteContent.fastCopy(): NoteContent {
+    return this.copy(
+        globalPagePadding = this.globalPagePadding.copy(),
+        pages = this.pages.map { it.fastCopy() }.toMutableList()
+    )
+}
+
+fun PageData.fastCopy(): PageData {
+    return this.copy(
+        pageDimensions = this.pageDimensions.copy(),
+        pagePadding = this.pagePadding.copy(),
+        borderStyle = this.borderStyle.copy(),
+        items = this.items.map { it.fastCopy() }.toMutableList(),
+        linearContent = this.linearContent.map { it.fastCopy() }.toMutableList(),
+        linearTextStyle = this.linearTextStyle.copy()
+    )
+}
+
+fun NoteObject.fastCopy(): NoteObject {
+    return this.copy(
+        transform = this.transform.copy(),
+        bounds = this.bounds.copy(),
+        payload = this.payload.fastCopy()
+    )
+}
+
+fun LinearContentEntry.fastCopy(): LinearContentEntry {
+    return this.copy(
+        transform = this.transform.copy(),
+        bounds = this.bounds.copy(),
+        style = this.style.copy(),
+        spans = this.spans.map { it.copy(style = it.style.copy()) }.toMutableList()
+    )
+}
+
+fun ObjectPayload.fastCopy(): ObjectPayload {
+    return when (this) {
+        is TextPayload -> this.copy(style = this.style.copy(), spans = this.spans.map { it.copy(style = it.style.copy()) }.toMutableList())
+        is ImagePayload -> this.copy()
+        is DrawingPayload -> this.copy(strokes = this.strokes.map { stroke -> stroke.copy(points = stroke.points.toList()) }.toMutableList())
+        is ChecklistPayload -> this.copy(items = this.items.map { it.copy() }.toMutableList())
+        is LinearTextPayload -> this.copy(style = this.style.copy(), spans = this.spans.map { it.copy(style = it.style.copy()) }.toMutableList())
+        is ListPayload -> this.copy(items = this.items.map { it.fastCopy() }.toMutableList())
+    }
+}
+
+fun ListItem.fastCopy(): ListItem {
+    return this.copy(
+        style = this.style.copy(),
+        spans = this.spans.map { it.copy(style = it.style.copy()) }.toMutableList(),
+        nestedList = this.nestedList?.copy(items = this.nestedList!!.items.map { it.fastCopy() }.toMutableList())
+    )
+}

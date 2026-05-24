@@ -1,11 +1,16 @@
 package com.mato.syai.note.data.local.repository
 
+import android.content.Context
+import android.graphics.Bitmap
+import android.net.Uri
 import android.os.Environment
+import android.util.Log
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.gson.Gson
 import com.mato.syai.note.data.local.database.*
 import com.mato.syai.note.data.local.security.CryptoManager
 import com.mato.syai.note.domain.local.model.*
+import com.mato.syai.note.utils.ThumbnailUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -16,7 +21,8 @@ import javax.inject.Inject
 class NoteRepository @Inject constructor(
     private val dao: NoteDao,
     private val cryptoManager: CryptoManager,
-    private val gson: Gson
+    private val gson: Gson,
+    private val utils: ThumbnailUtils
 ) {
 
     val allNotes: Flow<List<Note>> = dao.getNotesWithMetadata().map { list ->
@@ -28,15 +34,26 @@ class NoteRepository @Inject constructor(
                 folderName = item.note.folderName,
                 lastModified = item.note.lastModified,
                 isFavorite = item.note.isFavorite,
+                imagePreview = item.note.imagePreview,
                 metadata = NoteMetadata(
                     textSize = item.metadata?.textSize ?: 16f,
                     colorHex = item.metadata?.colorHex ?: 0xFF000000.toInt(),
+                    background = item.metadata?.background,
+                    backgroundType = item.metadata?.backgroundType ?: BackGroundType.SOLID.type,
+                    defaultTextSize = item.metadata?.defaultTextSize ?: 12f,
+                    cursorColor = item.metadata?.cursorColor ?: 0xFF0D0127.toInt(),
+                    totalPages = item.metadata?.totalPages?:1,
+                    pageSize = item.metadata?.pageSize?: PageSize.A4
                 )
             )
         }
     }
 
     suspend fun getNoteById(id: Long): NoteEntity? = dao.getNoteById(id)
+    
+    suspend fun getNoteMetadata(id: Long): MetadataEntity? = dao.getMetadataByNoteId(id)
+    
+    suspend fun updateNoteMetadata(metadata: MetadataEntity) = dao.insertMetadata(metadata)
 
     suspend fun createNewNote(title: String, folder: String): Long = withContext(Dispatchers.IO) {
         val root = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
@@ -51,7 +68,7 @@ class NoteRepository @Inject constructor(
             folderName = folder,
             lastModified = System.currentTimeMillis(),
             preview = "",
-            isFavorite = false
+            isFavorite = false,
         )
 
         val noteId = dao.insertNote(entity)
@@ -119,6 +136,15 @@ class NoteRepository @Inject constructor(
         if (file.exists()) file.delete()
     }
 
+    suspend fun deleteNoteById(noteId: Long) = withContext(Dispatchers.IO) {
+        val note = dao.getNoteById(noteId)
+        note?.let {
+            val file = File(it.filePath)
+            if (file.exists()) file.delete()
+            dao.deleteById(noteId)
+        }
+    }
+
     suspend fun saveNoteContent(noteId: Long, content: NoteContent) = withContext(Dispatchers.IO) {
         val note = dao.getNoteById(noteId) ?: return@withContext
         val json = gson.toJson(content)
@@ -140,7 +166,10 @@ class NoteRepository @Inject constructor(
             val iv = bytes.take(12).toByteArray()
             val encrypted = bytes.drop(12).toByteArray()
             val decrypted = cryptoManager.decrypt(iv, encrypted).decodeToString()
-            gson.fromJson(decrypted, NoteContent::class.java) ?: createDefaultContent()
+            val content = gson.fromJson(decrypted, NoteContent::class.java)?.normalizeForCurrentSchema()
+                ?: createDefaultContent()
+            Log.d("Note Content", "Note Data : $content")
+            content
         } catch (e: Exception) {
             e.printStackTrace()
             createDefaultContent()
@@ -163,9 +192,9 @@ class NoteRepository @Inject constructor(
 
     private fun createDefaultContent(): NoteContent {
         return NoteContent(
-            schemaVersion = 1,
+            schemaVersion = NOTE_SCHEMA_VERSION,
             pages = mutableListOf(
-                PageData(pageNo = 0)
+                PageData(pageNo = 0).apply { normalizeFromLegacyItems() }
             )
         )
     }
@@ -197,5 +226,70 @@ class NoteRepository @Inject constructor(
             dao.updateTitle(noteId, newTitle, System.currentTimeMillis())
         }
         dao.updateMetadata(noteId, textSize, color)
+    }
+
+    suspend fun generateNotePreview(context: Context, content: NoteContent,noteId: Long){
+        val previewId = utils.generateAndSave(context = context, content = content)
+
+        Log.d("GeneratePreview","Preview id:$previewId")
+        dao.savePreviewId(noteId,previewId)
+    }
+
+    suspend fun loadNotePreview(context: Context,noteId: Long): Bitmap?{
+        return utils.loadThumbnail(context,dao.fetchPreviewId(noteId)?:"")
+    }
+
+    suspend fun insertGeneratedImage(
+        noteId: Long,
+        pageIndex: Int,
+        imageFile: File,
+        jobId: String,
+        ratio: Float = 1f
+    ) = withContext(Dispatchers.IO) {
+        val content = loadNoteContent(noteId)
+        val page = content.pages.getOrNull(pageIndex) ?: return@withContext
+        if (page.items.any { (it.payload as? ImagePayload)?.fileId == jobId }) {
+            return@withContext
+        }
+
+        val maxLayer = maxOf(
+            page.items.maxOfOrNull { it.layer } ?: 0,
+            page.linearContent.maxOfOrNull { it.layer } ?: 0
+        )
+        val maxWidth = page.widthPoints * 0.4f
+        val maxHeight = page.heightPoints * 0.3f
+        val imageWidth = maxWidth.coerceAtLeast(120f)
+        val imageHeight = minOf((imageWidth / ratio.coerceAtLeast(0.1f)), maxHeight).coerceAtLeast(120f)
+        val x = page.pagePadding.startPoints
+        val y = (page.primaryLinearEntry?.transform?.y ?: page.pagePadding.topPoints) + 72f
+
+        val noteObject = NoteObject(
+            layer = maxLayer + 1,
+            type = ObjectType.IMAGE,
+            transform = Transform(
+                x = x.coerceAtMost(page.widthPoints - page.pagePadding.endPoints - imageWidth),
+                y = y.coerceAtMost(page.heightPoints - page.pagePadding.bottomPoints - imageHeight)
+            ),
+            bounds = Bounds(imageWidth, imageHeight),
+            payload = ImagePayload(
+                uri = Uri.fromFile(imageFile).toString(),
+                fileId = jobId,
+                ratio = ratio
+            )
+        )
+        page.upsertObject(noteObject)
+        page.refreshLinearTextPaste()
+        saveNoteContent(noteId, content)
+    }
+
+    val savedColors: Flow<List<SavedColorEntity>> = dao.getSavedColors()
+
+    suspend fun saveColor(colorHex: Int) = withContext(Dispatchers.IO) {
+        dao.insertSavedColor(SavedColorEntity(colorHex = colorHex))
+        dao.deleteOldSavedColors()
+    }
+
+    suspend fun deleteSavedColor(id: Long) = withContext(Dispatchers.IO) {
+        dao.deleteSavedColorById(id)
     }
 }

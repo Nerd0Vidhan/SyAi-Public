@@ -4,8 +4,8 @@ import androidx.room.Database
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [NoteEntity::class, MetadataEntity::class],
-    version = 1,
+    entities = [NoteEntity::class, MetadataEntity::class, SavedColorEntity::class],
+    version = 3,
     exportSchema = false
 )
 abstract class NoteDatabase : RoomDatabase() {

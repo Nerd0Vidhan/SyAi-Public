@@ -10,6 +10,7 @@ val White=Color(0xFFFFFFFF)
 val Black=Color(0xFF000000)
 val LightPurple = Color(0xFFAA8BEF)
 val WhitePurple = Color(0xFFE7D9FF)
+val AuraPurple = Color(0xFF3F2A7A)
 
 
 

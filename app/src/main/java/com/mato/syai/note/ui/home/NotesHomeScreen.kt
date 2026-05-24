@@ -1,5 +1,6 @@
 package com.mato.syai.note.ui.home
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -21,23 +22,37 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.rememberNestedScrollInteropConnection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import coil.compose.AsyncImage
+import com.airbnb.lottie.compose.LottieAnimation
+import com.airbnb.lottie.compose.LottieCompositionSpec
+import com.airbnb.lottie.compose.animateLottieCompositionAsState
+import com.airbnb.lottie.compose.rememberLottieComposition
 import com.mato.syai.R
 import com.mato.syai.note.domain.local.model.Note
 import com.mato.syai.note.ui.noteSettings.EditNoteMetadataSheet
+import com.mato.syai.note.utils.formatTime
+import com.mato.syai.utils.GlassEffect
+import java.io.File
 
-private val PrimaryDark = Color(0xFF0D0127)
-private val SecondaryCream = Color(0xFFF8E0C3)
 private val AuraPurple = Color(0xFF3F2A7A)
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -62,21 +77,8 @@ fun NotesHomeScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(PrimaryDark)
+            .background(MaterialTheme.colorScheme.primary)
     ) {
-        Box(
-            modifier = Modifier
-                .size(350.dp)
-                .align(Alignment.TopEnd)
-                .offset(x = 100.dp, y = (-80).dp)
-                .blur(100.dp)
-                .background(
-                    brush = Brush.radialGradient(
-                        colors = listOf(AuraPurple.copy(alpha = 0.6f), Color.Transparent)
-                    ),
-                    shape = RoundedCornerShape(175.dp)
-                )
-        )
 
         PullToRefreshBox(
             isRefreshing = isRefreshing,
@@ -89,7 +91,7 @@ fun NotesHomeScreen(
                     modifier = Modifier.align(Alignment.TopCenter)
                 )
             },
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize().nestedScroll(rememberNestedScrollInteropConnection())
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 Text(
@@ -158,9 +160,6 @@ fun NotesHomeScreen(
                         onDismiss = { noteToEditMeta = null },
                         onSave = { t, f, ts, c ->
                             viewModel.updateNoteMetadata(noteToEditMeta!!.id, t, f, ts, c)
-                        },
-                        onExportPdf = {
-                            // Call your existing export logic
                         }
                     )
                 }
@@ -171,9 +170,9 @@ fun NotesHomeScreen(
             onClick = {
                 viewModel.createNewNote()
             },
-            containerColor = SecondaryCream,
-            contentColor = PrimaryDark,
-            shape = RoundedCornerShape(18.dp),
+            containerColor = MaterialTheme.colorScheme.secondary,
+            contentColor = MaterialTheme.colorScheme.primary,
+            shape = RoundedCornerShape(30.dp),
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(bottom = 120.dp, end = 24.dp)
@@ -213,7 +212,7 @@ fun CustomRefreshIndicator(
     ) {
         if (state.distanceFraction > 0f || isRefreshing) {
             Surface(
-                color = AuraPurple.copy(alpha = 0.9f),
+                color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.9f),
                 shape = CircleShape,
                 shadowElevation = 8.dp,
                 modifier = Modifier
@@ -230,7 +229,7 @@ fun CustomRefreshIndicator(
                     Icon(
                         imageVector = Icons.Default.Refresh,
                         contentDescription = "Refreshing",
-                        tint = SecondaryCream,
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier
                             .size(24.dp)
                             .rotate(if (isRefreshing) rotation else state.distanceFraction * 180f)
@@ -242,33 +241,85 @@ fun CustomRefreshIndicator(
 }
 
 @Composable
-fun FolderCard(name: String, isSelected: Boolean, onClick: () -> Unit) {
-    Surface(
-        onClick = onClick,
-        color = SecondaryCream,
-        shape = RoundedCornerShape(20.dp),
-        border = if (isSelected) BorderStroke(2.dp, AuraPurple) else null,
-        modifier = Modifier.size(width = 115.dp, height = 90.dp)
+fun FolderCard(
+    name: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(width = 90.dp, height = 90.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .clickable { onClick() }
     ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            Image(
-                painter = painterResource(id = R.drawable.folder_icon),
-                contentDescription = null,
-                modifier = Modifier.size(26.dp)
-            )
-            Text(
-                text = name,
-                color = PrimaryDark,
-                fontWeight = FontWeight.ExtraBold,
-                fontSize = 14.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+
+        FolderBackground(isSelected)
+
+        Text(
+            text = name,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 14.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(14.dp)
+        )
+
+        if (isSelected) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.secondary.copy(alpha = 0.35f),
+                                Color.Transparent
+                            ),
+                            radius = 300f
+                        ),
+                        shape = RoundedCornerShape(20.dp)
+                    )
             )
         }
     }
+}
+
+@Composable
+fun FolderBackground(isSelected: Boolean) {
+
+    var isPlaying by remember { mutableStateOf(false) }
+
+    val composition by rememberLottieComposition(
+        LottieCompositionSpec.RawRes(R.raw.folder_animation)
+    )
+
+    val progress = remember { Animatable(0f) }
+
+    LaunchedEffect(isSelected) {
+        if (isSelected) {
+            progress.snapTo(0f)
+            progress.animateTo(0.5f,
+                animationSpec = tween(
+                    durationMillis = 600,
+                    easing = FastOutSlowInEasing
+                ))
+        } else {
+            progress.snapTo(0.5f)
+            progress.animateTo(1f,
+                animationSpec = tween(
+                    durationMillis = 600,
+                    easing = FastOutSlowInEasing
+                ))
+        }
+    }
+
+    LottieAnimation(
+        composition = composition,
+        progress = progress.value,
+        modifier = Modifier.fillMaxSize()
+    )
 }
 
 @Composable
@@ -277,15 +328,18 @@ fun NoteListItem(
     onClick: () -> Unit,
     onDelete: () -> Unit,
     onFavorite: () -> Unit,
-    onEditMeta: () -> Unit
+    onEditMeta: () -> Unit,
+    viewModel: NotesHomeViewModel = hiltViewModel()
 ) {
 
+    val context = LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
+    var thumbHeightX by remember { mutableStateOf(0.dp) }
+    var thumbHeightY by remember { mutableStateOf(0.dp) }
+    val density = LocalDensity.current
+
     Box {
-        Surface(
-            color = Color.White.copy(alpha = 0.06f),
-            shape = RoundedCornerShape(24.dp),
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
+        GlassEffect(
             modifier = Modifier
                 .fillMaxWidth()
                 .pointerInput(note) {
@@ -293,7 +347,11 @@ fun NoteListItem(
                         onTap = { onClick() },
                         onLongPress = { showMenu = true }
                     )
-                }
+                }.onGloballyPositioned { coordinates ->
+                    thumbHeightY = with(density) { coordinates.size.height.toDp() }
+                    thumbHeightX = with(density) { coordinates.size.width.toDp() }
+                },
+            glassTintColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f)
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -302,49 +360,55 @@ fun NoteListItem(
                         color = Color.White,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
-                        maxLines = 1, // Added max lines
-                        overflow = TextOverflow.Ellipsis, // Added ellipsis
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
                     )
                     if (note.isFavorite) {
                         Icon(
                             imageVector = Icons.Default.Star,
                             contentDescription = "Fav",
-                            tint = SecondaryCream,
+                            tint = MaterialTheme.colorScheme.secondary,
                             modifier = Modifier.size(18.dp)
                         )
                     }
                 }
-                /*Text(
-                    text = note.title,
-                    color = Color.White,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )*/
                 Spacer(modifier = Modifier.height(8.dp))
+                val fileName = note.imagePreview
+                if (fileName!=null){
+                    val file = File(context.filesDir, fileName)
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(100.dp)
+                    ) {
+                        AsyncImage(
+                            model = file,
+                            contentDescription = "Preview",
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(RoundedCornerShape(20.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = "File: ${note.filePath.substringAfterLast("/")}",
+                    text = " ${note.lastModified.formatTime()}",
                     color = Color.LightGray.copy(alpha = 0.7f),
                     fontSize = 13.sp,
                     maxLines = 1
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "Sync Active",
-                        color = Color.Gray,
-                        fontSize = 11.sp
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
                     Surface(
-                        color = AuraPurple.copy(alpha = 0.2f),
+                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f),
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text(
                             text = "#${note.folderName.lowercase()}",
-                            color = SecondaryCream,
+                            color = MaterialTheme.colorScheme.secondary,
                             fontSize = 10.sp,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         )
@@ -355,24 +419,37 @@ fun NoteListItem(
         DropdownMenu(
             expanded = showMenu,
             onDismissRequest = { showMenu = false },
-            modifier = Modifier.background(AuraPurple)
+            modifier = Modifier.background(Color.Transparent),
+            containerColor = Color.Transparent,
+            shadowElevation = 0.dp,
+            offset = DpOffset(x = thumbHeightX, y = thumbHeightY),
         ) {
-            DropdownMenuItem(
-                text = { Text("Edit Metadata", color = Color.White) },
-                leadingIcon = { Icon(Icons.Default.Settings, null, tint = Color.White) },
-                onClick = { showMenu = false; onEditMeta() }
-            )
-            DropdownMenuItem(
-                text = { Text(if (note.isFavorite) "Unfavorite" else "Mark Favorite", color = Color.White) },
-                leadingIcon = { Icon(Icons.Default.Star, null, tint = Color.White) },
-                onClick = { showMenu = false; onFavorite() }
-            )
-            Divider(color = Color.White.copy(0.1f))
-            DropdownMenuItem(
-                text = { Text("Delete", color = Color.Red) },
-                leadingIcon = { Icon(Icons.Default.Delete, null, tint = Color.Red) },
-                onClick = { showMenu = false; onDelete() }
-            )
+            GlassEffect(
+                glassTintColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.8f),
+                modifier = Modifier.background(Color.Transparent)
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Edit Metadata", color = Color.White) },
+                    leadingIcon = { Icon(Icons.Default.Settings, null, tint = Color.White) },
+                    onClick = { showMenu = false; onEditMeta() }
+                )
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            if (note.isFavorite) "Unfavorite" else "Mark Favorite",
+                            color = Color.White
+                        )
+                    },
+                    leadingIcon = { Icon(Icons.Default.Star, null, tint = Color.White) },
+                    onClick = { showMenu = false; onFavorite() }
+                )
+                Divider(color = Color.White.copy(0.1f))
+                DropdownMenuItem(
+                    text = { Text("Delete", color = Color.Red) },
+                    leadingIcon = { Icon(Icons.Default.Delete, null, tint = Color.Red) },
+                    onClick = { showMenu = false; onDelete() }
+                )
+            }
         }
     }
 }

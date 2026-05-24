@@ -33,7 +33,10 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         val apiKey = localProperties.getProperty("GEMINI_API") ?: ""
+        val localImageHost = localProperties.getProperty("LOCAL_IMAGE_GENERATOR_BASE_URL")
+            ?: "http://192.168.1.8:8088/"
         buildConfigField("String", "GEMINI_API", "\"$apiKey\"")
+        buildConfigField("String", "LOCAL_IMAGE_GENERATOR_BASE_URL", "\"$localImageHost\"")
     }
     buildTypes {
         release {
@@ -100,6 +103,7 @@ dependencies {
     implementation(libs.androidx.credentials.play.services.auth)
     implementation(libs.googleid)
     implementation(libs.firebase.analytics)
+    implementation(libs.firebase.messaging)
     implementation(libs.androidx.compose.ui.text)
     implementation(libs.androidx.lifecycle.process)
     implementation(libs.firebase.config.ktx)
@@ -150,6 +154,11 @@ dependencies {
 
     // Networking
     implementation(libs.okhttp)
+    implementation("com.squareup.retrofit2:retrofit:2.11.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.11.0")
+    implementation("androidx.work:work-runtime-ktx:2.10.3")
+    implementation("androidx.hilt:hilt-work:1.2.0")
+    ksp("androidx.hilt:hilt-compiler:1.2.0")
 
     // Testing
     testImplementation(libs.junit)
@@ -176,5 +185,30 @@ dependencies {
     implementation("com.google.protobuf:protobuf-kotlin-lite:3.25.1")
     implementation("androidx.datastore:datastore:1.1.1")
     implementation("io.coil-kt:coil-compose:2.6.0")
+    implementation("com.airbnb.android:lottie:6.7.1")
+    implementation("com.airbnb.android:lottie-compose:6.7.1")
 
+}
+
+tasks.register("startLocalImageGenerator") {
+    doLast {
+        val startLocalServer = rootProject.file("local.properties").let { file ->
+            if (file.exists()) {
+                val props = Properties()
+                props.load(file.inputStream())
+                props.getProperty("startLocalServer", "false").toBoolean()
+            } else false
+        }
+        if (startLocalServer) {
+            println("Starting Local Image Generator backend...")
+            val imageGeneratorDir = File(rootProject.projectDir, "image-generator")
+            ProcessBuilder(listOf("cmd.exe", "/c", "start", "..\\gradlew.bat", "bootRun"))
+                .directory(imageGeneratorDir)
+                .start()
+        }
+    }
+}
+
+tasks.named("preBuild") {
+    dependsOn("startLocalImageGenerator")
 }

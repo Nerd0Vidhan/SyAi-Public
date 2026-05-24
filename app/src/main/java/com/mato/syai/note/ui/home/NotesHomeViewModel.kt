@@ -1,6 +1,10 @@
 package com.mato.syai.note.ui.home
 
+import android.content.Context
+import android.graphics.Bitmap
+import android.util.Log
 import androidx.lifecycle.*
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mato.syai.note.data.local.repository.NoteRepository
 import com.mato.syai.note.domain.local.model.Note
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -23,6 +27,11 @@ class NotesHomeViewModel @Inject constructor(
     private val _navigationEvent = Channel<Long>()
     val navigationEvent = _navigationEvent.receiveAsFlow()
 
+    val isFirstRefresh = MutableStateFlow(true)
+
+    private val _previewBitmap = MutableStateFlow<Bitmap?>(null)
+    val previewBitmap: StateFlow<Bitmap?> = _previewBitmap
+
     val notes = combine(repository.allNotes, _selectedFolder) { list, folder ->
         if (folder == "All") list else list.filter { it.folderName == folder }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -32,12 +41,15 @@ class NotesHomeViewModel @Inject constructor(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), listOf("All"))
 
     init {
-        refresh() // Silent sync on start
+        if (isFirstRefresh.value) {
+            isFirstRefresh.value = false
+            refresh()
+        }
     }
 
     fun createNewNote() {
         viewModelScope.launch {
-            val newId = repository.createNewNote("Untitled_${System.currentTimeMillis().toString()}", "Root")
+            val newId = repository.createNewNote("Untitled_${(System.currentTimeMillis() % 1_000_000_000).toString()}", "Root")
             _navigationEvent.send(newId)
         }
     }
@@ -48,8 +60,7 @@ class NotesHomeViewModel @Inject constructor(
             try {
                 repository.syncFileSystem()
             } catch (e: Exception) {
-                // Log this so you can see it in Logcat
-                android.util.Log.e("SyAi_Debug", "Sync Failed", e)
+                Log.e("SyAi_Debug", "Sync Failed", e)
             } finally {
                 _isRefreshing.value = false
             }
@@ -62,8 +73,8 @@ class NotesHomeViewModel @Inject constructor(
 
     fun deleteNote(note: Note) {
         viewModelScope.launch {
-            repository.deleteNote(note)
-            refresh() // Ensure UI is in sync with filesystem
+            repository.deleteNoteById(note.id)
+//            refresh() // Ensure UI is in sync with filesystem
         }
     }
 
@@ -76,6 +87,13 @@ class NotesHomeViewModel @Inject constructor(
     fun updateNoteMetadata(noteId: Long, newTitle: String, folder: String, textSize: Float, color: Int) {
         viewModelScope.launch {
             repository.updateNoteMetadata(noteId, newTitle, folder, textSize, color)
+        }
+    }
+
+    fun loadNotePreview(context: Context, noteId: Long) {
+        viewModelScope.launch {
+            val bitmap = repository.loadNotePreview(context, noteId)
+            _previewBitmap.value = bitmap
         }
     }
 }
