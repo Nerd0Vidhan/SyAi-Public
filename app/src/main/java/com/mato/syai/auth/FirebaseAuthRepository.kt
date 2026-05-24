@@ -1,6 +1,7 @@
 package com.mato.syai.auth
 
-
+//import UserRepository
+import android.app.Activity
 import android.content.Context
 import android.util.Log
 import com.google.android.gms.auth.api.signin.GoogleSignIn
@@ -9,25 +10,60 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.PhoneAuthOptions
 import com.google.firebase.auth.PhoneAuthProvider
+import com.mato.syai.auth.SessionManager.firebaseToken
 import com.mato.syai.data.remote.repository.UserRepository
+import kotlinx.coroutines.tasks.await
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
-import kotlinx.coroutines.tasks.await
+
+object SessionManager {
+    var firebaseToken: String? = null
+}
 
 class FirebaseAuthRepository @Inject constructor(
     private val firebaseAuth: FirebaseAuth = FirebaseAuth.getInstance(),
-            private val userRepository: UserRepository
+    private val userRepository: UserRepository
 ) : AuthRepository {
 
-    override suspend fun signInWithEmail(email: String, password: String): Result<Unit> {
+    // ─────────────────────────────────────────────────────────────
+    // EMAIL LOGIN
+    // ─────────────────────────────────────────────────────────────
+    override suspend fun signInWithEmail(
+        email: String,
+        password: String
+    ): Result<Unit> {
+
         return try {
-            firebaseAuth.signInWithEmailAndPassword(email, password).await()
+
+            val authResult = firebaseAuth.signInWithEmailAndPassword(email, password).await()
+
+            val token = authResult.user
+                ?.getIdToken(false)
+                ?.await()
+                ?.token
+
+            firebaseToken = token
+
+            Log.d("AUTH", "Email Login Success")
+            Log.d("AUTH", "TOKEN: $token")
+
+            userRepository.createUser()
+
+            Log.d("API", "Email user synced to backend")
+
             Result.success(Unit)
+
         } catch (e: Exception) {
+
+            Log.e("AUTH", "Email Login Failed", e)
+
             Result.failure(e)
         }
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // EMAIL SIGNUP
+    // ─────────────────────────────────────────────────────────────
     override suspend fun signUpWithEmail(
         email: String,
         password: String
@@ -46,9 +82,11 @@ class FirebaseAuthRepository @Inject constructor(
                 ?.await()
                 ?.token
 
-            Log.d("AUTH", "Token: $token")
+            firebaseToken = token
 
-            // CREATE USER IN NEON DB
+            Log.d("AUTH", "TOKEN: $token")
+
+            // Sync to backend
             userRepository.createUser()
 
             Log.d("API", "Backend user created")
@@ -63,60 +101,79 @@ class FirebaseAuthRepository @Inject constructor(
         }
     }
 
-    override suspend fun signInWithGoogleIdToken(idToken: String): Result<Unit> {
-
+    // ─────────────────────────────────────────────────────────────
+    // GOOGLE LOGIN
+    // ─────────────────────────────────────────────────────────────
+    override suspend fun signInWithGoogleIdToken(
+        idToken: String
+    ): Result<Unit> {
         return try {
+            val credential =
+                GoogleAuthProvider.getCredential(
+                    idToken,
+                    null
+                )
 
-            val credential = GoogleAuthProvider.getCredential(idToken, null)
-
-            val authResult = firebaseAuth
-                .signInWithCredential(credential)
-                .await()
+            val authResult = firebaseAuth.signInWithCredential(credential).await()
 
             val user = authResult.user
+                ?: return Result.failure(
+                    Exception("Google user null")
+                )
 
-            val email = user?.email
-            val uid = user?.uid
+            val token = user.getIdToken(false).await().token
 
-            Log.d("AUTH", "Google Sign-In Success")
-            Log.d("AUTH", "UID: $uid")
-            Log.d("AUTH", "EMAIL: $email")
+            SessionManager.firebaseToken = token
 
-            // 🔥 SYNC TO NEON DB
+            // Backend sync
             userRepository.createUser()
 
-            Log.d("API", "Google user synced to backend")
+            Log.d("AUTH", "Google Login Success")
 
             Result.success(Unit)
 
         } catch (e: Exception) {
 
-            Log.e("AUTH", "Google Sign-In Failed", e)
+            Log.e("AUTH", "Google Login Failed", e)
 
             Result.failure(e)
         }
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // SEND OTP
+    // ─────────────────────────────────────────────────────────────
     override suspend fun sendOtp(
         phoneNumber: String,
         timeoutSeconds: Long,
-        activity: android.app.Activity,
+        activity: Activity,
         callbacks: PhoneAuthProvider.OnVerificationStateChangedCallbacks
     ): Result<Unit> {
+
         return try {
+
             val options = PhoneAuthOptions.newBuilder(firebaseAuth)
                 .setPhoneNumber(phoneNumber)
                 .setTimeout(timeoutSeconds, TimeUnit.SECONDS)
                 .setActivity(activity)
                 .setCallbacks(callbacks)
                 .build()
+
             PhoneAuthProvider.verifyPhoneNumber(options)
+
             Result.success(Unit)
+
         } catch (e: Exception) {
+
+            Log.e("AUTH", "OTP Send Failed", e)
+
             Result.failure(e)
         }
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // PHONE LOGIN
+    // ─────────────────────────────────────────────────────────────
     override suspend fun signInWithPhoneCredential(
         verificationId: String,
         otp: String
@@ -124,47 +181,94 @@ class FirebaseAuthRepository @Inject constructor(
 
         return try {
 
-            val credential = PhoneAuthProvider.getCredential(verificationId, otp)
+            val credential =
+                PhoneAuthProvider.getCredential(
+                    verificationId,
+                    otp
+                )
 
             val authResult = firebaseAuth
                 .signInWithCredential(credential)
                 .await()
 
             val user = authResult.user
+                ?: return Result.failure(
+                    Exception("Phone auth user is null")
+                )
 
-            val uid = user?.uid
-            val phone = user?.phoneNumber
+            val uid = user.uid
+            val phone = user.phoneNumber
 
             Log.d("AUTH", "Phone Login Success")
             Log.d("AUTH", "UID: $uid")
             Log.d("AUTH", "PHONE: $phone")
 
-            // 🔥 SYNC TO NEON
-            userRepository.createUser()
+            val firebaseToken = user
+                .getIdToken(false)
+                .await()
+                .token
+
+            SessionManager.firebaseToken = firebaseToken
+
+            Log.d("AUTH", "TOKEN: $firebaseToken")
+
+            // Sync to backend
+            userRepository.createUser(
+//                uid = TODO(),
+//                email = TODO(),
+//                firebaseToken = TODO()
+            )
 
             Log.d("API", "Phone user synced")
+9
             Result.success(Unit)
 
         } catch (e: Exception) {
+
             Log.e("AUTH", "Phone Login Failed", e)
+
             Result.failure(e)
         }
     }
 
-    override fun isUserLoggedIn(): Boolean = firebaseAuth.currentUser != null
-    override fun getCurrentUserUid(): String? = firebaseAuth.currentUser?.uid
+    // ─────────────────────────────────────────────────────────────
+    // USER STATE
+    // ─────────────────────────────────────────────────────────────
+    override fun isUserLoggedIn(): Boolean {
+        return firebaseAuth.currentUser != null
+    }
 
+    override fun getCurrentUserUid(): String? {
+        return firebaseAuth.currentUser?.uid
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // LOGOUT
+    // ─────────────────────────────────────────────────────────────
     override fun logout(context: Context): Result<Unit> {
-        FirebaseAuth.getInstance().signOut()
 
         return try {
-            // Also sign out Google if used
+
+            firebaseAuth.signOut()
+
             GoogleSignIn.getClient(
                 context,
-                GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN).build()
+                GoogleSignInOptions.Builder(
+                    GoogleSignInOptions.DEFAULT_SIGN_IN
+                ).build()
             ).signOut()
+
+            // Clear token
+            firebaseToken = null
+
+            Log.d("AUTH", "Logout Success")
+
             Result.success(Unit)
+
         } catch (e: Exception) {
+
+            Log.e("AUTH", "Logout Failed", e)
+
             Result.failure(e)
         }
     }

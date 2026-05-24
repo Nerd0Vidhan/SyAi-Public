@@ -11,6 +11,6 @@ interface UserApi {
     @POST("api/v1/users")
     suspend fun createUser(): Response<MessageResponse>
 
-    @GET("api/v1/users")
-    suspend fun getUser(): Response<UserResponse>
+//    @GET("api/v1/users")
+//    suspend fun getUser(): Response<UserResponse>
 }
