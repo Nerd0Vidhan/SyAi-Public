@@ -122,7 +122,7 @@ fun FabGroup(
             modifier = Modifier.padding(PaddingValues(bottom = 72.dp, end = 210.dp) * FastOutSlowInEasing.transform(0f, 0.8f, animationProgress)),
             opacity = LinearEasing.transform(0.2f, 0.7f, animationProgress),
             onClick = {
-                Toast.makeText(context, "Premium Features Coming Soon", Toast.LENGTH_SHORT).show()
+//                Toast.makeText(context, "Premium Features Coming Soon", Toast.LENGTH_SHORT).show()
                 navController.navigate("premium")
                 toggleAnimation()
             }
@@ -133,7 +133,7 @@ fun FabGroup(
             modifier = Modifier.padding(PaddingValues(bottom = 88.dp) * FastOutSlowInEasing.transform(0.1f, 0.9f, animationProgress)),
             opacity = LinearEasing.transform(0.3f, 0.8f, animationProgress),
             onClick = {
-                Toast.makeText(context, "Profile View Will be available in future update", Toast.LENGTH_SHORT).show()
+//                Toast.makeText(context, "Profile View Will be available in future update", Toast.LENGTH_SHORT).show()
                 navController.navigate("profile")
                 toggleAnimation()
             }
@@ -144,7 +144,7 @@ fun FabGroup(
             modifier = Modifier.padding(PaddingValues(bottom = 72.dp, start = 210.dp) * FastOutSlowInEasing.transform(0.2f, 1.0f, animationProgress)),
             opacity = LinearEasing.transform(0.4f, 0.9f, animationProgress),
             onClick = {
-                Toast.makeText(context, "Settings will be available in future update", Toast.LENGTH_SHORT).show()
+//                Toast.makeText(context, "Settings will be available in future update", Toast.LENGTH_SHORT).show()
                 parentNavController.navigate("settings")
                 toggleAnimation()
             }
