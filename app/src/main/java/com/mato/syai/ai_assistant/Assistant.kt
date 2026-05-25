@@ -35,8 +35,6 @@ suspend fun generateText(prompt: String): String {
     }
 }
 
-
-
 class GeminiTextViewModel : ViewModel() {
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val messages: StateFlow<List<ChatMessage>> = _messages
