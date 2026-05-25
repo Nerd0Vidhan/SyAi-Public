@@ -1,8 +1,7 @@
-package com.example.profile
+package com.mato.syai.profile
 
 import android.app.DatePickerDialog
 import android.content.Context
-import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
@@ -21,11 +20,11 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.*
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.*
 import java.util.Calendar
 import android.content.res.Configuration
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.tooling.preview.Preview
 
 // ─── Color Palette (matching reference) ────────────────────────────────────────
@@ -134,7 +133,7 @@ fun ProfileField(
                 value = value,
                 onValueChange = onValueChange,
                 readOnly = readOnly,
-                textStyle = androidx.compose.ui.text.TextStyle(
+                textStyle = TextStyle(
                     color = TextPrimary,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Medium
