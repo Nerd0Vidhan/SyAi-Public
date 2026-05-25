@@ -24,6 +24,7 @@ import com.mato.syai.utils.animatedBackground.DeepSpaceWaveBackground
 @Composable
 fun SettingsScreenPremium(
     navController: NavHostController,
+    onBack: () -> Unit,
     viewModel: LoginViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
@@ -45,7 +46,10 @@ fun SettingsScreenPremium(
                 .systemBarsPadding()
         ) {
 
-            SettingsTopBar(navController)
+            SettingsTopBar(
+                navController,
+                onBack
+            )
 
             Column(
                 modifier = Modifier

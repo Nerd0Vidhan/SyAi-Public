@@ -20,6 +20,7 @@ import androidx.navigation.compose.navigation
 import androidx.compose.runtime.remember
 import androidx.navigation.compose.rememberNavController
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import com.mato.syai.CutePrompts.PromptUI
 import com.mato.syai.splashScreen.ui.SplashScreen
 import com.mato.syai.ai_assistant.MainAssistantScreen
@@ -64,9 +65,15 @@ fun AppNavGraph(navController: NavHostController) {
 
         composable("settings") {
             if(/*userIsPremium()*/true){
-                SettingsScreenPremium(navController)
+                SettingsScreenPremium(
+                    navController = navController,
+                    onBack = { navController?.popBackStack()?: navController.navigate("home") }
+                )
             } else {
-                SettingsScreen(navController)
+                SettingsScreen(
+                    navController = navController,
+                    onBack = { navController.popBackStack() }
+                )
             }
         }
         navigation(startDestination = "note_editor/{noteId}", route = "note_editor_flow/{noteId}") {

@@ -3,6 +3,7 @@ package com.mato.syai.presentation.settings
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowBackIosNew
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -16,15 +17,16 @@ import androidx.navigation.NavHostController
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsTopBar(navController: NavHostController) {
+fun SettingsTopBar(
+    navController: NavHostController,
+    onBack: () -> Unit
+) {
 
     TopAppBar(
         title = { Text("Settings", color = MaterialTheme.colorScheme.onSurface) },
         navigationIcon = {
-            IconButton(
-                onClick = { navController.popBackStack() }
-            ) {
-                Icon(Icons.Default.ArrowBack, null)
+            IconButton(onClick = onBack) {
+                Icon(Icons.Default.ArrowBackIosNew, contentDescription = "Back", tint = Color.White)
             }
         },
         colors = TopAppBarDefaults.topAppBarColors(
