@@ -34,6 +34,8 @@ import com.mato.syai.task_management.TaskManagementScreen
 import com.mato.syai.tools.ToolsScreen
 import com.mato.syai.voiceAssistant.VoiceAssistantScreen
 import com.mato.syai.voiceAssistant.VoiceAssistantViewModel
+import com.mato.syai.profile.ProfileScreen
+import com.mato.syai.subscriptions.presentation.SubscriptionScreen
 
 @Composable
 fun AppNavGraph(navController: NavHostController) {
@@ -132,10 +134,16 @@ fun BottomNavigationGraph(
         composable ("prompt_box") { PromptUI() }
         composable("ai") { MainAssistantScreen() }
         composable("premium") {
-            ComingSoonScreen("premium")
+//            ComingSoonScreen("premium")
+            SubscriptionScreen()
         }
         composable("profile") {
-            ComingSoonScreen("profile")
+//            ComingSoonScreen("profile")
+            ProfileScreen(
+                onBack = {
+                    navController.popBackStack()
+                }
+            )
         }
         composable("water_tracker") { CuteAnimatedWaterTank() }
         composable("settings") {
