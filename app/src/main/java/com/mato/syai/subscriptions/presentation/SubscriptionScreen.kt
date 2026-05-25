@@ -20,16 +20,16 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.*
 import androidx.compose.ui.text.style.*
 import androidx.compose.ui.unit.*
-import com.example.profile.AccentPink
-import com.example.profile.AccentViolet
-import com.example.profile.GlassBorder
-import com.example.profile.GlassCard
-import com.example.profile.TextPrimary
-import com.example.profile.TextSecondary
+import com.mato.syai.profile.AccentPink
+import com.mato.syai.profile.AccentViolet
+import com.mato.syai.profile.GlassBorder
+import com.mato.syai.profile.GlassCard
+import com.mato.syai.profile.TextPrimary
+import com.mato.syai.profile.TextSecondary
 import android.content.res.Configuration
 import androidx.compose.ui.tooling.preview.Preview
-import com.example.profile.BlobBackground
-import com.example.profile.DeepPurpleBg
+import com.mato.syai.profile.BlobBackground
+import com.mato.syai.profile.DeepPurpleBg
 
 // ─── Re-use colors from ProfileScreen ──────────────────────────────────────────
 // DeepPurpleBg, GlassCard, GlassBorder, AccentViolet, AccentCyan, AccentPink,
