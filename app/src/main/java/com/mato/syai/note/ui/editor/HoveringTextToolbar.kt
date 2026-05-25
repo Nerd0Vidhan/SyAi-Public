@@ -19,9 +19,11 @@ import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.PopupProperties
 import com.mato.syai.note.domain.local.model.TextStyleData
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -55,18 +57,29 @@ fun HoveringTextToolbar(
             var expanded by remember { mutableStateOf(false) }
             var sizeText by remember(style.fontSize) { mutableStateOf(style.fontSize.toInt().toString()) }
 
-            ToolbarIcon(Icons.Default.Remove, true) {
+            val keepCanvasFocusModifier = Modifier.focusProperties { canFocus = false }
+
+            ToolbarIcon(Icons.Default.Remove, true, modifier = keepCanvasFocusModifier) {
                 onStyleChange(style.copy(fontSize = (style.fontSize - 1f).coerceIn(8f, 100f)))
             }
             Spacer(modifier=Modifier.width(6.dp))
             Box {
-                OutlinedButton(onClick = { expanded = true },border = BorderStroke(width= 2.dp,color = MaterialTheme.colorScheme.secondary)) {
+                OutlinedButton(
+                    modifier = keepCanvasFocusModifier,
+                    onClick = { expanded = true },
+                    border = BorderStroke(width= 2.dp,color = MaterialTheme.colorScheme.secondary)
+                ) {
                     Text(sizeText, color = MaterialTheme.colorScheme.secondary)
                 }
-                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                DropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false },
+                    properties = PopupProperties(focusable = false)
+                ) {
                     val sizes = listOf(10, 12, 14, 16, 18, 20, 24, 30, 36)
                     sizes.forEach { s ->
                         DropdownMenuItem(
+                            modifier = keepCanvasFocusModifier,
                             text = { Text(s.toString()) },
                             onClick = { 
                                 onStyleChange(style.copy(fontSize = s.toFloat()))
@@ -77,7 +90,7 @@ fun HoveringTextToolbar(
                 }
             }
             Spacer(modifier=Modifier.width(6.dp))
-            ToolbarIcon(Icons.Default.Add, true) {
+            ToolbarIcon(Icons.Default.Add, true, modifier = keepCanvasFocusModifier) {
                 onStyleChange(style.copy(fontSize = (style.fontSize + 1f).coerceIn(8f, 100f)))
             }
             Spacer(modifier=Modifier.width(6.dp))
@@ -97,29 +110,29 @@ fun HoveringTextToolbar(
 
             VerticalDivider(modifier = Modifier.height(24.dp).width(2.dp), color = Color.White)
 
-            ToolbarIcon(Icons.Default.FormatBold, style.isBold) {
+            ToolbarIcon(Icons.Default.FormatBold, style.isBold, modifier = keepCanvasFocusModifier) {
                 onStyleChange(style.copy(isBold = !style.isBold))
             }
 
-            ToolbarIcon(Icons.Default.FormatItalic, style.isItalic) {
+            ToolbarIcon(Icons.Default.FormatItalic, style.isItalic, modifier = keepCanvasFocusModifier) {
                 onStyleChange(style.copy(isItalic = !style.isItalic))
             }
 
-            ToolbarIcon(Icons.Default.FormatUnderlined, style.isUnderline) {
+            ToolbarIcon(Icons.Default.FormatUnderlined, style.isUnderline, modifier = keepCanvasFocusModifier) {
                 onStyleChange(style.copy(isUnderline = !style.isUnderline))
             }
 
             VerticalDivider(modifier = Modifier.height(24.dp).width(2.dp), color = Color.White)
             
-            ToolbarIcon(Icons.Default.FormatAlignLeft, style.alignment == "LEFT") {
+            ToolbarIcon(Icons.Default.FormatAlignLeft, style.alignment == "LEFT", modifier = keepCanvasFocusModifier) {
                 onStyleChange(style.copy(alignment = "LEFT"))
             }
 
-            ToolbarIcon(Icons.Default.FormatAlignCenter, style.alignment == "CENTER") {
+            ToolbarIcon(Icons.Default.FormatAlignCenter, style.alignment == "CENTER", modifier = keepCanvasFocusModifier) {
                 onStyleChange(style.copy(alignment = "CENTER"))
             }
 
-            ToolbarIcon(Icons.Default.FormatAlignRight, style.alignment == "RIGHT") {
+            ToolbarIcon(Icons.Default.FormatAlignRight, style.alignment == "RIGHT", modifier = keepCanvasFocusModifier) {
                 onStyleChange(style.copy(alignment = "RIGHT"))
             }
 

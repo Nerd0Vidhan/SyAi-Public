@@ -16,6 +16,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
@@ -28,6 +29,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -49,7 +51,10 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalTextToolbar
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.TextToolbar
+import androidx.compose.ui.platform.TextToolbarStatus
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
@@ -59,6 +64,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -76,6 +82,25 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
+
+private enum class SelectionDragTarget {
+    START,
+    END
+}
+
+private object NoOpTextToolbar : TextToolbar {
+    override val status: TextToolbarStatus = TextToolbarStatus.Hidden
+
+    override fun hide() = Unit
+
+    override fun showMenu(
+        rect: ComposeRect,
+        onCopyRequested: (() -> Unit)?,
+        onPasteRequested: (() -> Unit)?,
+        onCutRequested: (() -> Unit)?,
+        onSelectAllRequested: (() -> Unit)?
+    ) = Unit
+}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -102,8 +127,6 @@ fun ManualLinearTextEditor(
     val context = LocalContext.current
     val hostView = LocalView.current
     val density = LocalDensity.current
-    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
-    val isImeVisible = WindowInsets.isImeVisible
 
     var hiddenInput by remember {
         mutableStateOf(
@@ -124,7 +147,7 @@ fun ManualLinearTextEditor(
         }
     }
 
-    LaunchedEffect(selection, payload.text, isSelected) {
+    LaunchedEffect(selection, isSelected) {
         if (!isSelected || selection == null) return@LaunchedEffect
         val normalized = TextRange(
             start = (selection.start + 1).coerceIn(1, payload.text.length + 1),
@@ -161,14 +184,6 @@ fun ManualLinearTextEditor(
         }
     }
 
-    var wasImeVisible by remember { mutableStateOf(isImeVisible) }
-    LaunchedEffect(isImeVisible) {
-        if (wasImeVisible && !isImeVisible && isFocused) {
-            focusManager.clearFocus()
-        }
-        wasImeVisible = isImeVisible
-    }
-
     DisposableEffect(Unit) {
         onDispose {
             selectionActionMode?.finish()
@@ -185,7 +200,8 @@ fun ManualLinearTextEditor(
             "RIGHT" -> TextAlign.Right
             "JUSTIFY" -> TextAlign.Justify
             else -> TextAlign.Left
-        }
+        },
+        textDecoration = if (payload.style.isUnderline) TextDecoration.Underline else TextDecoration.None
     )
 
     val displayText = remember(hiddenInput.text) {
@@ -232,44 +248,48 @@ fun ManualLinearTextEditor(
         onHeightMeasured((measuredHeightPx / uiScale + 16f).coerceAtLeast(42f))
     }
 
+    fun toExternalSelection(selection: TextRange): TextRange {
+        return TextRange(
+            start = (selection.start - 1).coerceIn(0, payload.text.length),
+            end = (selection.end - 1).coerceIn(0, payload.text.length)
+        )
+    }
+
     fun updateSelection(selection: TextRange) {
-        hiddenInput = hiddenInput.copy(selection = selection)
-        onSelectionChange(selection)
-        if (!selection.collapsed && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val mappedSelection = TextRange(
-                (selection.start - 1).coerceAtLeast(0),
-                (selection.end - 1).coerceAtLeast(0)
-            )
-            val contentRect = calculateSelectionRect(
-                layout = latestLayout,
-                selection = mappedSelection,
-                containerInWindow = containerInWindow
-            )
-            if (contentRect != null) {
-                if (selectionActionMode == null) {
-                    val callback = TextSelectionActionModeCallback(
-                        context = context,
-                        getSelection = { TextRange((hiddenInput.selection.start - 1).coerceAtLeast(0), (hiddenInput.selection.end - 1).coerceAtLeast(0)) },
-                        getText = { hiddenInput.text.removePrefix("\u200B") },
-                        onSelectionUpdate = { newSelection -> updateSelection(TextRange(newSelection.start + 1, newSelection.end + 1)) },
-                        onCopy = onCopy,
-                        onPaste = { 
-                            val mappedStart = (hiddenInput.selection.start - 1).coerceAtLeast(0)
-                            val mappedEnd = (hiddenInput.selection.end - 1).coerceAtLeast(0)
-                            onPaste(mappedEnd)
-                            updateSelection(TextRange(hiddenInput.selection.start, hiddenInput.selection.end))
-                        }
-                    )
-                    selectionActionModeCallback = callback
-                    selectionActionMode = hostView.startActionMode(callback, ActionMode.TYPE_FLOATING)
-                }
-                selectionActionModeCallback?.contentRect = contentRect
-                selectionActionMode?.invalidateContentRect()
-            }
-        } else {
-            selectionActionMode?.finish()
-            selectionActionMode = null
-            selectionActionModeCallback = null
+        val clampedSelection = TextRange(
+            start = selection.start.coerceIn(1, payload.text.length + 1),
+            end = selection.end.coerceIn(1, payload.text.length + 1)
+        )
+        hiddenInput = hiddenInput.copy(selection = clampedSelection)
+        onSelectionChange(toExternalSelection(clampedSelection))
+        selectionActionMode?.finish()
+        selectionActionMode = null
+        selectionActionModeCallback = null
+    }
+
+    fun selectionHandleTarget(offset: Offset, layout: TextLayoutResult): SelectionDragTarget? {
+        val selection = hiddenInput.selection
+        if (selection.collapsed) return null
+
+        val mappedMin = (selection.min - 1).coerceAtLeast(0)
+        val mappedMax = (selection.max - 1).coerceAtLeast(0)
+        val handleYOffset = with(density) { 8.dp.toPx() }
+        val hitRadius = with(density) { 30.dp.toPx() }
+        val hitRadiusSq = hitRadius * hitRadius
+        fun isNear(center: Offset): Boolean {
+            val dx = offset.x - center.x
+            val dy = offset.y - center.y
+            return dx * dx + dy * dy <= hitRadiusSq
+        }
+
+        val startCursorRect = layout.getCursorRect(mappedMin)
+        val endCursorRect = layout.getCursorRect(mappedMax)
+        val startCenter = Offset(startCursorRect.left, startCursorRect.bottom + handleYOffset)
+        val endCenter = Offset(endCursorRect.left, endCursorRect.bottom + handleYOffset)
+        return when {
+            isNear(startCenter) -> SelectionDragTarget.START
+            isNear(endCenter) -> SelectionDragTarget.END
+            else -> null
         }
     }
 
@@ -319,6 +339,40 @@ fun ManualLinearTextEditor(
                 )
             }
             .pointerInput(payload.text) {
+                var dragTarget: SelectionDragTarget? = null
+                detectDragGestures(
+                    onDragStart = { start ->
+                        val layout = latestLayout
+                        if (layout != null) {
+                            dragTarget = selectionHandleTarget(start, layout)
+                            if (dragTarget == null) {
+                                val position = layout.getOffsetForPosition(start)
+                                updateSelection(TextRange(position + 1))
+                                dragTarget = SelectionDragTarget.END
+                            }
+                            focusRequester.requestFocus()
+                            keyboardController?.show()
+                        }
+                    },
+                    onDrag = { change, _ ->
+                        val layout = latestLayout
+                        if (layout != null) {
+                            val current = (layout.getOffsetForPosition(change.position) + 1)
+                                .coerceIn(1, payload.text.length + 1)
+                            val fixedSelection = hiddenInput.selection
+                            val nextSelection = when (dragTarget) {
+                                SelectionDragTarget.START -> TextRange(current, fixedSelection.max)
+                                SelectionDragTarget.END, null -> TextRange(fixedSelection.min, current)
+                            }
+                            updateSelection(nextSelection)
+                            change.consume()
+                        }
+                    },
+                    onDragEnd = { dragTarget = null },
+                    onDragCancel = { dragTarget = null }
+                )
+            }
+            .pointerInput(payload.text) {
                 detectDragGesturesAfterLongPress(
                     onDragStart = { start ->
                         val layout = latestLayout ?: return@detectDragGesturesAfterLongPress
@@ -354,18 +408,20 @@ fun ManualLinearTextEditor(
                 val startCursorRect = layout.getCursorRect(mappedMin)
                 val endCursorRect = layout.getCursorRect(mappedMax)
                 val primaryColor = androidx.compose.ui.graphics.Color(0xFF4F46E5)
+                val handleRadius = 10.dp.toPx()
+                val handleYOffset = 8.dp.toPx()
                 
                 // Start handle
                 drawLine(
                     color = primaryColor,
                     start = Offset(startCursorRect.left, startCursorRect.top),
                     end = Offset(startCursorRect.left, startCursorRect.bottom),
-                    strokeWidth = 2.dp.toPx()
+                    strokeWidth = 3.dp.toPx()
                 )
                 drawCircle(
                     color = primaryColor,
-                    radius = 6.dp.toPx(),
-                    center = Offset(startCursorRect.left, startCursorRect.bottom + 4.dp.toPx())
+                    radius = handleRadius,
+                    center = Offset(startCursorRect.left, startCursorRect.bottom + handleYOffset)
                 )
                 
                 // End handle
@@ -373,12 +429,12 @@ fun ManualLinearTextEditor(
                     color = primaryColor,
                     start = Offset(endCursorRect.left, endCursorRect.top),
                     end = Offset(endCursorRect.left, endCursorRect.bottom),
-                    strokeWidth = 2.dp.toPx()
+                    strokeWidth = 3.dp.toPx()
                 )
                 drawCircle(
                     color = primaryColor,
-                    radius = 6.dp.toPx(),
-                    center = Offset(endCursorRect.left, endCursorRect.bottom + 4.dp.toPx())
+                    radius = handleRadius,
+                    center = Offset(endCursorRect.left, endCursorRect.bottom + handleYOffset)
                 )
             }
 
@@ -396,9 +452,10 @@ fun ManualLinearTextEditor(
             }
         }
 
-        BasicTextField(
-            value = hiddenInput,
-            onValueChange = { newValue ->
+        CompositionLocalProvider(LocalTextToolbar provides NoOpTextToolbar) {
+            BasicTextField(
+                value = hiddenInput,
+                onValueChange = { newValue ->
                 val previousSelection = hiddenInput.selection
                 val oldText = hiddenInput.text
                 var newText = newValue.text
@@ -442,21 +499,31 @@ fun ManualLinearTextEditor(
                 val delta = insertedLen - deletedLen
                 
                 if (delta != 0 || insertedLen > 0 || deletedLen > 0) {
-                    newSpans = newSpans.mapNotNull { span ->
-                        var start = span.start
-                        var end = span.end
-                        
-                        if (end > replaceStart) {
-                            if (end <= oldReplaceEnd) end = replaceStart
-                            else end += delta
+                    newSpans = newSpans.flatMap { span ->
+                        val pieces = mutableListOf<TextSpan>()
+                        when {
+                            span.end <= replaceStart -> pieces.add(span)
+                            span.start >= oldReplaceEnd -> pieces.add(
+                                span.copy(
+                                    start = span.start + delta,
+                                    end = span.end + delta
+                                )
+                            )
+                            else -> {
+                                if (span.start < replaceStart) {
+                                    pieces.add(span.copy(end = replaceStart))
+                                }
+                                if (span.end > oldReplaceEnd) {
+                                    pieces.add(
+                                        span.copy(
+                                            start = replaceStart + insertedLen,
+                                            end = span.end + delta
+                                        )
+                                    )
+                                }
+                            }
                         }
-                        
-                        if (start >= replaceStart) {
-                            if (start < oldReplaceEnd) start = replaceStart + insertedLen
-                            else start += delta
-                        }
-                        
-                        if (start < end) span.copy(start = start, end = end) else null
+                        pieces
                     }
                 }
                 
@@ -472,10 +539,11 @@ fun ManualLinearTextEditor(
 
                 newSpans = mergeAdjacentSpans(newSpans)
 
-                LinearListMarkerCodec.normalizeInsertedNewLine(newText, newValue.selection.end)?.let { (normalizedText, normalizedCursor) ->
+                val externalCursor = toExternalSelection(newSelection).end
+                LinearListMarkerCodec.normalizeInsertedNewLine(realNewText, externalCursor)?.let { (normalizedText, normalizedCursor) ->
                     hiddenInput = TextFieldValue(
-                        text = normalizedText,
-                        selection = TextRange(normalizedCursor.coerceIn(0, normalizedText.length))
+                        text = "\u200B$normalizedText",
+                        selection = TextRange((normalizedCursor + 1).coerceIn(1, normalizedText.length + 1))
                     )
                     onTextChange(normalizedText, newSpans)
                     onSelectionChange(TextRange(normalizedCursor.coerceIn(0, normalizedText.length)))
@@ -484,7 +552,7 @@ fun ManualLinearTextEditor(
 
                 val maxHeightPx = maxHeightPoints?.let { with(density) { (it * uiScale).toDp().toPx() } }
                 if (maxHeightPx != null && canvasSize.width > 0) {
-                    val overflowDisplayText = LinearListMarkerCodec.displayText(newText)
+                    val overflowDisplayText = LinearListMarkerCodec.displayText(realNewText)
                     val overflowLayout = textMeasurer.measure(
                         text = RichTextParser.buildRichText(
                             text = overflowDisplayText.ifEmpty { " " },
@@ -506,10 +574,10 @@ fun ManualLinearTextEditor(
                             .lastOrNull { overflowLayout.getLineBottom(it) <= maxHeightPx }
                             ?: 0
                         val cutIndex = overflowLayout.getLineEnd(fittingLine, visibleEnd = true)
-                            .coerceIn(0, newText.length)
-                        if (cutIndex in 1 until newText.length) {
-                            val visibleText = newText.substring(0, cutIndex).trimEnd()
-                            val overflowText = newText.substring(cutIndex).trimStart('\n')
+                            .coerceIn(0, realNewText.length)
+                        if (cutIndex in 1 until realNewText.length) {
+                            val visibleText = realNewText.substring(0, cutIndex).trimEnd()
+                            val overflowText = realNewText.substring(cutIndex).trimStart('\n')
                             val visibleSpans = mutableListOf<TextSpan>()
                             val overflowSpans = mutableListOf<TextSpan>()
                             newSpans.forEach { span ->
@@ -528,8 +596,8 @@ fun ManualLinearTextEditor(
                                 }
                             }
                             hiddenInput = TextFieldValue(
-                                text = visibleText,
-                                selection = TextRange(visibleText.length)
+                                text = "\u200B$visibleText",
+                                selection = TextRange(visibleText.length + 1)
                             )
                             onOverflow(visibleText, overflowText, visibleSpans, overflowSpans)
                             return@BasicTextField
@@ -537,26 +605,27 @@ fun ManualLinearTextEditor(
                     }
                 }
                 
-                hiddenInput = newValue
+                hiddenInput = newValue.copy(text = newText, selection = newSelection)
                 if (realOldText != realNewText) {
                     onTextChange(realNewText, newSpans)
                 }
-                onSelectionChange(newValue.selection)
-                if (newValue.selection != previousSelection) {
-                    updateSelection(newValue.selection)
-                } else if (newValue.selection.collapsed) {
+                onSelectionChange(toExternalSelection(newSelection))
+                if (newSelection != previousSelection) {
+                    updateSelection(newSelection)
+                } else if (newSelection.collapsed) {
                     selectionActionMode?.finish()
                     selectionActionMode = null
                     selectionActionModeCallback = null
                 }
-            },
-            textStyle = textStyle.copy(color = androidx.compose.ui.graphics.Color.Transparent),
-            cursorBrush = SolidColor(Color.Transparent),
-            modifier = Modifier
-                .size(1.dp)
-                .focusRequester(focusRequester)
-                .onFocusChanged { isFocused = it.isFocused }
-        )
+                },
+                textStyle = textStyle.copy(color = androidx.compose.ui.graphics.Color.Transparent),
+                cursorBrush = SolidColor(Color.Transparent),
+                modifier = Modifier
+                    .size(1.dp)
+                    .focusRequester(focusRequester)
+                    .onFocusChanged { isFocused = it.isFocused }
+            )
+        }
     }
 }
 

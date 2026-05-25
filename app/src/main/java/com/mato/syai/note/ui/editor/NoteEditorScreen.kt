@@ -53,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.NavController
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.*
@@ -2075,13 +2076,18 @@ fun EditorBottomToolbar(
 fun ToolbarIcon(
     icon: ImageVector,
     isSelected: Boolean,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     Surface(
+        modifier = modifier,
         shape = CircleShape,
         color = if (isSelected) AuraPurple else Color.Transparent
     ) {
-        IconButton(onClick = onClick) {
+        IconButton(
+            modifier = Modifier.focusProperties { canFocus = false },
+            onClick = onClick
+        ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,

@@ -6,6 +6,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.sp
 import com.mato.syai.note.domain.local.model.PageSize
@@ -44,6 +45,7 @@ object RichTextParser {
                             fontSize = with(density) { (span.style.fontSize * uiScale).toSp() },
                             fontWeight = if (span.style.isBold) FontWeight.Bold else FontWeight.Normal,
                             fontStyle = if (span.style.isItalic) FontStyle.Italic else FontStyle.Normal,
+                            textDecoration = if (span.style.isUnderline) TextDecoration.Underline else TextDecoration.None,
                         ),
                         start = start,
                         end = end
