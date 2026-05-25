@@ -69,6 +69,21 @@ fun AppNavGraph(navController: NavHostController) {
                 SettingsScreen(navController)
             }
         }
+
+        composable("premium") {
+            SubscriptionScreen(
+                onBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+        composable("profile") {
+            ProfileScreen(
+                onBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
         navigation(startDestination = "note_editor/{noteId}", route = "note_editor_flow/{noteId}") {
             composable("note_editor/{noteId}") { backStackEntry ->
                 val parentEntry = remember(backStackEntry) {

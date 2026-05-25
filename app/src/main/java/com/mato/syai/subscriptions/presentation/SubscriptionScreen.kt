@@ -441,7 +441,6 @@ fun CancelDialog(planName: String, onConfirm: () -> Unit, onDismiss: () -> Unit)
     )
 }
 
-// ─── Upgrade Dialog ──────────────────────────────────────────────────────────────
 @Composable
 fun UpgradeDialog(info: PlanInfo, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
@@ -488,15 +487,12 @@ fun UpgradeDialog(info: PlanInfo, onConfirm: () -> Unit, onDismiss: () -> Unit) 
     )
 }
 
-// ─── MAIN SCREEN ────────────────────────────────────────────────────────────────
 @Composable
 fun SubscriptionScreen(onBack: () -> Unit = {}) {
     val scrollState = rememberScrollState()
 
-    // Current plan state
     var currentPlan by remember { mutableStateOf(Plan.PREMIUM) }
 
-    // Dialog state
     var showCancelDialog by remember { mutableStateOf(false) }
     var showUpgradeTarget by remember { mutableStateOf<Plan?>(null) }
 

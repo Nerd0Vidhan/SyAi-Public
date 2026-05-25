@@ -147,11 +147,12 @@ fun ManualLinearTextEditor(
         }
     }
 
-    LaunchedEffect(selection, isSelected) {
+    LaunchedEffect(selection, payload.text, isSelected) {
         if (!isSelected || selection == null) return@LaunchedEffect
+        val currentTextLength = max(payload.text.length, hiddenInput.text.removePrefix("\u200B").length)
         val normalized = TextRange(
-            start = (selection.start + 1).coerceIn(1, payload.text.length + 1),
-            end = (selection.end + 1).coerceIn(1, payload.text.length + 1)
+            start = (selection.start + 1).coerceIn(1, currentTextLength + 1),
+            end = (selection.end + 1).coerceIn(1, currentTextLength + 1)
         )
         if (hiddenInput.selection != normalized) {
             hiddenInput = hiddenInput.copy(selection = normalized)
@@ -248,20 +249,24 @@ fun ManualLinearTextEditor(
         onHeightMeasured((measuredHeightPx / uiScale + 16f).coerceAtLeast(42f))
     }
 
-    fun toExternalSelection(selection: TextRange): TextRange {
+    fun toExternalSelection(
+        selection: TextRange,
+        textLength: Int = hiddenInput.text.removePrefix("\u200B").length
+    ): TextRange {
         return TextRange(
-            start = (selection.start - 1).coerceIn(0, payload.text.length),
-            end = (selection.end - 1).coerceIn(0, payload.text.length)
+            start = (selection.start - 1).coerceIn(0, textLength),
+            end = (selection.end - 1).coerceIn(0, textLength)
         )
     }
 
     fun updateSelection(selection: TextRange) {
+        val textLength = hiddenInput.text.removePrefix("\u200B").length
         val clampedSelection = TextRange(
-            start = selection.start.coerceIn(1, payload.text.length + 1),
-            end = selection.end.coerceIn(1, payload.text.length + 1)
+            start = selection.start.coerceIn(1, textLength + 1),
+            end = selection.end.coerceIn(1, textLength + 1)
         )
         hiddenInput = hiddenInput.copy(selection = clampedSelection)
-        onSelectionChange(toExternalSelection(clampedSelection))
+        onSelectionChange(toExternalSelection(clampedSelection, textLength))
         selectionActionMode?.finish()
         selectionActionMode = null
         selectionActionModeCallback = null
@@ -539,7 +544,7 @@ fun ManualLinearTextEditor(
 
                 newSpans = mergeAdjacentSpans(newSpans)
 
-                val externalCursor = toExternalSelection(newSelection).end
+                val externalCursor = toExternalSelection(newSelection, realNewText.length).end
                 LinearListMarkerCodec.normalizeInsertedNewLine(realNewText, externalCursor)?.let { (normalizedText, normalizedCursor) ->
                     hiddenInput = TextFieldValue(
                         text = "\u200B$normalizedText",
@@ -609,10 +614,8 @@ fun ManualLinearTextEditor(
                 if (realOldText != realNewText) {
                     onTextChange(realNewText, newSpans)
                 }
-                onSelectionChange(toExternalSelection(newSelection))
-                if (newSelection != previousSelection) {
-                    updateSelection(newSelection)
-                } else if (newSelection.collapsed) {
+                onSelectionChange(toExternalSelection(newSelection, realNewText.length))
+                if (newSelection.collapsed) {
                     selectionActionMode?.finish()
                     selectionActionMode = null
                     selectionActionModeCallback = null
