@@ -30,6 +30,7 @@ import com.mato.syai.note.domain.local.model.TextPayload
 import com.mato.syai.note.domain.local.model.LinearTextPayload
 import com.mato.syai.note.domain.local.model.ListMarker
 import com.mato.syai.note.domain.local.model.ListPayload
+import com.mato.syai.note.ui.editor.LinearListMarkerCodec
 import java.io.File
 import java.io.FileOutputStream
 
@@ -175,11 +176,12 @@ class PdfExporter(private val context: Context) {
     }
 
     private fun drawLinearText(canvas: Canvas, entry: LinearContentEntry) {
-        val spannable = SpannableString(entry.value)
+        val displayStr = LinearListMarkerCodec.displayText(entry.value)
+        val spannable = SpannableString(displayStr)
         
         entry.spans.forEach { span ->
-            val start = Math.max(0, Math.min(span.start, entry.value.length))
-            val end = Math.max(0, Math.min(span.end, entry.value.length))
+            val start = Math.max(0, Math.min(span.start, displayStr.length))
+            val end = Math.max(0, Math.min(span.end, displayStr.length))
             if (start < end) {
                 spannable.setSpan(ForegroundColorSpan(span.style.color), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                 spannable.setSpan(AbsoluteSizeSpan(span.style.fontSize.toInt(), true), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
@@ -345,18 +347,14 @@ class PdfExporter(private val context: Context) {
         return res.toString()
     }
 
-    public fun renderFirstPageToBitmap(content: NoteContent): Bitmap? {
-        val page = content.pages.firstOrNull() ?: return null
-
+    public fun renderPageToBitmap(page: com.mato.syai.note.domain.local.model.PageData): Bitmap? {
         val bitmap = Bitmap.createBitmap(
-            page.widthPoints.toInt(),
-            page.heightPoints.toInt(),
+            page.widthPoints.toInt().coerceAtLeast(1),
+            page.heightPoints.toInt().coerceAtLeast(1),
             Bitmap.Config.ARGB_8888
         )
 
         val canvas = Canvas(bitmap)
-
-        // draw background
         canvas.drawColor(page.backgroundColor)
 
         val renderables = page.renderableItems
@@ -383,5 +381,10 @@ class PdfExporter(private val context: Context) {
         }
 
         return bitmap
+    }
+
+    public fun renderFirstPageToBitmap(content: NoteContent): Bitmap? {
+        val page = content.pages.firstOrNull() ?: return null
+        return renderPageToBitmap(page)
     }
 }

@@ -119,7 +119,7 @@ class GeminiClient {
                   "layer": 2,
                   "type": "DRAWING",
                   "changes": {
-                    "color": -16777216,
+                    "color": 16777216,
                     "width": 5.0,
                     "alpha": 0.5
                   }
@@ -142,9 +142,12 @@ class GeminiClient {
             }
 
             Rules:
+            - Prioritize creating content in this order: LINEAR_TEXT > LIST > TEXT. Do not use TEXT (floating textbox) unless explicitly requested.
             - CREATE: Use payload for the initial state. For TEXT/LINEAR_TEXT use {"text": "..."}. For LIST use {"listStyle": "BULLET", "items": [{"text": "item 1", "isChecked": false}]}.
+            - DRAWING CREATE/UPDATE: "color" must be a Hex string like "#FF000000" (black), "#FFFF0000" (red). "points" must be a flat array of numbers: [x1, y1, x2, y2, ...].
+            - To draw complex shapes and smooth edges use atleast 100 points for each shape to make it smooth and correct.
+            - Drawings are like pixel Drawing based on page Size give pixel Perfect match for drawing as Pencil/Outline Sketch.
             - UPDATE: Include ONLY the fields that should be altered in "changes". Do not include fields that should remain the same.
-            - DRAWING UPDATE: You can change 'color', 'width', 'alpha', or provide entirely new 'points' array to replace the drawing.
             - To replace text in a LINEAR_TEXT block, use UPDATE with "changes": {"text": "new text"}.
             - Do not invent unsupported fields.
             

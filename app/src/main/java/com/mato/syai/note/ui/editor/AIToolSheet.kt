@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -20,6 +21,8 @@ import androidx.compose.ui.unit.dp
 
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
+import androidx.compose.ui.text.input.KeyboardType
+import com.mato.syai.note.utils.OutlinedTextFieldStyled
 
 @Composable
 fun AIToolSheet(
@@ -28,7 +31,7 @@ fun AIToolSheet(
 ) {
     var text by remember { mutableStateOf("") }
     var selectedTabIndex by remember { mutableStateOf(0) }
-    val tabs = listOf("Gemini", "Stable Diffusion")
+    val tabs = listOf("AI Text/Drawing", "Image Generation")
 
     Column(
         modifier = Modifier.padding(16.dp),
@@ -45,24 +48,16 @@ fun AIToolSheet(
                 Tab(
                     selected = selectedTabIndex == index,
                     onClick = { selectedTabIndex = index },
-                    text = { Text(title) }
+                    text = { Text(title, color = Color.White) }
                 )
             }
         }
 
-        Text(
-            if (selectedTabIndex == 0) "Gemini uses the previous, current, and next page as context. Can generate text and highly detailed drawings." 
-            else "Stable Diffusion runs locally on your laptop. It generates images directly onto the canvas based on your prompt.",
-            color = Color.White.copy(alpha = 0.72f)
-        )
-
-        OutlinedTextField(
+        OutlinedTextFieldStyled(
             value = text,
             onValueChange = { text = it },
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = {
-                Text(if (selectedTabIndex == 0) "Write a paragraph, create a list, or draw a smooth diagram" else "A clean study notes illustration...")
-            }
+            keyboardType = KeyboardType.Unspecified,
+            placeholder = "Your Imagination ..."
         )
 
         Button(
@@ -75,7 +70,7 @@ fun AIToolSheet(
             },
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text(if (selectedTabIndex == 0) "Generate Content" else "Generate Image")
+            Text(if (selectedTabIndex == 0) "Generate" else "Generate Image")
         }
     }
 }

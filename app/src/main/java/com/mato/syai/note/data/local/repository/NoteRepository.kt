@@ -50,6 +50,10 @@ class NoteRepository @Inject constructor(
     }
 
     suspend fun getNoteById(id: Long): NoteEntity? = dao.getNoteById(id)
+    
+    suspend fun getNoteMetadata(id: Long): MetadataEntity? = dao.getMetadataByNoteId(id)
+    
+    suspend fun updateNoteMetadata(metadata: MetadataEntity) = dao.insertMetadata(metadata)
 
     suspend fun createNewNote(title: String, folder: String): Long = withContext(Dispatchers.IO) {
         val root = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
@@ -276,5 +280,16 @@ class NoteRepository @Inject constructor(
         page.upsertObject(noteObject)
         page.refreshLinearTextPaste()
         saveNoteContent(noteId, content)
+    }
+
+    val savedColors: Flow<List<SavedColorEntity>> = dao.getSavedColors()
+
+    suspend fun saveColor(colorHex: Int) = withContext(Dispatchers.IO) {
+        dao.insertSavedColor(SavedColorEntity(colorHex = colorHex))
+        dao.deleteOldSavedColors()
+    }
+
+    suspend fun deleteSavedColor(id: Long) = withContext(Dispatchers.IO) {
+        dao.deleteSavedColorById(id)
     }
 }

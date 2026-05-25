@@ -21,6 +21,17 @@ import com.mato.syai.presentation.navigation.AppNavGraph
 import com.mato.syai.presentation.settings.ThemeMode
 import com.mato.syai.presentation.theme.ThemeViewModel
 import com.mato.syai.ui.theme.AppTheme
+import com.mato.syai.utils.GlobalSnackbarState
+import com.mato.syai.utils.LocalGlobalSnackbar
+import com.mato.syai.utils.CustomUndoSnackbar
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.remember
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -56,6 +67,7 @@ class MainActivity : ComponentActivity() {
                 dynamicColor = themeState.dynamicColor
             ) {
                 val navController = rememberNavController()
+                val globalSnackbarState = remember { GlobalSnackbarState() }
 
                 // Handle notification intent
                 LaunchedEffect(intent) {
@@ -64,11 +76,20 @@ class MainActivity : ComponentActivity() {
                     if (openNote && noteId != -1L) {
                         // Delay slightly to allow splash/home to load if needed
                         // or just navigate directly
-                        navController.navigate("note_editor/$noteId")
+                        navController.navigate("note_editor_flow/$noteId")
                     }
                 }
 
-                AppNavGraph(navController = navController)
+                CompositionLocalProvider(LocalGlobalSnackbar provides globalSnackbarState) {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        AppNavGraph(navController = navController)
+                        
+                        CustomUndoSnackbar(
+                            state = globalSnackbarState,
+                            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 64.dp)
+                        )
+                    }
+                }
             }
 
         }

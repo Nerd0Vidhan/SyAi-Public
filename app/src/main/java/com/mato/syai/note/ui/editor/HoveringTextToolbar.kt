@@ -1,16 +1,21 @@
 package com.mato.syai.note.ui.editor
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,14 +33,6 @@ fun HoveringTextToolbar(
     modifier: Modifier = Modifier
 ) {
     var showColorPicker by remember { mutableStateOf(false) }
-    val quickColors = listOf(
-        Color(0xFF111111),
-        Color(0xFF3F2A7A),
-        Color(0xFF0057B8),
-        Color(0xFF0F766E),
-        Color(0xFFB45309),
-        Color(0xFFB91C1C)
-    )
 
     if (showColorPicker) {
         ColorPickerBottomSheet(
@@ -55,16 +52,16 @@ fun HoveringTextToolbar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            // Dropdown for Font Size
             var expanded by remember { mutableStateOf(false) }
             var sizeText by remember(style.fontSize) { mutableStateOf(style.fontSize.toInt().toString()) }
 
-            ToolbarIcon(Icons.Default.Remove, false) {
+            ToolbarIcon(Icons.Default.Remove, true) {
                 onStyleChange(style.copy(fontSize = (style.fontSize - 1f).coerceIn(8f, 100f)))
             }
+            Spacer(modifier=Modifier.width(6.dp))
             Box {
-                TextButton(onClick = { expanded = true }) {
-                    Text(sizeText)
+                OutlinedButton(onClick = { expanded = true },border = BorderStroke(width= 2.dp,color = MaterialTheme.colorScheme.secondary)) {
+                    Text(sizeText, color = MaterialTheme.colorScheme.secondary)
                 }
                 DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                     val sizes = listOf(10, 12, 14, 16, 18, 20, 24, 30, 36)
@@ -79,11 +76,26 @@ fun HoveringTextToolbar(
                     }
                 }
             }
-            ToolbarIcon(Icons.Default.Add, false) {
+            Spacer(modifier=Modifier.width(6.dp))
+            ToolbarIcon(Icons.Default.Add, true) {
                 onStyleChange(style.copy(fontSize = (style.fontSize + 1f).coerceIn(8f, 100f)))
             }
+            Spacer(modifier=Modifier.width(6.dp))
 
-            HorizontalDivider(modifier = Modifier.height(24.dp).width(1.dp), color = Color.Gray)
+
+            VerticalDivider(modifier = Modifier.height(24.dp).width(2.dp), color = Color.White)
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            ColorCircle(
+                color = Color(style.color),
+                selected = false,
+                onClick = { showColorPicker = true }
+            )
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            VerticalDivider(modifier = Modifier.height(24.dp).width(2.dp), color = Color.White)
 
             ToolbarIcon(Icons.Default.FormatBold, style.isBold) {
                 onStyleChange(style.copy(isBold = !style.isBold))
@@ -97,7 +109,7 @@ fun HoveringTextToolbar(
                 onStyleChange(style.copy(isUnderline = !style.isUnderline))
             }
 
-            HorizontalDivider(modifier = Modifier.height(24.dp).width(1.dp), color = Color.Gray)
+            VerticalDivider(modifier = Modifier.height(24.dp).width(2.dp), color = Color.White)
             
             ToolbarIcon(Icons.Default.FormatAlignLeft, style.alignment == "LEFT") {
                 onStyleChange(style.copy(alignment = "LEFT"))
@@ -111,21 +123,7 @@ fun HoveringTextToolbar(
                 onStyleChange(style.copy(alignment = "RIGHT"))
             }
 
-            HorizontalDivider(modifier = Modifier.height(24.dp).width(1.dp), color = Color.Gray)
-
-            ColorCircle(
-                color = Color(style.color),
-                selected = false,
-                onClick = { showColorPicker = true }
-            )
-
-            quickColors.forEach { quickColor ->
-                ColorCircle(
-                    color = quickColor,
-                    selected = style.color == quickColor.toArgb(),
-                    onClick = { onColorChange(quickColor.toArgb()) }
-                )
-            }
+            VerticalDivider(modifier = Modifier.height(24.dp).width(2.dp), color = Color.White)
         }
     }
 }
