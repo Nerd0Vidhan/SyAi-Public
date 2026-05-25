@@ -1,6 +1,5 @@
 package com.mato.syai.presentation.bottomnavigation
 
-import android.annotation.SuppressLint
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 import android.graphics.RenderEffect
@@ -16,6 +15,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.*
@@ -29,21 +29,15 @@ import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import androidx.navigation.compose.rememberNavController
-import com.mato.syai.presentation.navigation.BottomNavigationGraph
-import com.mato.syai.presentation.toolbar.Toolbar
-import com.mato.syai.ui.theme.PurpleDark
 import com.mato.syai.ui.theme.WhitePurple
 import kotlin.math.PI
 import kotlin.math.sin
 
-@SuppressLint("NewApi")
 @Composable
-fun MainScreen() {
+fun BottomFabGroup(navController: NavController,parentNavController: NavController) {
     val isMenuExtended = remember { mutableStateOf(false) }
 
     val fabAnimationProgress by animateFloatAsState(
@@ -57,23 +51,14 @@ fun MainScreen() {
     )
 
     val renderEffect = getRenderEffect().asComposeRenderEffect()
-    val navController = rememberNavController()
-
-
-    BottomNavigationGraph(
-        navController = navController,
-        paddingValues = PaddingValues(bottom = 80.dp)
-    )
-
-//    Column() {
-        Toolbar(navController)
         Box(
-            Modifier.fillMaxSize().padding(bottom = 24.dp),
+            Modifier
+                .fillMaxWidth()
+                .wrapContentHeight()
+                .padding(bottom = 16.dp),
             contentAlignment = Alignment.BottomCenter
         ) {
-//            CustomBottomNavigation(navController)
 
-            // Dimmed background when FAB menu is open
             if (fabAnimationProgress > 0f) {
                 Box(
                     modifier = Modifier
@@ -83,17 +68,38 @@ fun MainScreen() {
                 )
             }
 
-            Circle(color = Color.Blue, animationProgress = 0.5f)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(0.92f)
+                    .graphicsLayer {
+                        shadowElevation = 12f
+                        shape = BottomBarCutoutShape()
+                        clip = true
+                    }
+            ) {
+                CustomBottomNavigation(navController = navController)
+            }
+            Box(modifier = Modifier.padding(bottom = 12.dp)) {
+                FabGroup(
+                    animationProgress = fabAnimationProgress,
+                    renderEffect = renderEffect,
+                    navController = navController,
+                    parentNavController = parentNavController
+                    )
+                FabGroup(
+                    renderEffect = null,
+                    animationProgress = fabAnimationProgress,
+                    toggleAnimation = { isMenuExtended.value = !isMenuExtended.value },
+                    navController = navController,
+                    parentNavController = parentNavController
+                )
+            }
 
-            FabGroup(renderEffect = renderEffect, animationProgress = fabAnimationProgress)
-            FabGroup(
-                renderEffect = null,
-                animationProgress = fabAnimationProgress,
-                toggleAnimation = { isMenuExtended.value = !isMenuExtended.value },
-                navController = navController
-            )
+            Box(modifier = Modifier.padding(bottom = 16.dp)) {
 
-            Circle(color = PurpleDark, animationProgress = clickAnimationProgress)
+                Circle(color = MaterialTheme.colorScheme.primary, animationProgress = clickAnimationProgress)
+            }
+            Spacer(modifier = Modifier.height(10.dp))
         }
     }
 
@@ -102,7 +108,8 @@ fun FabGroup(
     animationProgress: Float = 0f,
     renderEffect: androidx.compose.ui.graphics.RenderEffect? = null,
     toggleAnimation: () -> Unit = {},
-    navController: NavController? = null
+    navController: NavController,
+    parentNavController: NavController
 ) {
     val context = LocalContext.current
 
@@ -111,41 +118,43 @@ fun FabGroup(
         contentAlignment = Alignment.BottomCenter
     ) {
         AnimatedFab(
-            icon = Icons.Default.Settings,
+            icon = Icons.Default.ShoppingCart,
             modifier = Modifier.padding(PaddingValues(bottom = 72.dp, end = 210.dp) * FastOutSlowInEasing.transform(0f, 0.8f, animationProgress)),
             opacity = LinearEasing.transform(0.2f, 0.7f, animationProgress),
             onClick = {
-                Toast.makeText(context, "Navigating to Premium", Toast.LENGTH_SHORT).show()
-                navController?.navigate("premium")
+                Toast.makeText(context, "Premium Features Coming Soon", Toast.LENGTH_SHORT).show()
+                navController.navigate("premium")
                 toggleAnimation()
             }
         )
 
         AnimatedFab(
-            icon = Icons.Default.ShoppingCart,
+            icon = Icons.Filled.Person,
             modifier = Modifier.padding(PaddingValues(bottom = 88.dp) * FastOutSlowInEasing.transform(0.1f, 0.9f, animationProgress)),
             opacity = LinearEasing.transform(0.3f, 0.8f, animationProgress),
             onClick = {
-                Toast.makeText(context, "Navigating to Profile", Toast.LENGTH_SHORT).show()
-                navController?.navigate("profile")
+                Toast.makeText(context, "Profile View Will be available in future update", Toast.LENGTH_SHORT).show()
+                navController.navigate("profile")
                 toggleAnimation()
             }
         )
 
         AnimatedFab(
-            icon = Icons.Default.Add,
+            icon = Icons.Default.Settings,
             modifier = Modifier.padding(PaddingValues(bottom = 72.dp, start = 210.dp) * FastOutSlowInEasing.transform(0.2f, 1.0f, animationProgress)),
             opacity = LinearEasing.transform(0.4f, 0.9f, animationProgress),
             onClick = {
-                Toast.makeText(context, "Navigating to Settings", Toast.LENGTH_SHORT).show()
-                navController?.navigate("settings")
+                Toast.makeText(context, "Settings will be available in future update", Toast.LENGTH_SHORT).show()
+                parentNavController.navigate("settings")
                 toggleAnimation()
             }
         )
 
         AnimatedFab(
             icon = Icons.Default.Add,
-            modifier = Modifier.rotate(225 * FastOutSlowInEasing.transform(0.35f, 0.65f, animationProgress)),
+            modifier = Modifier
+                .padding(bottom = 10.dp)
+                .rotate(225 * FastOutSlowInEasing.transform(0.35f, 0.65f, animationProgress)),
             backgroundColor = Color.Transparent,
             onClick = toggleAnimation
         )
@@ -164,7 +173,8 @@ fun AnimatedFab(
         onClick = onClick,
         elevation = FloatingActionButtonDefaults.elevation(0.dp),
         containerColor = backgroundColor,
-        modifier = modifier.scale(1.25f)
+        modifier = modifier.scale(1.25f),
+        shape = CircleShape
     ) {
         icon?.let {
             Icon(
@@ -213,10 +223,4 @@ fun getRenderEffect(): RenderEffect {
         )
     )
     return RenderEffect.createChainEffect(alphaMatrix, blurEffect)
-}
-
-@Preview(showBackground = true, showSystemUi = true)
-@Composable
-fun MainScreenPreview() {
-    MainScreen()
 }

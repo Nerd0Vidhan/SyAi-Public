@@ -46,3 +46,10 @@ data class NoteWithMetadata(
     @Relation(parentColumn = "noteId", entityColumn = "noteId")
     val metadata: MetadataEntity?
 )
+
+@Entity(tableName = "saved_colors")
+data class SavedColorEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val colorHex: Int,
+    val timestamp: Long = System.currentTimeMillis()
+)

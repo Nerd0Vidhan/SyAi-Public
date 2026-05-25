@@ -71,6 +71,11 @@ import com.mato.syai.note.domain.local.model.TextStyleData
 import com.mato.syai.note.utils.RichTextParser
 import kotlin.math.max
 import kotlin.math.min
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -103,17 +108,18 @@ fun ManualLinearTextEditor(
     var hiddenInput by remember {
         mutableStateOf(
             TextFieldValue(
-                text = payload.text,
-                selection = TextRange(payload.text.length)
+                text = "\u200B" + payload.text,
+                selection = TextRange(payload.text.length + 1)
             )
         )
     }
 
     LaunchedEffect(payload.text) {
-        if (hiddenInput.text != payload.text) {
+        val targetText = "\u200B" + payload.text
+        if (hiddenInput.text != targetText) {
             hiddenInput = hiddenInput.copy(
-                text = payload.text,
-                selection = TextRange(hiddenInput.selection.end.coerceAtMost(payload.text.length))
+                text = targetText,
+                selection = TextRange(hiddenInput.selection.end.coerceAtMost(targetText.length))
             )
         }
     }
@@ -121,8 +127,8 @@ fun ManualLinearTextEditor(
     LaunchedEffect(selection, payload.text, isSelected) {
         if (!isSelected || selection == null) return@LaunchedEffect
         val normalized = TextRange(
-            start = selection.start.coerceIn(0, payload.text.length),
-            end = selection.end.coerceIn(0, payload.text.length)
+            start = (selection.start + 1).coerceIn(1, payload.text.length + 1),
+            end = (selection.end + 1).coerceIn(1, payload.text.length + 1)
         )
         if (hiddenInput.selection != normalized) {
             hiddenInput = hiddenInput.copy(selection = normalized)
@@ -183,7 +189,7 @@ fun ManualLinearTextEditor(
     )
 
     val displayText = remember(hiddenInput.text) {
-        LinearListMarkerCodec.displayText(hiddenInput.text)
+        LinearListMarkerCodec.displayText(hiddenInput.text.removePrefix("\u200B"))
     }
 
     val annotatedText = remember(displayText, payload.spans, payload.style, uiScale, density.fontScale) {
@@ -230,20 +236,29 @@ fun ManualLinearTextEditor(
         hiddenInput = hiddenInput.copy(selection = selection)
         onSelectionChange(selection)
         if (!selection.collapsed && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val mappedSelection = TextRange(
+                (selection.start - 1).coerceAtLeast(0),
+                (selection.end - 1).coerceAtLeast(0)
+            )
             val contentRect = calculateSelectionRect(
                 layout = latestLayout,
-                selection = selection,
+                selection = mappedSelection,
                 containerInWindow = containerInWindow
             )
             if (contentRect != null) {
                 if (selectionActionMode == null) {
                     val callback = TextSelectionActionModeCallback(
                         context = context,
-                        getSelection = { hiddenInput.selection },
-                        getText = { hiddenInput.text },
-                        onSelectionUpdate = { newSelection -> updateSelection(newSelection) },
+                        getSelection = { TextRange((hiddenInput.selection.start - 1).coerceAtLeast(0), (hiddenInput.selection.end - 1).coerceAtLeast(0)) },
+                        getText = { hiddenInput.text.removePrefix("\u200B") },
+                        onSelectionUpdate = { newSelection -> updateSelection(TextRange(newSelection.start + 1, newSelection.end + 1)) },
                         onCopy = onCopy,
-                        onPaste = { onPaste(hiddenInput.selection.start) }
+                        onPaste = { 
+                            val mappedStart = (hiddenInput.selection.start - 1).coerceAtLeast(0)
+                            val mappedEnd = (hiddenInput.selection.end - 1).coerceAtLeast(0)
+                            onPaste(mappedEnd)
+                            updateSelection(TextRange(hiddenInput.selection.start, hiddenInput.selection.end))
+                        }
                     )
                     selectionActionModeCallback = callback
                     selectionActionMode = hostView.startActionMode(callback, ActionMode.TYPE_FLOATING)
@@ -267,6 +282,16 @@ fun ManualLinearTextEditor(
                 val position = coordinates.positionInWindow()
                 containerInWindow = Offset(position.x, position.y)
             }
+            .onKeyEvent { keyEvent ->
+                if (
+                    keyEvent.type == KeyEventType.KeyDown &&
+                    keyEvent.key == Key.Backspace &&
+                    hiddenInput.text.isEmpty()
+                ) {
+                    onBackspaceAtStart()
+                    true
+                } else false
+            }
             .pointerInput(payload.text, isSelected) {
                 detectTapGestures(
                     onTap = { offset ->
@@ -280,14 +305,16 @@ fun ManualLinearTextEditor(
                             onCheckboxToggle(lineInfo.start)
                             return@detectTapGestures
                         }
-                        updateSelection(TextRange(position))
+                        updateSelection(TextRange(position + 1))
                         focusRequester.requestFocus()
                         keyboardController?.show()
                     },
                     onLongPress = { offset ->
                         val layout = latestLayout ?: return@detectTapGestures
-                        val position = layout.getOffsetForPosition(offset)
-                        updateSelection(TextRange(position, payload.text.length))
+                        val index = layout.getOffsetForPosition(offset)
+                        val mappedIndex = (index - 1).coerceAtLeast(0)
+                        onTextChange(payload.text, payload.spans)
+                        updateSelection(TextRange(index + 1, payload.text.length + 1))
                     }
                 )
             }
@@ -296,12 +323,12 @@ fun ManualLinearTextEditor(
                     onDragStart = { start ->
                         val layout = latestLayout ?: return@detectDragGesturesAfterLongPress
                         val position = layout.getOffsetForPosition(start)
-                        updateSelection(TextRange(position))
+                        updateSelection(TextRange(position + 1))
                     },
                     onDrag = { change, _ ->
                         val layout = latestLayout ?: return@detectDragGesturesAfterLongPress
                         val start = hiddenInput.selection.start
-                        val current = layout.getOffsetForPosition(change.position)
+                        val current = layout.getOffsetForPosition(change.position) + 1
                         updateSelection(TextRange(min(start, current), max(start, current)))
                         change.consume()
                     }
@@ -315,15 +342,17 @@ fun ManualLinearTextEditor(
             if (!selection.collapsed) {
                 val minSelection = selection.min
                 val maxSelection = selection.max
+                val mappedMin = (minSelection - 1).coerceAtLeast(0)
+                val mappedMax = (maxSelection - 1).coerceAtLeast(0)
                 
                 drawPath(
-                    path = layout.getPathForRange(minSelection, maxSelection),
+                    path = layout.getPathForRange(mappedMin, mappedMax),
                     color = androidx.compose.ui.graphics.Color(0x334F46E5)
                 )
                 
                 // Draw teardrops
-                val startCursorRect = layout.getCursorRect(minSelection)
-                val endCursorRect = layout.getCursorRect(maxSelection)
+                val startCursorRect = layout.getCursorRect(mappedMin)
+                val endCursorRect = layout.getCursorRect(mappedMax)
                 val primaryColor = androidx.compose.ui.graphics.Color(0xFF4F46E5)
                 
                 // Start handle
@@ -356,7 +385,8 @@ fun ManualLinearTextEditor(
             drawText(layout)
 
             if (isSelected && isFocused && selection.collapsed) {
-                val cursorRect = layout.getCursorRect(selection.start)
+                val mappedIndex = (selection.start - 1).coerceAtLeast(0)
+                val cursorRect = layout.getCursorRect(mappedIndex)
                 drawLine(
                     color = androidx.compose.ui.graphics.Color(payload.style.color).copy(alpha = cursorAlpha),
                     start = Offset(cursorRect.left, cursorRect.top),
@@ -371,29 +401,41 @@ fun ManualLinearTextEditor(
             onValueChange = { newValue ->
                 val previousSelection = hiddenInput.selection
                 val oldText = hiddenInput.text
-                val newText = newValue.text
+                var newText = newValue.text
+                var newSelection = newValue.selection
 
-                if (newText == oldText && newValue.selection.collapsed && newValue.selection.start == 0 && previousSelection.start == 0) {
-                     // Potential backspace at start (if keyboard sends it without text change or just cursor move)
-                     // But usually newText < oldText. 
+                if (newSelection.start == 0 && newSelection.end == 0 && newText.startsWith("\u200B")) {
+                    newSelection = TextRange(1)
                 }
 
-                if (oldText.isNotEmpty() && newText.length < oldText.length && previousSelection.collapsed && previousSelection.start == 0) {
-                    onBackspaceAtStart()
-                    return@BasicTextField
+                if (!newText.contains("\u200B")) {
+                    if (oldText == "\u200B" && newText.isEmpty()) {
+                        onBackspaceAtStart()
+                        return@BasicTextField
+                    }
+                    newText = "\u200B" + newText
+                    newSelection = TextRange((newSelection.start + 1).coerceAtMost(newText.length), (newSelection.end + 1).coerceAtMost(newText.length))
+                } else if (!newText.startsWith("\u200B")) {
+                    val split = newText.split("\u200B")
+                    newText = "\u200B" + split.joinToString("")
                 }
+
+                hiddenInput = newValue.copy(text = newText, selection = newSelection)
+
+                val realOldText = oldText.replace("\u200B", "")
+                val realNewText = newText.replace("\u200B", "")
 
                 var newSpans = payload.spans.toList()
                 
-                val commonPrefixLen = oldText.commonPrefixWith(newText).length
-                val commonSuffixLen = oldText.reversed().commonPrefixWith(newText.reversed()).length
+                val commonPrefixLen = realOldText.commonPrefixWith(realNewText).length
+                val commonSuffixLen = realOldText.reversed().commonPrefixWith(realNewText.reversed()).length
                 
-                val overlap = (commonPrefixLen + commonSuffixLen) - min(oldText.length, newText.length)
+                val overlap = (commonPrefixLen + commonSuffixLen) - min(realOldText.length, realNewText.length)
                 val safeSuffixLen = if (overlap > 0) commonSuffixLen - overlap else commonSuffixLen
                 
                 val replaceStart = commonPrefixLen
-                val oldReplaceEnd = oldText.length - safeSuffixLen
-                val newReplaceEnd = newText.length - safeSuffixLen
+                val oldReplaceEnd = realOldText.length - safeSuffixLen
+                val newReplaceEnd = realNewText.length - safeSuffixLen
                 
                 val deletedLen = oldReplaceEnd - replaceStart
                 val insertedLen = newReplaceEnd - replaceStart
@@ -496,7 +538,9 @@ fun ManualLinearTextEditor(
                 }
                 
                 hiddenInput = newValue
-                onTextChange(newText, newSpans)
+                if (realOldText != realNewText) {
+                    onTextChange(realNewText, newSpans)
+                }
                 onSelectionChange(newValue.selection)
                 if (newValue.selection != previousSelection) {
                     updateSelection(newValue.selection)

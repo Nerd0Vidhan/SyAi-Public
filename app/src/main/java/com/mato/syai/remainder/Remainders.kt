@@ -16,7 +16,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import java.time.Instant
 import java.time.LocalDateTime
@@ -53,11 +52,6 @@ data class ReminderItem(
     val isActive: Boolean = true
 )
 
-@Preview
-@Composable
-fun prev(){
-    ReminderAlarmScreen()
-}
 // Main Screen
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

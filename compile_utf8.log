@@ -1,0 +1,87 @@
+﻿> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:startLocalImageGenerator
+> Task :app:preBuild
+> Task :app:preDebugBuild
+> Task :app:generateDebugBuildConfig UP-TO-DATE
+> Task :app:protobufDummy UP-TO-DATE
+> Task :app:extractDebugProto UP-TO-DATE
+> Task :app:extractIncludeDebugProto UP-TO-DATE
+> Task :app:extractProto UP-TO-DATE
+> Task :app:generateDebugProto UP-TO-DATE
+> Task :app:checkDebugAarMetadata UP-TO-DATE
+> Task :app:processDebugNavigationResources UP-TO-DATE
+> Task :app:compileDebugNavigationResources UP-TO-DATE
+> Task :app:generateDebugResValues UP-TO-DATE
+> Task :app:processDebugGoogleServices UP-TO-DATE
+> Task :app:mapDebugSourceSetPaths UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :app:mergeDebugResources UP-TO-DATE
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :app:parseDebugLocalResources UP-TO-DATE
+> Task :app:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksDebug UP-TO-DATE
+> Task :app:processDebugMainManifest
+> Task :app:processDebugManifest
+> Task :app:processDebugManifestForPackage
+> Task :app:processDebugResources
+> Task :app:kspDebugKotlin
+> Task :app:compileDebugKotlin
+.\gradlew : e: file:///C:/Users/Vidhan/AndroidStudioProjects/SyAi-Public/app/src/main/java/com/mato/syai/note/ui/editor
+/ManualLinearTextEditor.kt:275:14 Unresolved reference 'androidx'.
+At line:1 char:1
++ .\gradlew compileDebugKotlin > compile.log 2>&1
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (e: file:///C:/U...nce 'androidx'.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+e: file:///C:/Users/Vidhan/AndroidStudioProjects/SyAi-Public/app/src/main/java/com/mato/syai/note/ui/editor/ManualLinea
+rTextEditor.kt:275:44 Unresolved reference. None of the following candidates is applicable because of a receiver type 
+mismatch:
+fun Modifier.onKeyEvent(onKeyEvent: (KeyEvent) -> Boolean): Modifier
+e: file:///C:/Users/Vidhan/AndroidStudioProjects/SyAi-Public/app/src/main/java/com/mato/syai/note/ui/editor/NoteEditorS
+creen.kt:91:26 Unresolved reference 'NavController'.
+e: file:///C:/Users/Vidhan/AndroidStudioProjects/SyAi-Public/app/src/main/java/com/mato/syai/note/ui/editor/NoteEditorS
+creen.kt:104:9 Conflicting declarations:
+local var expandedInsertIndex: Int?
+local var expandedInsertIndex: Int?
+e: file:///C:/Users/Vidhan/AndroidStudioProjects/SyAi-Public/app/src/main/java/com/mato/syai/note/ui/editor/NoteEditorS
+creen.kt:105:9 Conflicting declarations:
+local var expandedInsertIndex: Int?
+local var expandedInsertIndex: Int?
+e: file:///C:/Users/Vidhan/AndroidStudioProjects/SyAi-Public/app/src/main/java/com/mato/syai/note/ui/editor/NoteEditorS
+creen.kt:190:56 Unresolved reference 'navigate'.
+e: file:///C:/Users/Vidhan/AndroidStudioProjects/SyAi-Public/app/src/main/java/com/mato/syai/note/ui/editor/PagePreview
+Screen.kt:357:42 Argument type mismatch: actual type is 'Int', but 'String' was expected.
+e: file:///C:/Users/Vidhan/AndroidStudioProjects/SyAi-Public/app/src/main/java/com/mato/syai/note/ui/editor/PagePreview
+Screen.kt:358:39 Argument type mismatch: actual type is 'PagePadding', but 'String' was expected.
+e: file:///C:/Users/Vidhan/AndroidStudioProjects/SyAi-Public/app/src/main/java/com/mato/syai/note/ui/editor/PagePreview
+Screen.kt:359:38 Argument type mismatch: actual type is 'PageBorderStyle', but 'String' was expected.
+e: file:///C:/Users/Vidhan/AndroidStudioProjects/SyAi-Public/app/src/main/java/com/mato/syai/presentation/navigation/Ap
+pNavGraph.kt:83:17 No value passed for parameter 'viewModel'.
+
+> Task :app:compileDebugKotlin FAILED
+
+[Incubating] Problems report is available at: file:///C:/Users/Vidhan/AndroidStudioProjects/SyAi-Public/build/reports/problems/problems-report.html
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:compileDebugKotlin'.
+> A failure occurred while executing 
+org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction
+   > Compilation error. See log for more details
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to generate a Build Scan (powered by Develocity).
+> Get more help at https://help.gradle.org.
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.2.0/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD FAILED in 2m 1s
+24 actionable tasks: 7 executed, 17 up-to-date

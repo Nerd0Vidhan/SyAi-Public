@@ -6,20 +6,31 @@ import android.content.Intent
 import android.os.Build
 import android.util.Log
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -30,6 +41,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -38,6 +50,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.navigation.NavController
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
@@ -74,20 +87,39 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.zIndex
+import com.mato.syai.note.utils.SliderStyled
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlin.math.roundToInt
+import java.io.File
 
 private val SecondaryCream = Color(0xFFF8E0C3)
 val AuraPurple = Color(0xFF3F2A7A)
+
+private fun getLocalImageModel(context: Context, uriString: String?): Any? {
+    if (uriString == null) return null
+    if (uriString.startsWith("file:///")) {
+        val fileName = uriString.substringAfterLast("/")
+        val file = if (uriString.contains("/generated-images/")) {
+            File(File(context.filesDir, "generated-images"), fileName)
+        } else {
+            File(context.filesDir, fileName)
+        }
+        if (file.exists()) {
+            return file
+        }
+    }
+    return uriString
+}
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun NoteEditorScreen(
     noteId: Long,
     viewModel: NoteEditorViewModel = hiltViewModel(),
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    parentNavController: NavController? = null
 ) {
     val context = LocalContext.current
     val state by viewModel.uiState.collectAsState()
@@ -101,10 +133,30 @@ fun NoteEditorScreen(
     var showPageSettings by remember { mutableStateOf(false) }
     var showCustomPageDialog by remember { mutableStateOf(false) }
     var expandedInsertIndex by remember { mutableStateOf<Int?>(null) }
+    var showToolbar by remember { mutableStateOf(true) }
+    var lastInteractionTime by remember {
+        mutableLongStateOf(System.currentTimeMillis())
+    }
 
     LaunchedEffect(state.activeTool) {
         if (state.activeTool == ActiveTool.AI_TOOL) {
             showAI = true
+        }
+    }
+
+    LaunchedEffect(lastInteractionTime, showAI) {
+
+        if (showAI) return@LaunchedEffect
+
+        showToolbar = true
+
+        delay(5000)
+
+        val isStillInactive =
+            System.currentTimeMillis() - lastInteractionTime >= 5000
+
+        if (isStillInactive) {
+            showToolbar = false
         }
     }
 
@@ -146,7 +198,7 @@ fun NoteEditorScreen(
         }
             .filterNotNull()
             .distinctUntilChanged()
-            .collect(viewModel::setVisiblePage)
+            .collect(viewModel::updateCurrentPageIndex)
     }
 
     LaunchedEffect(state.pendingViewportPageIndex, state.content.pages.size) {
@@ -184,7 +236,11 @@ fun NoteEditorScreen(
                 onDeleteLayer = { objectId -> viewModel.deleteLayer(state.currentPageIndex, objectId) },
                 onToggleViewOnly = { viewModel.toggleViewOnly() },
                 onExportPdf = {viewModel.exportToPdf(context)},
-                onPageSettings = { showPageSettings = true }
+                onPageSettings = { showPageSettings = true },
+                onPagePreview = { parentNavController?.navigate("page_preview/$noteId") },
+                onReorderLayer = { from, to ->
+                    viewModel.reorderLayers(state.currentPageIndex, from, to)
+                }
             )
         },
         containerColor = MaterialTheme.colorScheme.primary
@@ -200,7 +256,24 @@ fun NoteEditorScreen(
                 CircularProgressIndicator(color = MaterialTheme.colorScheme.secondary)
             }
         } else {
-            Box(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (true) {
+
+                                awaitPointerEvent()
+
+                                lastInteractionTime = System.currentTimeMillis()
+
+                                if (!showToolbar) {
+                                    showToolbar = true
+                                }
+                            }
+                        }
+                    }
+            ) {
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
@@ -287,37 +360,88 @@ fun NoteEditorScreen(
                     )
                 }
 
-                FloatingEditorActionColumn(
-                    onUndo = viewModel::undo,
-                    onRedo = viewModel::redo,
+                AnimatedVisibility(
+                    visible = !showAI,
+                    enter = fadeIn() + slideInHorizontally(
+                        initialOffsetX = { it },
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessLow
+                        )
+                    ),
+                    exit = fadeOut() + slideOutHorizontally(
+                        targetOffsetX = { it },
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioNoBouncy,
+                            stiffness = Spring.StiffnessMedium
+                        )
+                    ),
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
-                        .navigationBarsPadding()
-                        .imePadding()
-                        .padding(end = 16.dp, bottom = 132.dp)
                         .zIndex(12f)
-                )
+                ) {
+                    FloatingEditorActionColumn(
+                        onUndo = viewModel::undo,
+                        onRedo = viewModel::redo,
+                        modifier = Modifier
+                            .navigationBarsPadding()
+                            .imePadding()
+                            .padding(end = 16.dp, bottom = 132.dp)
+                    )
+                }
 
-                EditorBottomToolbar(
-                    state = state,
-                    onToolSelect = viewModel::setTool,
-                    onTextStyleChange = viewModel::updateTextStyle,
-                    onDrawColorChange = viewModel::updateDrawColor,
-                    onDrawWidthChange = viewModel::updateDrawWidth,
-                    onBrushStyleChange = viewModel::updateBrushStyle,
-                    onImagePicker = { imagePicker() },
-                    onTextColorChange = { int -> viewModel.updateTextColor(int) },
-                    onCheckListSelect = { viewModel.addChecklist(state.currentPageIndex, 200f, 200f) },
-                    onDelete = { viewModel.deleteSelectedObjects() },
-                    onListSelection = { marker, orderedStyle, bulletStyle ->
-                        viewModel.handleListInsertion(marker, orderedStyle, bulletStyle)
-                    },
-                    onListIndentChange = viewModel::changeCurrentLinearListDepth,
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .navigationBarsPadding()
-                        .padding(horizontal = 12.dp, vertical = 12.dp)
-                )
+                AnimatedVisibility(
+                    visible = !showAI && showToolbar,
+                    enter = fadeIn() + slideInVertically(
+                        initialOffsetY = { it },
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessLow
+                        )
+                    ),
+                    exit = fadeOut() + slideOutVertically(
+                        targetOffsetY = { it },
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioNoBouncy,
+                            stiffness = Spring.StiffnessMedium
+                        )
+                    ),
+                    modifier = Modifier.align(Alignment.BottomCenter)
+                ) {
+                    EditorBottomToolbar(
+                        state = state,
+                        onToolSelect = viewModel::setTool,
+                        onTextStyleChange = viewModel::updateTextStyle,
+                        onDrawColorChange = viewModel::updateDrawColor,
+                        onDrawWidthChange = viewModel::updateDrawWidth,
+                        onBrushStyleChange = viewModel::updateBrushStyle,
+                        onImagePicker = { imagePicker() },
+                        onTextColorChange = { int ->
+                            viewModel.updateTextColor(int)
+                        },
+                        onCheckListSelect = {
+                            viewModel.addChecklist(
+                                state.currentPageIndex,
+                                200f,
+                                200f
+                            )
+                        },
+                        onDelete = {
+                            viewModel.deleteSelectedObjects()
+                        },
+                        onListSelection = { marker, orderedStyle, bulletStyle ->
+                            viewModel.handleListInsertion(
+                                marker,
+                                orderedStyle,
+                                bulletStyle
+                            )
+                        },
+                        onListIndentChange = viewModel::changeCurrentLinearListDepth,
+                        modifier = Modifier
+                            .navigationBarsPadding()
+                            .padding(horizontal = 12.dp, vertical = 12.dp)
+                    )
+                }
 
             }
         }
@@ -325,15 +449,27 @@ fun NoteEditorScreen(
 
     if (showPageSettings) {
         PageSettingsDialog(
+            isNoteLevel = true,
             page = pages.getOrNull(current),
             offlineModelDownloadState = state.offlineModelDownloadState,
             offlineModelStatusMessage = state.offlineModelStatusMessage,
             onOfflineModelDownload = viewModel::startOfflineModelDownload,
             onDismiss = { showPageSettings = false },
-            onApply = { textSize, background, padding, border ->
+            onApply = { textSize, background, padding, border, textColor, drawColor->
                 viewModel.updateGlobalPageStyle(textSize, background, padding, border)
                 showPageSettings = false
-            }
+            },
+            /*onApply = { textSize, background, padding, border, textColor, drawColor ->
+                viewModel.updateNoteLevelDefaults(
+                    textSize = textSize,
+                    background = background,
+                    padding = padding,
+                    border = border,
+                    textColor = textColor,
+                    drawColor = drawColor
+                )
+                showPageSettings = false
+            }*/
         )
     }
 
@@ -342,7 +478,7 @@ fun NoteEditorScreen(
             onDismiss = { showCustomPageDialog = false },
             onCreate = { width, height ->
                 viewModel.addPageAt(
-                    insertIndex = expandedInsertIndex ?: state.currentPageIndex + 1,
+                    insertIndex = expandedInsertIndex ?: (state.currentPageIndex + 1),
                     pageSize = PageSize.CUSTOM,
                     customDimensions = PageDimensions(widthPoints = width, heightPoints = height)
                 )
@@ -357,23 +493,26 @@ fun NoteEditorScreen(
             onDismissRequest = {
                 showAI = false
                 viewModel.setTool(ActiveTool.SELECT)
-            }
+            },
+            containerColor = Color.Transparent
         ) {
-            AIToolSheet(
-                onGenerate = { prompt ->
-                    viewModel.generateAIContent(
-                        state.currentPageIndex,
-                        prompt
-                    )
-                    showAI = false
-                    viewModel.setTool(ActiveTool.SELECT)
-                },
-                onGenerateImage = { prompt ->
-                    viewModel.requestAiImageGeneration(prompt)
-                    showAI = false
-                    viewModel.setTool(ActiveTool.SELECT)
-                }
-            )
+            GlassEffect{
+                AIToolSheet(
+                    onGenerate = { prompt ->
+                        viewModel.generateAIContent(
+                            state.currentPageIndex,
+                            prompt
+                        )
+                        showAI = false
+                        viewModel.setTool(ActiveTool.SELECT)
+                    },
+                    onGenerateImage = { prompt ->
+                        viewModel.requestAiImageGeneration(prompt)
+                        showAI = false
+                        viewModel.setTool(ActiveTool.SELECT)
+                    }
+                )
+            }
         }
     }
 }
@@ -391,7 +530,9 @@ fun EditorTopBar(
     onDeleteLayer: (String) -> Unit,
     onToggleViewOnly: () -> Unit,
     onExportPdf: () -> Unit,
-    onPageSettings: () -> Unit
+    onPageSettings: () -> Unit,
+    onPagePreview: () -> Unit,
+    onReorderLayer: (Int, Int) -> Unit
 ) {
     TopAppBar(
         title = {
@@ -422,7 +563,17 @@ fun EditorTopBar(
         actions = {
             var menuExpanded by remember { mutableStateOf(false) }
             var layerMenuExpanded by remember { mutableStateOf(false) }
-            IconButton(onClick = { layerMenuExpanded = true }) {
+            var showLayerReorderSheet by remember { mutableStateOf(false) }
+
+            IconButton(
+                onClick = { layerMenuExpanded = true },
+                modifier = Modifier.pointerInput(Unit) {
+                    detectTapGestures(
+                        onLongPress = { showLayerReorderSheet = true },
+                        onTap = { layerMenuExpanded = true }
+                    )
+                }
+            ) {
                 Icon(Icons.Default.Layers, contentDescription = "Layers", tint = Color.White)
             }
             IconButton(onClick = onToggleViewOnly) {
@@ -438,9 +589,13 @@ fun EditorTopBar(
             DropdownMenu(
                 expanded = layerMenuExpanded,
                 onDismissRequest = { layerMenuExpanded = false },
-                modifier = Modifier.background(MaterialTheme.colorScheme.primary).border(1.dp, Color.White.copy(0.1f))
+                modifier = Modifier
+                    .background(MaterialTheme.colorScheme.primary)
+                    .border(1.dp, Color.White.copy(0.1f))
             ) {
-                val layerItems = currentPage?.renderableItems?.sortedByDescending { it.layer }.orEmpty()
+                val layerItems = currentPage?.renderableItems?.sortedByDescending { obj ->
+                    currentPage.linearContent.find { it.objectId == obj.id }?.layer ?: obj.layer
+                }.orEmpty()
                 if (layerItems.isEmpty()) {
                     DropdownMenuItem(
                         text = { Text("No layers", color = Color.White) },
@@ -450,17 +605,23 @@ fun EditorTopBar(
                     layerItems.forEach { item ->
                         DropdownMenuItem(
                             text = {
+                                val effectiveLayer = currentPage?.linearContent?.find { it.objectId == item.id }?.layer ?: item.layer
                                 LayerMenuRow(
                                     obj = item,
+                                    effectiveLayer = effectiveLayer,
                                     isSelected = selectedObjectId == item.id,
                                     onDelete = {
                                         onDeleteLayer(item.id)
+                                        layerMenuExpanded = false
+                                    },
+                                    onClick = {
+                                        showLayerReorderSheet = true
                                         layerMenuExpanded = false
                                     }
                                 )
                             },
                             onClick = {
-                                onSelectLayer(item.id)
+                                showLayerReorderSheet = true
                                 layerMenuExpanded = false
                             }
                         )
@@ -470,7 +631,9 @@ fun EditorTopBar(
             DropdownMenu(
                 expanded = menuExpanded,
                 onDismissRequest = { menuExpanded = false },
-                modifier = Modifier.background(MaterialTheme.colorScheme.primary).border(1.dp, Color.White.copy(0.1f))
+                modifier = Modifier
+                    .background(MaterialTheme.colorScheme.primary)
+                    .border(1.dp, Color.White.copy(0.1f))
             ) {
                 DropdownMenuItem(
                     text = { Text("Page Settings", color = Color.White) },
@@ -480,10 +643,30 @@ fun EditorTopBar(
                     }
                 )
                 DropdownMenuItem(
+                    text = { Text("Page Preview", color = Color.White) },
+                    onClick = {
+                        menuExpanded = false
+                        onPagePreview()
+                    }
+                )
+                DropdownMenuItem(
                     text = { Text("Export PDF", color = Color.White) },
                     onClick = {
                         menuExpanded = false
                         onExportPdf()
+                    }
+                )
+            }
+
+            if (showLayerReorderSheet) {
+                LayerReorderBottomSheet(
+                    currentPage = currentPage,
+                    selectedObjectId = selectedObjectId,
+                    onDismiss = { showLayerReorderSheet = false },
+                    onReorder = onReorderLayer,
+                    onSelect = {
+                        onSelectLayer(it)
+                        showLayerReorderSheet = false
                     }
                 )
             }
@@ -498,66 +681,142 @@ fun EditorTopBar(
 
 @Composable
 fun PageSettingsDialog(
-    page: PageData?,
+    isNoteLevel: Boolean = false,
+    page: PageData? = null,
+    noteMetadata: NoteMetadata? = null,
     offlineModelDownloadState: OfflineModelDownloadState,
     offlineModelStatusMessage: String?,
     onOfflineModelDownload: () -> Unit,
     onDismiss: () -> Unit,
-    onApply: (Float, Int, PagePadding, PageBorderStyle) -> Unit
+    onApply: (Float, Int, PagePadding, PageBorderStyle, Int, Int) -> Unit
 ) {
-    if (page == null) return
+    if (!isNoteLevel && page == null) return
 
-    var textSize by remember(page.pageId) { mutableStateOf(page.linearTextStyle.fontSize) }
-    var padding by remember(page.pageId) { mutableStateOf(page.pagePadding.startPoints) }
-    var borderVisible by remember(page.pageId) { mutableStateOf(page.borderStyle.isVisible) }
-    var backgroundColor by remember(page.pageId) { mutableStateOf(page.backgroundColor) }
-    val backgroundChoices = listOf(
-        Color.White.toArgb(),
-        Color(0xFFFFFBF2).toArgb(),
-        Color(0xFFF6F8FC).toArgb(),
-        Color(0xFFFDF2F8).toArgb(),
-        Color(0xFFECFEFF).toArgb()
-    )
+    var textSize by remember { mutableStateOf(if (isNoteLevel) noteMetadata?.textSize ?: 16f else page?.linearTextStyle?.fontSize ?: 16f) }
+    var padding by remember { mutableStateOf(if (isNoteLevel) 24f else page?.pagePadding?.startPoints ?: 24f) }
+    var borderVisible by remember { mutableStateOf(if (isNoteLevel) false else page?.borderStyle?.isVisible ?: false) }
+    
+    var backgroundColor by remember { 
+        mutableStateOf(
+            if (isNoteLevel) {
+                try {
+                    android.graphics.Color.parseColor(noteMetadata?.background ?: "#FFFFFF")
+                } catch (e: Exception) {
+                    0xFFFFFFFF.toInt()
+                }
+            } else {
+                page?.backgroundColor ?: 0xFFFFFFFF.toInt()
+            }
+        ) 
+    }
+    
+    var textColor by remember { mutableStateOf(noteMetadata?.colorHex ?: 0xFF000000.toInt()) }
+    var drawColor by remember { mutableStateOf(0xFF000000.toInt()) }
+
+    var activeColorPicker by remember { mutableStateOf<String?>(null) }
+
+    if (activeColorPicker != null) {
+        val initialColor = when (activeColorPicker) {
+            "background" -> backgroundColor
+            "text" -> textColor
+            "draw" -> drawColor
+            else -> 0xFFFFFFFF.toInt()
+        }
+        ColorPickerBottomSheet(
+            initialColor = initialColor,
+            onColorSelected = { color ->
+                when (activeColorPicker) {
+                    "background" -> backgroundColor = color
+                    "text" -> textColor = color
+                    "draw" -> drawColor = color
+                }
+                activeColorPicker = null
+            },
+            onDismissRequest = { activeColorPicker = null }
+        )
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(
+            Button(
                 onClick = {
                     onApply(
                         textSize,
                         backgroundColor,
                         PagePadding(padding, padding, padding, padding),
-                        page.borderStyle.copy(isVisible = borderVisible)
+                        page?.borderStyle?.copy(isVisible = borderVisible) ?: PageBorderStyle(isVisible = borderVisible),
+                        textColor,
+                        drawColor
                     )
                 }
             ) { Text("Apply") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            OutlinedButton(
+                onClick = onDismiss,
+                border = BorderStroke(
+                    width = 2.dp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            ) {
+                Text("Cancel",color = MaterialTheme.colorScheme.primary)
+            }
         },
-        title = { Text("Page Settings") },
+        title = { Text(if (isNoteLevel) "Note Settings" else "Page Settings",color = MaterialTheme.colorScheme.primary) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Default text size: ${textSize.toInt()} pt")
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.verticalScroll(rememberScrollState())
+            ) {
+                Text("Default text size: ${textSize.toInt()} pt",color = MaterialTheme.colorScheme.primary)
                 Slider(value = textSize, onValueChange = { textSize = it }, valueRange = 10f..36f)
-                Text("Default page padding: ${padding.toInt()} pt")
-                Slider(value = padding, onValueChange = { padding = it }, valueRange = 12f..72f)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    backgroundChoices.forEach { choice ->
+
+                if (!isNoteLevel || true) {
+                    Text("Default page padding: ${padding.toInt()} pt")
+                    SliderStyled(
+                        value = padding,
+                        onValueChange = { padding = it },
+                        valueRange = 12f..72f
+                    )
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                    Text("Background Color")
+                    ColorCircle(
+                        color = Color(backgroundColor),
+                        selected = false,
+                        onClick = { activeColorPicker = "background" }
+                    )
+                }
+
+                if (isNoteLevel) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                        Text("Default Text Color")
                         ColorCircle(
-                            color = Color(choice),
-                            selected = choice == backgroundColor,
-                            onClick = { backgroundColor = choice }
+                            color = Color(textColor),
+                            selected = false,
+                            onClick = { activeColorPicker = "text" }
+                        )
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                        Text("Default Draw Color")
+                        ColorCircle(
+                            color = Color(drawColor),
+                            selected = false,
+                            onClick = { activeColorPicker = "draw" }
                         )
                     }
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = borderVisible, onCheckedChange = { borderVisible = it })
-                    Text("Show page border")
+
+                if (!isNoteLevel) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = borderVisible, onCheckedChange = { borderVisible = it })
+                        Text("Show page border")
+                    }
                 }
 
-                HorizontalDivider()
+                /*HorizontalDivider()
 
                 Text("Offline Image Model")
                 Text(
@@ -588,7 +847,7 @@ fun PageSettingsDialog(
                             OfflineModelDownloadState.FAILED -> "Retry Download"
                         }
                     )
-                }
+                }*/
             }
         }
     )
@@ -738,11 +997,15 @@ private fun OrbitPageFab(
 @Composable
 private fun LayerMenuRow(
     obj: NoteObject,
+    effectiveLayer: Int,
     isSelected: Boolean,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onClick: () -> Unit
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
@@ -750,20 +1013,28 @@ private fun LayerMenuRow(
             modifier = Modifier
                 .size(36.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .background(if (isSelected) AuraPurple.copy(alpha = 0.45f) else Color.White.copy(alpha = 0.08f)),
+                .background(
+                    if (isSelected) AuraPurple.copy(alpha = 0.45f) else Color.White.copy(
+                        alpha = 0.08f
+                    )
+                ),
             contentAlignment = Alignment.Center
         ) {
             when (val payload = obj.payload) {
                 is ImagePayload -> {
+                    val context = LocalContext.current
+                    val imageModel = remember(payload.uri) { getLocalImageModel(context, payload.uri) }
                     AsyncImage(
-                        model = payload.uri,
+                        model = imageModel,
                         contentDescription = null,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
                     )
                 }
                 is DrawingPayload -> {
-                    MiniDrawingThumbnail(payload = payload, modifier = Modifier.fillMaxSize().padding(2.dp))
+                    MiniDrawingThumbnail(payload = payload, modifier = Modifier
+                        .fillMaxSize()
+                        .padding(2.dp))
                 }
                 else -> {
                     Icon(
@@ -782,7 +1053,7 @@ private fun LayerMenuRow(
             }
         }
         Text(
-            text = "Layer ${obj.layer}",
+            text = "Layer $effectiveLayer",
             color = Color.White,
             modifier = Modifier.weight(1f)
         )
@@ -943,7 +1214,10 @@ fun NotePage(
             .aspectRatio(1 / page.ratio)
             .background(Color(page.backgroundColor), RoundedCornerShape(6.dp))
             .border(
-                width = if (page.borderStyle.isVisible) PageUnitConverter.pointsToDp(page.borderStyle.widthPoints, page.pageSize).dp else 0.dp,
+                width = if (page.borderStyle.isVisible) PageUnitConverter.pointsToDp(
+                    page.borderStyle.widthPoints,
+                    page.pageSize
+                ).dp else 0.dp,
                 color = if (page.borderStyle.isVisible) Color(page.borderStyle.color) else Color.Transparent,
                 shape = RoundedCornerShape(6.dp)
             )
@@ -981,17 +1255,26 @@ fun NotePage(
                                     onAnyInteraction()
                                 }
                             }
-                            keepTracking = event.changes.any { it.pressed && !it.changedToUpIgnoreConsumed() }
+                            keepTracking =
+                                event.changes.any { it.pressed && !it.changedToUpIgnoreConsumed() }
                         }
                     }
                 }
-                .pointerInput(state.activeTool, state.isViewOnly, viewport.scale, viewport.offsetX, viewport.offsetY) {
+                .pointerInput(
+                    state.activeTool,
+                    state.isViewOnly,
+                    viewport.scale,
+                    viewport.offsetX,
+                    viewport.offsetY
+                ) {
                     detectTapGestures { offset ->
                         if (state.isViewOnly) return@detectTapGestures
                         onAnyInteraction()
                         viewModel.selectPage(pageIndex)
-                        val docX = ((offset.x - viewport.offsetX) / effectivePageScaleX).coerceAtLeast(0f)
-                        val docY = ((offset.y - viewport.offsetY) / effectivePageScaleY).coerceAtLeast(0f)
+                        val docX =
+                            ((offset.x - viewport.offsetX) / effectivePageScaleX).coerceAtLeast(0f)
+                        val docY =
+                            ((offset.y - viewport.offsetY) / effectivePageScaleY).coerceAtLeast(0f)
 
                         when (state.activeTool) {
                             ActiveTool.TEXT -> viewModel.addText(pageIndex, docX, docY)
@@ -1000,11 +1283,18 @@ fun NotePage(
                                 viewModel.handlePageTapForLinearText(pageIndex, docX, docY)
                                 keyboardController?.show()
                             }
+
                             else -> Unit
                         }
                     }
                 }
-                .pointerInput(state.activeTool, state.isViewOnly, viewport.scale, viewport.offsetX, viewport.offsetY) {
+                .pointerInput(
+                    state.activeTool,
+                    state.isViewOnly,
+                    viewport.scale,
+                    viewport.offsetX,
+                    viewport.offsetY
+                ) {
                     if (state.activeTool != ActiveTool.SELECT || state.isViewOnly) return@pointerInput
                     detectDragGestures(
                         onDragStart = { start ->
@@ -1038,39 +1328,7 @@ fun NotePage(
         if (viewport.scale > 1.01f) {
             ZoomedPageOverlay()
         }
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            page.renderableItems
-                .filter { it.type == ObjectType.DRAWING }
-                .sortedBy { it.layer }
-                .forEach { obj ->
-                    val payload = obj.payload as? DrawingPayload ?: return@forEach
-                    payload.strokes.forEach { stroke ->
-                        if (stroke.points.size >= 2) {
-                            for (i in 0 until stroke.points.lastIndex) {
-                                drawLine(
-                                    color = when (stroke.brushStyle) {
-                                        BrushStyle.PENCIL -> Color(stroke.color).copy(alpha = 0.65f)
-                                        BrushStyle.MARKER -> Color(stroke.color).copy(alpha = 0.9f)
-                                        BrushStyle.HIGHLIGHTER -> Color(stroke.color).copy(alpha = 0.35f)
-                                        BrushStyle.PEN -> Color(stroke.color)
-                                        BrushStyle.ERASER -> Color(stroke.color)
-                                    },
-                                    start = Offset(stroke.points[i].x * pageScaleX, stroke.points[i].y * pageScaleY),
-                                    end = Offset(stroke.points[i + 1].x * pageScaleX, stroke.points[i + 1].y * pageScaleY),
-                                    strokeWidth = when (stroke.brushStyle) {
-                                        BrushStyle.PENCIL -> stroke.width * pageScaleX * 0.8f
-                                        BrushStyle.MARKER -> stroke.width * pageScaleX * 1.2f
-                                        BrushStyle.HIGHLIGHTER -> stroke.width * pageScaleX * 1.5f
-                                        BrushStyle.PEN -> stroke.width * pageScaleX
-                                        BrushStyle.ERASER -> stroke.width * pageScaleX
-                                    },
-                                    cap = StrokeCap.Round
-                                )
-                            }
-                        }
-                    }
-                }
-        }
+        // Drawings will be rendered inline in the renderableItems loop to respect Z-index relative to other objects.
 
         Column(
             modifier = Modifier
@@ -1091,7 +1349,9 @@ fun NotePage(
                 val remainingHeightPoints = (contentHeightPoints - consumedHeightPoints).coerceAtLeast(42f)
                 when (entry.type) {
                     ObjectType.LINEAR_TEXT -> {
-                        Box(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                        Box(modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 2.dp)) {
                             ManualLinearTextEditor(
                                 payload = TextPayload(
                                     text = entry.value,
@@ -1173,7 +1433,9 @@ fun NotePage(
                     ObjectType.LIST -> {
                         val obj = page.items.find { it.id == entry.objectId }
                         if (obj != null) {
-                            Box(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                            Box(modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)) {
                                 val payload = obj.payload as? ListPayload ?: return@Box
                                 RenderListRecursive(
                                     payload = payload,
@@ -1209,27 +1471,6 @@ fun NotePage(
             }
         }
 
-        // Layer 2 - Live drawing
-        if (state.activeTool == ActiveTool.DRAW && !state.isViewOnly) {
-            DrawingCanvas(
-                pageIndex = pageIndex,
-                drawColor = state.drawColor,
-                drawWidth = state.drawWidth,
-                brushStyle = state.brushStyle,
-                pageScaleX = pageScaleX,
-                pageScaleY = pageScaleY,
-                onStrokeFinished = { stroke ->
-                    onAnyInteraction()
-                    viewModel.addStroke(pageIndex, stroke)
-                },
-                onErase = { point ->
-                    onAnyInteraction()
-                    viewModel.eraseStrokesAt(pageIndex, point)
-                },
-                modifier = Modifier.fillMaxSize()
-            )
-        }
-
         selectionRect?.let { rect ->
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val safeLeft = rect.left.coerceIn(0f, pageWidthPx.toFloat())
@@ -1260,22 +1501,85 @@ fun NotePage(
                 obj.type == ObjectType.LIST &&
                     page.linearContent.any { it.objectId == obj.id && it.type == ObjectType.LIST }
             }
-            .sortedBy { it.layer }
-            .forEach { obj ->
-                RenderObject(
-                    pageIndex = pageIndex,
-                    obj = obj,
-                    isSelected = state.selectedObjectId == obj.id,
-                    activeTool = state.activeTool,
-                    isViewOnly = state.isViewOnly,
-                    viewModel = viewModel,
-                    onAnyInteraction = onAnyInteraction,
-                    pageWidth = pageWidthPx.toFloat(),
-                    pageHeight = pageHeightPx.toFloat(),
-                    pageScaleX = pageScaleX,
-                    pageScaleY = pageScaleY
-                )
+            .sortedBy { obj ->
+                page.linearContent.find { it.objectId == obj.id }?.layer ?: obj.layer
             }
+            .forEach { obj ->
+                if (obj.type == ObjectType.DRAWING) {
+                    val effectiveLayer = page.linearContent.find { it.objectId == obj.id }?.layer ?: obj.layer
+                    Canvas(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .zIndex(effectiveLayer.toFloat())
+                    ) {
+                        val payload = obj.payload as? DrawingPayload ?: return@Canvas
+                        payload.strokes.forEach { stroke ->
+                            if (stroke.points.size >= 2) {
+                                for (i in 0 until stroke.points.lastIndex) {
+                                    drawLine(
+                                        color = when (stroke.brushStyle) {
+                                            BrushStyle.PENCIL -> Color(stroke.color).copy(alpha = 0.65f)
+                                            BrushStyle.MARKER -> Color(stroke.color).copy(alpha = 0.9f)
+                                            BrushStyle.HIGHLIGHTER -> Color(stroke.color).copy(alpha = 0.35f)
+                                            BrushStyle.PEN -> Color(stroke.color)
+                                            BrushStyle.ERASER -> Color(stroke.color)
+                                        },
+                                        start = Offset(stroke.points[i].x * pageScaleX, stroke.points[i].y * pageScaleY),
+                                        end = Offset(stroke.points[i + 1].x * pageScaleX, stroke.points[i + 1].y * pageScaleY),
+                                        strokeWidth = when (stroke.brushStyle) {
+                                            BrushStyle.PENCIL -> stroke.width * pageScaleX * 0.8f
+                                            BrushStyle.MARKER -> stroke.width * pageScaleX * 1.2f
+                                            BrushStyle.HIGHLIGHTER -> stroke.width * pageScaleX * 1.5f
+                                            BrushStyle.PEN -> stroke.width * pageScaleX
+                                            BrushStyle.ERASER -> stroke.width * pageScaleX
+                                        },
+                                        cap = StrokeCap.Round
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    val effectiveLayer = page.linearContent.find { it.objectId == obj.id }?.layer ?: obj.layer
+                    RenderObject(
+                        pageIndex = pageIndex,
+                        obj = obj,
+                        effectiveLayer = effectiveLayer,
+                        isSelected = state.selectedObjectId == obj.id,
+                        activeTool = state.activeTool,
+                        isViewOnly = state.isViewOnly,
+                        viewModel = viewModel,
+                        onAnyInteraction = onAnyInteraction,
+                        pageWidth = pageWidthPx.toFloat(),
+                        pageHeight = pageHeightPx.toFloat(),
+                        pageScaleX = pageScaleX,
+                        pageScaleY = pageScaleY
+                    )
+                }
+            }
+
+        // Layer 2 - Live drawing (moved to top to intercept touches)
+        if (state.activeTool == ActiveTool.DRAW && !state.isViewOnly) {
+            DrawingCanvas(
+                pageIndex = pageIndex,
+                drawColor = state.drawColor,
+                drawWidth = state.drawWidth,
+                brushStyle = state.brushStyle,
+                pageScaleX = pageScaleX,
+                pageScaleY = pageScaleY,
+                onStrokeFinished = { stroke ->
+                    onAnyInteraction()
+                    viewModel.addStroke(pageIndex, stroke)
+                },
+                onErase = { point ->
+                    onAnyInteraction()
+                    viewModel.eraseStrokesAt(pageIndex, point)
+                },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .zIndex(1_000_000f)
+            )
+        }
         }
 
         if (state.generatingPageIds.contains(page.pageId)) {
@@ -1376,6 +1680,7 @@ fun DrawingCanvas(
 fun RenderObject(
     pageIndex: Int,
     obj: NoteObject,
+    effectiveLayer: Int,
     isSelected: Boolean,
     activeTool: ActiveTool,
     isViewOnly: Boolean,
@@ -1405,7 +1710,7 @@ fun RenderObject(
             .width(frameWidthDp)
             .height(frameHeightDp)
             .clip(RoundedCornerShape(12.dp))
-            .zIndex(obj.layer.toFloat())
+            .zIndex(effectiveLayer.toFloat())
 
             // 🔥 DRAG SYSTEM
             .pointerInput(isDraggable) {
@@ -1444,7 +1749,8 @@ fun RenderObject(
             }
 
             // 🔥 TAP SELECT (NO bringToFront here)
-            .pointerInput(Unit) {
+            .pointerInput(activeTool) {
+                if (activeTool != ActiveTool.SELECT) return@pointerInput
                 detectTapGestures(
                     onTap = {
                         onAnyInteraction()
@@ -1525,9 +1831,11 @@ fun RenderObject(
 
             ObjectType.IMAGE -> {
                 val payload = obj.payload as? ImagePayload
+                val context = LocalContext.current
+                val imageModel = remember(payload?.uri) { getLocalImageModel(context, payload?.uri) }
 
                 AsyncImage(
-                    model = payload?.uri,
+                    model = imageModel,
                     contentDescription = null,
                     modifier = Modifier
                         .fillMaxSize()
@@ -1763,8 +2071,6 @@ fun EditorBottomToolbar(
     }
 }
 
-// Removed UniversalColorToolbar
-
 @Composable
 fun ToolbarIcon(
     icon: ImageVector,
@@ -1795,14 +2101,10 @@ fun DrawToolSubToolbar(
     onWidthChange: (Float) -> Unit,
     onBrushStyleChange: (BrushStyle) -> Unit
 ) {
-    val quickColors = listOf(
-        Color(0xFF111111),
-        Color(0xFF3F2A7A),
-        Color(0xFF0057B8),
-        Color(0xFF0F766E),
-        Color(0xFFB45309),
-        Color(0xFFB91C1C)
-    )
+
+    var showColorPicker by remember { mutableStateOf(false) }
+    var expanded by remember { mutableStateOf(false) }
+
     EditorGlassContainer(
         modifier = Modifier
             .fillMaxWidth()
@@ -1814,6 +2116,56 @@ fun DrawToolSubToolbar(
                 .padding(horizontal = 10.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+
+            ColorCircle(
+                color = Color(color),
+                selected = false,
+                onClick = { showColorPicker = true }
+            )
+
+            Spacer(modifier = Modifier.width(10.dp))
+
+            VerticalDivider(modifier = Modifier
+                .height(24.dp)
+                .width(2.dp), color = Color.White)
+
+            ToolbarIcon(Icons.Default.Remove, true) {
+                onWidthChange((width - 1f).coerceAtLeast(2f))
+            }
+            Spacer(modifier=Modifier.width(6.dp))
+            Box {
+                OutlinedButton(
+                    onClick = { expanded = true },
+                    border = BorderStroke(width = 2.dp, color = MaterialTheme.colorScheme.secondary)
+                ) {
+                    Text(width.toInt().toString(), color = MaterialTheme.colorScheme.secondary)
+                }
+                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    val sizes = listOf(2, 4, 6, 8, 10, 12, 14, 20, 30)
+                    sizes.forEach { s ->
+                        DropdownMenuItem(
+                            text = { Text(s.toString()) },
+                            onClick = {
+                                onWidthChange(s.toFloat().coerceAtLeast(2f).coerceAtMost(40f))
+                                expanded = false
+                            }
+                        )
+                    }
+                }
+            }
+            Spacer(modifier=Modifier.width(6.dp))
+            ToolbarIcon(Icons.Default.Add, true) {
+                onWidthChange((width + 1f).coerceAtMost(40f))
+            }
+
+            Spacer(modifier=Modifier.width(6.dp))
+
+            VerticalDivider(modifier = Modifier
+                .height(24.dp)
+                .width(2.dp), color = Color.White)
+
+            Spacer(modifier=Modifier.width(6.dp))
+
             ToolbarIcon(Icons.Default.Edit, brushStyle == BrushStyle.PEN) {
                 onBrushStyleChange(BrushStyle.PEN)
             }
@@ -1831,12 +2183,7 @@ fun DrawToolSubToolbar(
             }
 
             Spacer(modifier = Modifier.width(10.dp))
-
-            Text(
-                text = "Width: ${width.toInt()}",
-                color = Color.White,
-                fontSize = 12.sp
-            )
+/*
 
             Slider(
                 value = width,
@@ -1844,17 +2191,17 @@ fun DrawToolSubToolbar(
                 valueRange = 2f..20f,
                 modifier = Modifier.width(150.dp)
             )
-
-            Spacer(modifier = Modifier.width(10.dp))
-
-            quickColors.forEach { quickColor ->
-                ColorCircle(
-                    color = quickColor,
-                    selected = color == quickColor.toArgb(),
-                    onClick = { onColorChange(quickColor.toArgb()) }
-                )
-            }
+*/
         }
+    }
+    if (showColorPicker) {
+        ColorPickerBottomSheet(
+            initialColor = color,
+            onColorSelected = { color ->
+                onColorChange(color)
+            },
+            onDismissRequest = { showColorPicker = false }
+        )
     }
 }
 
@@ -1934,14 +2281,21 @@ fun EditorGlassContainer(
     }
     /*if (showPageSettings) {
         PageSettingsDialog(
+            isNoteLevel = true,
             page = state.content.pages.getOrNull(state.currentPageIndex),
+            noteMetadata = state.noteMetadata,
+            offlineModelDownloadState = state.offlineModelDownloadState,
+            offlineModelStatusMessage = state.offlineModelStatusMessage,
+            onOfflineModelDownload = { viewModel.downloadOfflineModel(context) },
             onDismiss = { showPageSettings = false },
-            onApply = { textSize, background, padding, border ->
-                viewModel.updateCurrentPageStyle(
+            onApply = { textSize, background, padding, border, textColor, drawColor ->
+                viewModel.updateNoteLevelDefaults(
                     textSize = textSize,
-                    backgroundColor = background,
+                    background = background,
                     padding = padding,
-                    borderStyle = border
+                    border = border,
+                    textColor = textColor,
+                    drawColor = drawColor
                 )
                 showPageSettings = false
             }
@@ -1992,5 +2346,220 @@ private fun estimateFlowEntryHeightPoints(
             }
         }
         ObjectType.IMAGE, ObjectType.DRAWING, ObjectType.TEXT, ObjectType.CHECKLIST -> entry.bounds.height.coerceAtLeast(42f)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun LayerReorderBottomSheet(
+    currentPage: PageData?,
+    selectedObjectId: String?,
+    onDismiss: () -> Unit,
+    onReorder: (Int, Int) -> Unit,
+    onSelect: (String) -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState()
+    val scope = rememberCoroutineScope()
+    val layerItems = remember(currentPage) { 
+        currentPage?.renderableItems?.sortedByDescending { obj ->
+            currentPage.linearContent.find { it.objectId == obj.id }?.layer ?: obj.layer
+        }.orEmpty() 
+    }
+
+    val currentOnReorder by rememberUpdatedState(onReorder)
+
+    var draggedItemIndex by remember { mutableStateOf<Int?>(null) }
+    var dragOffset by remember { mutableStateOf(Offset.Zero) }
+    val listState = rememberLazyListState()
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.primary,
+        dragHandle = { BottomSheetDefaults.DragHandle(color = Color.White.copy(alpha = 0.5f)) }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 32.dp)
+        ) {
+            Text(
+                "Reorder Layers",
+                color = Color.White,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)
+            )
+
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 400.dp)
+                    .pointerInput(Unit) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = { offset ->
+                                val item = listState.layoutInfo.visibleItemsInfo.firstOrNull {
+                                    offset.y >= it.offset && offset.y <= it.offset + it.size
+                                }
+                                if (item != null) {
+                                    draggedItemIndex = item.index
+                                }
+                            },
+                            onDrag = { change, dragAmount ->
+                                change.consume()
+                                dragOffset += Offset(0f, dragAmount.y)
+
+                                val currentDraggedIndex =
+                                    draggedItemIndex ?: return@detectDragGesturesAfterLongPress
+                                val draggedItemInfo =
+                                    listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == currentDraggedIndex }
+                                if (draggedItemInfo != null) {
+                                    val centerY =
+                                        draggedItemInfo.offset + (draggedItemInfo.size / 2f) + dragOffset.y
+                                    val targetItem = listState.layoutInfo.visibleItemsInfo.find {
+                                        centerY >= it.offset && centerY <= it.offset + it.size && it.index != currentDraggedIndex
+                                    }
+
+                                    if (targetItem != null) {
+                                        val oldPos = draggedItemInfo.offset.toFloat()
+                                        val newPos = targetItem.offset.toFloat()
+
+                                        // Reorder in UI state (Note: layers are sortedByDescending, so reorder mapping might be inverted if not careful)
+                                        // But here we reorder the list we derived.
+                                        currentOnReorder(currentDraggedIndex, targetItem.index)
+                                        draggedItemIndex = targetItem.index
+                                        dragOffset += Offset(0f, oldPos - newPos)
+                                    }
+                                }
+                            },
+                            onDragEnd = {
+                                draggedItemIndex = null
+                                dragOffset = Offset.Zero
+                            },
+                            onDragCancel = {
+                                draggedItemIndex = null
+                                dragOffset = Offset.Zero
+                            }
+                        )
+                    }
+            ) {
+                itemsIndexed(layerItems, key = { _, item -> item.id }) { index, item ->
+                    val isDragged = index == draggedItemIndex
+                    val scale by animateFloatAsState(if (isDragged) 1.05f else 1f)
+                    
+                    val effectiveLayer = currentPage?.linearContent?.find { it.objectId == item.id }?.layer ?: item.layer
+                    LayerReorderItem(
+                        obj = item,
+                        effectiveLayer = effectiveLayer,
+                        isSelected = selectedObjectId == item.id,
+                        isDragged = isDragged,
+                        dragOffset = dragOffset.y,
+                        modifier = Modifier
+                            .animateItem()
+                            .graphicsLayer {
+                                scaleX = scale
+                                scaleY = scale
+                                if (isDragged) {
+                                    translationY = dragOffset.y
+                                }
+                            }
+                            .zIndex(if (isDragged) 10f else 1f),
+                        onSelect = { onSelect(item.id) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun LayerReorderItem(
+    obj: NoteObject,
+    effectiveLayer: Int,
+    isSelected: Boolean,
+    isDragged: Boolean,
+    dragOffset: Float,
+    modifier: Modifier = Modifier,
+    onSelect: () -> Unit
+) {
+    Surface(
+        onClick = onSelect,
+        color = if (isSelected) Color.White.copy(alpha = 0.15f) else Color.Transparent,
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color.White.copy(alpha = 0.08f)),
+                contentAlignment = Alignment.Center
+            ) {
+                when (val payload = obj.payload) {
+                    is ImagePayload -> {
+                        val context = LocalContext.current
+                        val imageModel = remember(payload.uri) { getLocalImageModel(context, payload.uri) }
+                        AsyncImage(
+                            model = imageModel,
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
+                    is DrawingPayload -> {
+                        MiniDrawingThumbnail(payload = payload, modifier = Modifier
+                            .fillMaxSize()
+                            .padding(2.dp))
+                    }
+                    else -> {
+                        Icon(
+                            imageVector = when (obj.type) {
+                                ObjectType.TEXT -> Icons.Default.TextFields
+                                ObjectType.IMAGE -> Icons.Default.Image
+                                ObjectType.DRAWING -> Icons.Default.Brush
+                                ObjectType.LIST -> Icons.Default.Checklist
+                                ObjectType.CHECKLIST -> Icons.Default.CheckBox
+                                ObjectType.LINEAR_TEXT -> Icons.Default.EditNote
+                            },
+                            contentDescription = null,
+                            tint = Color.White
+                        )
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.width(16.dp))
+            
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = when (obj.type) {
+                        ObjectType.DRAWING -> "Drawing Layer"
+                        ObjectType.IMAGE -> "Image Layer"
+                        ObjectType.TEXT -> "Text Block"
+                        ObjectType.LIST -> "List Object"
+                        else -> "Object"
+                    },
+                    color = Color.White,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = "Layer $effectiveLayer",
+                    color = Color.White.copy(alpha = 0.6f),
+                    fontSize = 12.sp
+                )
+            }
+
+            Icon(
+                imageVector = Icons.Default.DragHandle,
+                contentDescription = "Reorder",
+                tint = Color.White.copy(alpha = 0.3f)
+            )
+        }
     }
 }
