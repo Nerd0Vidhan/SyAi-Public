@@ -19,7 +19,7 @@ data class NoteMetadata(
     val textSize: Float = 16f,
     val colorHex: Int = 0xFF000000.toInt(),
     val background : String?="0xFFFFFFFF",
-    val defaultTextSize: Float = 12f,
+    val defaultTextSize: Float = 16f,
     val cursorColor: Int = 0xFF0D0127.toInt(),
     val backgroundType: String = BackGroundType.SOLID.type,
     val totalPages: Int = 1,
@@ -382,7 +382,7 @@ data class Point(
 )
 
 data class TextStyleData(
-    val fontSize: Float = 12f,
+    val fontSize: Float = 16f,
     val color: Int = 0xFF000000.toInt(),
     val isBold: Boolean = false,
     val isItalic: Boolean = false,

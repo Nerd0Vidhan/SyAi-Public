@@ -123,7 +123,7 @@ fun FabGroup(
             opacity = LinearEasing.transform(0.2f, 0.7f, animationProgress),
             onClick = {
 //                Toast.makeText(context, "Premium Features Coming Soon", Toast.LENGTH_SHORT).show()
-                navController.navigate("premium")
+                parentNavController.navigate("premium")
                 toggleAnimation()
             }
         )
@@ -134,7 +134,7 @@ fun FabGroup(
             opacity = LinearEasing.transform(0.3f, 0.8f, animationProgress),
             onClick = {
 //                Toast.makeText(context, "Profile View Will be available in future update", Toast.LENGTH_SHORT).show()
-                navController.navigate("profile")
+                parentNavController.navigate("profile")
                 toggleAnimation()
             }
         )
